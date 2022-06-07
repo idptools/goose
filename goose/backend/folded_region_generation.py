@@ -248,7 +248,7 @@ def gen_beta_sheet(length, strand_length=14, coil_length=6):
 
 
 
-    
+
 
 
 '''

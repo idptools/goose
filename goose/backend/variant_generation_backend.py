@@ -609,8 +609,9 @@ def gen_constant_residue_variant(sequence, constant_residues = []):
     input_hydro = Protein.calc_mean_hydro(seq_variant)
     input_length = len(seq_variant)
 
+
     # now make the sequence
-    seq_variant = create_seq_by_props(length = input_length, FCR=input_FCR, NCPR = input_NCPR, hydropathy = input_hydro)
+    seq_variant = create_seq_by_props(length = input_length, FCR=input_FCR, NCPR = input_NCPR, hydropathy = input_hydro, exclude=constant_residues)
 
     # now strip the charged residues from seq_variant
     input_backbone = ''
@@ -649,12 +650,6 @@ def gen_constant_residue_variant(sequence, constant_residues = []):
     return rebuilt_sequence
 
 
+def gen_minimal_variant
 
-
-test = 'RVALELLQYAMAKRALYAQ'
-new_seq = gen_constant_residue_variant(test, constant_residues=['R', 'V'])
-print(Protein.calc_all_properties(test))
-print(Protein.calc_all_properties(new_seq))
-print(test)
-print(new_seq)
 

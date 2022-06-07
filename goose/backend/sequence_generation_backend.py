@@ -1508,7 +1508,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
         #===============================================#
         elif FCR == None and NCPR == None and hydropathy != None:
             try:
-                final_seq = hydro_seq(length, hydropathy)
+                final_seq = hydro_seq(length, hydropathy, exclude_residues=exclude)
                 return final_seq
             except:
                 raise GooseError('Failed to make sequence.')
@@ -1520,16 +1520,25 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
             # Generate random list of charged residue positions
             number_charged = round(length * FCR)
             charged_positions = gen_charged_positions(length, number_charged)
+            # account for necessary residue exclusions
+            if exclude != []:
+                final_exclusion = ['D', 'E', 'K', 'R']
+                for aa in exclude:
+                    if aa not in final_exclusion:
+                        final_exclusion.append(aa)
+            else:
+                final_exclusion = ['D', 'E', 'K', 'R']
+
             for i in range(0, length):
                 if i not in charged_positions:                
                     if len(final_seq) < 4:
                         cur_input = seq[len(seq)-4:]
-                        residue = get_optimal_residue(cur_input, exclude_residues = ['D', 'E', 'K', 'R'])
+                        residue = get_optimal_residue(cur_input, exclude_residues = final_exclusion)
                         final_seq += residue
                         seq += residue
                     else:
                         cur_input = final_seq[len(final_seq)-4:]
-                        residue = get_optimal_residue(cur_input, exclude_residues = ['D', 'E', 'K', 'R'])
+                        residue = get_optimal_residue(cur_input, exclude_residues = final_exclusion)
                         final_seq += residue
                 else:
                     residue = random_amino_acid(lists.charged_list)
@@ -1586,17 +1595,25 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
             charged_residues = shuffle_seq(charged_residues)
             charged_residue_list = list([char for char in charged_residues])
 
+            # account for necessary residue exclusions
+            if exclude != []:
+                final_exclusion = ['D', 'E', 'K', 'R']
+                for aa in exclude:
+                    if aa not in final_exclusion:
+                        final_exclusion.append(aa)
+            else:
+                final_exclusion = ['D', 'E', 'K', 'R']
 
             for i in range(0, length):
                 if i not in charged_positions:                
                     if len(final_seq) < 4:
                         cur_input = seq[len(seq)-4:]
-                        residue = get_optimal_residue(cur_input, exclude_residues = ['D', 'E', 'K', 'R'])
+                        residue = get_optimal_residue(cur_input, exclude_residues = final_exclusion)
                         final_seq += residue
                         seq += residue
                     else:
                         cur_input = final_seq[len(final_seq)-4:]
-                        residue = get_optimal_residue(cur_input, exclude_residues = ['D', 'E', 'K', 'R'])
+                        residue = get_optimal_residue(cur_input, exclude_residues = final_exclusion)
                         final_seq += residue
                 else:
                     residue = charged_residue_list.pop()
@@ -1639,18 +1656,26 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
             # turn charged_residues into shuffled list
             charged_residues = shuffle_seq(charged_residues)
             charged_residue_list = list([char for char in charged_residues])
-
+            
+            # account for necessary residue exclusions
+            if exclude != []:
+                final_exclusion = ['D', 'E', 'K', 'R']
+                for aa in exclude:
+                    if aa not in final_exclusion:
+                        final_exclusion.append(aa)
+            else:
+                final_exclusion = ['D', 'E', 'K', 'R']
 
             for i in range(0, length):
                 if i not in charged_positions:                
                     if len(final_seq) < 4:
                         cur_input = seq[len(seq)-4:]
-                        residue = get_optimal_residue(cur_input, exclude_residues = ['D', 'E', 'K', 'R'])
+                        residue = get_optimal_residue(cur_input, exclude_residues = final_exclusion)
                         final_seq += residue
                         seq += residue
                     else:
                         cur_input = final_seq[len(final_seq)-4:]
-                        residue = get_optimal_residue(cur_input, exclude_residues = ['D', 'E', 'K', 'R'])
+                        residue = get_optimal_residue(cur_input, exclude_residues = final_exclusion)
                         final_seq += residue
                 else:
                     residue = charged_residue_list.pop()
@@ -1723,7 +1748,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                         adjusted_error = allowed_hydro_error
 
                     # now make the sequence that will be used
-                    input_hydro_sequence = hydro_seq(number_hydro_res, new_mean_hydro, just_neutral=True, allowed_error = adjusted_error, return_best_seq = True)
+                    input_hydro_sequence = hydro_seq(number_hydro_res, new_mean_hydro, just_neutral=True, allowed_error = adjusted_error, return_best_seq = True, exclude_residues=exclude)
                     
                     # Generate random list of charged residue positions
                     charged_positions = gen_charged_positions(length, len(charged_residues))
@@ -1835,7 +1860,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
 
             # if NCPR was set to 0 and the FCR ends at 0, just make the sequence
             if charged_residues == '':
-                final_seq = hydro_seq(length, hydropathy, just_neutral=True)
+                final_seq = hydro_seq(length, hydropathy, just_neutral=True, exclude_residues = exclude)
 
             else:
                 # calculate FCR
@@ -1871,7 +1896,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
 
 
                     # now make the sequence that will be used
-                    input_hydro_sequence = hydro_seq(number_hydro_res, new_mean_hydro, just_neutral=True, allowed_error =  adjusted_error, return_best_seq=True)
+                    input_hydro_sequence = hydro_seq(number_hydro_res, new_mean_hydro, just_neutral=True, allowed_error =  adjusted_error, return_best_seq=True, exclude_residues = exclude)
                     
                     # Generate random list of charged residue positions
                     charged_positions = gen_charged_positions(length, len(charged_residues))
@@ -1917,7 +1942,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
         elif FCR != None and NCPR != None and hydropathy != None:
             
             if FCR == 0 and NCPR == 0:
-                final_seq = hydro_seq(length, hydropathy, just_neutral=True)
+                final_seq = hydro_seq(length, hydropathy, just_neutral=True, exclude_residues=exclude)
 
             else:
                 # figure out how many residues for FCR and how many for NCPR
@@ -1983,7 +2008,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                         adjusted_error = allowed_hydro_error
 
                     # now make the sequence that will be used
-                    input_hydro_sequence = hydro_seq(number_hydro_res, new_mean_hydro, just_neutral=True, allowed_error = adjusted_error, return_best_seq = True)
+                    input_hydro_sequence = hydro_seq(number_hydro_res, new_mean_hydro, just_neutral=True, allowed_error = adjusted_error, return_best_seq = True, exclude_residues=exclude)
 
                     # Generate random list of charged residue positions
                     charged_positions = gen_charged_positions(length, len(charged_residues))
@@ -2212,4 +2237,7 @@ def create_seq_by_fracs(length, **kwargs):
             sequence = sequence + chosen_residue
         # return the sequence
         return sequence
+
+
+
 
