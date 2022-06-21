@@ -79,7 +79,7 @@ def optimal_residue_key(four_amino_acids):
     return key
 
 
-def get_optimal_residue(four_amino_acids, exclude_residues = [], cutoff_disorder = None):
+def get_optimal_residue(four_amino_acids, exclude_residues = [], cutoff_disorder = None, return_all=False):
 
     """
 
@@ -117,6 +117,9 @@ def get_optimal_residue(four_amino_acids, exclude_residues = [], cutoff_disorder
     
     cutoff_dis_val : Float
         The cutoff value to be used for considering something as disordered
+
+    return_all : Bool
+        Whether to return all candidate residues
 
     Returns
     ---------
@@ -203,7 +206,11 @@ def get_optimal_residue(four_amino_acids, exclude_residues = [], cutoff_disorder
             amino_acid_index += 1
 
     # choose a random amino acid from the list to return
-    return candidate_amino_acids[randint(0, len(candidate_amino_acids)-1)]
+    if return_all == False:
+        return candidate_amino_acids[randint(0, len(candidate_amino_acids)-1)]
+    else:
+        return candidate_amino_acids
+
 
 
 #function that returns a random amino acid from a specified list.

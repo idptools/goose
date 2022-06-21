@@ -2,6 +2,7 @@
 backend functionality for variant generation
 '''
 import random
+from random import randint
 
 from goose.goose_exceptions import GooseInputError
 from goose.backend.protein import Protein
@@ -9,6 +10,12 @@ from goose.backend.sequence_generation_backend import identify_residue_positions
 from goose.backend import lists
 from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
+
+
+# might have to remove
+from sparrow import Protein as pr
+
+
 
 
 '''
@@ -84,7 +91,7 @@ def return_num_for_class(sequence):
     'negative': num_negative, 'C': num_C, 'H': num_H, 'P': num_P, 'G': num_G}
 
 
-def get_optimal_res_within_class(residue_class, sequence, additional_exclusion=[]):
+def get_optimal_res_within_class(residue_class, sequence, additional_exclusion=[], return_all=False):
     '''
     function to get the optimal residues within a class 
     for a sequence where the residue returned will
@@ -117,6 +124,7 @@ def get_optimal_res_within_class(residue_class, sequence, additional_exclusion=[
         hydrophobic = ['I', 'V', 'L', 'A', 'M']
         positive = ['K', 'R']
         negative = ['D', 'E']
+        cannot_change = ['G', 'P', 'H', 'C']
 
         # residues to exclude for each class of AAs for get_optimal_residue function
         exclude_for_aromatics = ['A', 'C', 'D', 'E', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V']
@@ -141,20 +149,20 @@ def get_optimal_res_within_class(residue_class, sequence, additional_exclusion=[
         key = optimal_residue_key(four_residues)
         # now get optimal residue, exclude necessary residues from choice
         if residue_class == 'aromatic':
-            chosen_residue = get_optimal_residue(four_residues, exclude_residues=exclude_for_aromatics)
+            chosen_residues = get_optimal_residue(four_residues, exclude_residues=exclude_for_aromatics, return_all=return_all)
         elif residue_class == 'polar':
-            chosen_residue = get_optimal_residue(four_residues, exclude_residues=exclude_for_polar)
+            chosen_residues = get_optimal_residue(four_residues, exclude_residues=exclude_for_polar, return_all=return_all)
         elif residue_class == 'hydrophobic':
-            chosen_residue = get_optimal_residue(four_residues, exclude_residues=exclude_for_hydrophobic)        
+            chosen_residues = get_optimal_residue(four_residues, exclude_residues=exclude_for_hydrophobic, return_all=return_all)        
         elif residue_class == 'positive':
-            chosen_residue = get_optimal_residue(four_residues, exclude_residues=exclude_for_positive)
+            chosen_residues = get_optimal_residue(four_residues, exclude_residues=exclude_for_positive, return_all=return_all)
         elif residue_class == 'negative':
-            chosen_residue = get_optimal_residue(four_residues, exclude_residues=exclude_for_negative)
+            chosen_residues = get_optimal_residue(four_residues, exclude_residues=exclude_for_negative, return_all=return_all)
         else:
             raise GooseInputError('chosen residue class is not valid. Options are aromatic, polar, hydrophobic, positive, or negative.')
         
         # return chosen residue
-        return chosen_residue
+        return chosen_residues
 
 
 
@@ -449,7 +457,16 @@ def gen_constant_class_variant(sequence):
     build_sequence = ''
     for amino_acid in sequence:
         cur_class = AminoAcid.return_AA_class(amino_acid)
-        build_sequence += get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=[])
+        potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=[], return_all = True)
+        if len(potential_residues) == 1:
+            build_sequence += potential_residues[0]
+        else:
+            if amino_acid in potential_residues:
+                potential_residues.remove(amino_acid)
+            if len(potential_residues) == 1:
+                build_sequence += potential_residues[0]
+            else:
+                build_sequence += potential_residues[randint(0, len(potential_residues)-1)]
     # now correct hydropathy
     starting_disorder = Protein.calc_mean_hydro(sequence)
     final_seq = optimize_hydropathy_within_class(build_sequence, starting_disorder)
@@ -650,6 +667,691 @@ def gen_constant_residue_variant(sequence, constant_residues = []):
     return rebuilt_sequence
 
 
-def gen_minimal_variant
+
+def seq_chunks_from_regions_list(sequence, regions=[]):
+    '''
+    function that takes in specified regions and returns
+    a list of sequences
+
+    parameters
+    ----------
+    sequence : str
+        amino acid sequenc as a string
+
+    regions : list of lists
+        list of lists where sublists specify regions to break up 
+        into chunks
+    '''
+
+    # list to add additional lists to to close gaps
+    complete_list = []
+
+    # make sure list is list of lists
+    if type(regions[0]) == int:
+        regions = [regions]
+    
+
+    # iterate through lists to make sublists
+    for sublist in range(0, len(regions)):
+        curlist = regions[sublist]
+        if sublist == len(regions)-1:
+            if len(regions) == 1:
+                if curlist[0] != 0:
+                    complete_list.append([0, curlist[0]])
+            complete_list.append(curlist)
+            if curlist[1] != len(sequence):
+                complete_list.append([curlist[1], len(sequence)])
+        else:
+            if sublist == 0:
+                if curlist[0] != 0:
+                    complete_list.append([0,curlist[0]])
+            nextlist = regions[sublist+1]
+            complete_list.append(curlist)
+            if curlist[1]!=nextlist[0]:
+                complete_list.append([curlist[1],nextlist[0]])
+
+    return complete_list
+
+
+
+def gen_shuffle_variant(sequence, shuffle_regions=[], use_index=False):
+    '''
+    Function that will shuffle specific regions of an IDR.
+    Multiple regions can be specified simultaneously.
+
+    parameters
+    ----------
+    sequences : string
+        the string of the amino acid sequence to shuffle
+
+    shuffle_regions : list of lists
+        A nested list containing the regions of the
+        protein to shuffle. If a single list is input, 
+        the function just does that region (no need
+        for unnecessary listed nests.)
+
+    use_index : Bool
+        Whether the first amino acid should be considered '1'
+        or '0'. By default will start at 1 (for the first amino acid.), 
+        which doesn't follow standard coding formatting but
+        will be easier for most end user. If it drives you bananas,
+        feel free to set use_index to True.
+
+    Returns
+    -------
+    shuffled_seq : String
+        Returns your sequence with the specified regions shuffled.
+    '''
+
+    # now make a nested list to keep things from getting annoying
+    if type(shuffle_regions[0])==int:
+        shuffle_regions = [shuffle_regions]
+
+    # now convert to index values for the computering peeps
+    # also modifies values such that the range includes specified residues
+    # unlike default behavior where the final residue number is not included
+    if use_index == False:
+        full_list = []
+        for i in shuffle_regions:
+            full_list.append([i[0]-1, i[1]])
+        shuffle_regions = full_list
+
+
+    # get all regions
+    all_regions = seq_chunks_from_regions_list(sequence, regions = shuffle_regions)
+
+
+    #build the seq
+    shuffled_sequence = ''
+
+    for subregion in all_regions:
+        curblock = sequence[subregion[0]:subregion[1]]
+        if subregion in shuffle_regions:
+            shuffled_sequence += ''.join(random.sample(curblock, len(curblock)))
+        else:
+            shuffled_sequence += curblock
+
+    # return the sequence
+    return shuffled_sequence
+
+
+# function to identify residue closest tot eh middle (from list or otherwise)
+def find_middle_res(sequence, residues):
+    '''
+    function to find the residue from residue(s)
+    of interest that are closest to the middle of a sequence
+    
+    Parameters
+    -----------
+    sequence : string 
+        amino acid sequence as a string
+
+    residues : list or string
+        can be a list of residues or a single residue as a string
+
+    Returns
+    -------
+    approx_middle : int
+        returns thte index of the resiude approximately in the middle
+
+    '''
+
+    # make sure consistnetly working with a list
+    if type(residues) == str:
+        residues = [residues]
+
+    # find approximate middle of sequence
+    approx_middle = int(len(sequence)/2)
+    # if the approx middle residue is the res of interest, great
+    if sequence[approx_middle] in residues:
+        return approx_middle
+    else:
+        for i in range(0, approx_middle):
+            cur_residue_1 = sequence[approx_middle+i]
+            cur_residue_2 = sequence[approx_middle-i]
+            if cur_residue_1 in residues:
+                return approx_middle+i
+            if cur_residue_2 in residues:
+                return approx_middle-i
+
+        # if we still have nothing, we have to return an end value
+
+        if sequence[0] in residues:
+            return 0
+        elif sequence[len(sequence)] in residues:
+            return len(sequence)
+        else:
+            raise exception('Error in finding middle residue')
+    raise exception('Error in finding middle residue, made to end of function')
+
+
+
+
+def increase_charge_asymmetry_once(sequence, exclude = []):
+    
+    """
+    
+    Function to increase charge asymmetry of an input sequence.
+    Uses some randomness during generation in case the generated 
+    does not reach the cutoff value (then can retry a different
+    sequence)
+
+    Parameters
+    -------------
+
+    sequence : String
+        The amino acid sequence as a string.
+
+    exclude : List
+        A list of residues to exclude moving when altering asymmetry
+
+
+    Returns
+    ---------
+        
+    sequence : String
+        Returns an amino acid sequence with an increased charge asymmetry
+
+    """
+
+    # identify positions of negative and positive residues in a sequence
+    if 'E' not in exclude:
+        E_coordinates = identify_residue_positions(sequence, 'E')
+    else:
+        E_coordinates = []
+
+    if 'D' not in exclude:
+        D_coordinates = identify_residue_positions(sequence, 'D')
+    else:
+        D_coordinates = []
+
+    if 'K' not in exclude:
+        K_coordinates = identify_residue_positions(sequence, 'K')
+    else:
+        K_coordinates = []
+
+    if 'R' not in exclude:
+        R_coordinates = identify_residue_positions(sequence, 'R')
+    else:
+        R_coordinates = []
+
+    negative_coordinates = (E_coordinates + D_coordinates)
+    positive_coordinates = (K_coordinates + R_coordinates)
+
+    # figure out what residues can be targeted and where to put them based on charge distribution
+    if len(positive_coordinates) > 0:
+        positive_weight = sum(positive_coordinates)/len(positive_coordinates)
+    else:
+        positive_weight = 0
+    
+    if len(negative_coordinates) > 0:
+        negative_weight = sum(negative_coordinates)/len(negative_coordinates)
+    else:
+        negative_weight = 0
+
+    N=0
+
+
+    # if no charged residues just return the sequence
+    if positive_weight == 0 and negative_weight == 0:
+        return sequence
+
+    # if no positive charges but have negative charges
+    elif positive_weight == 0 and negative_weight > 0:
+        
+        # make empty string to hold final sequence
+        nonmoved_res = ""
+        target_negative_coordinates = []
+        target_negative_residue = max(negative_coordinates)
+
+        # identify residues to pull from final sequence
+        for residue in range(0, len(sequence)):
+            if residue == target_negative_residue:
+                moved_negative_residue = sequence[residue]
+            else:
+                nonmoved_res += sequence[residue]
+
+        for i in range(0, int(0.25*len(nonmoved_res))):
+            if i < target_negative_residue:
+                target_negative_coordinates.append(i)  
+        # if no negative_charges but have positive charges
+        #elif positive_weight > 0 and negative weight == 0:
+
+        if len(target_negative_coordinates) > 1:
+            chosen_negative_position = target_negative_coordinates[random.randint(0, len(target_negative_coordinates)-1)]
+        else:
+            chosen_negative_position = 0        
+
+        # build the final sequence
+        final_sequence = ""
+
+        for i in range(0, len(nonmoved_res)):
+            if i == chosen_negative_position:
+                final_sequence += moved_negative_residue
+                final_sequence += nonmoved_res[i]
+            else:
+                final_sequence += nonmoved_res[i]
+
+
+    # if no negative charges but have positive charges
+    elif positive_weight > 0 and negative_weight == 0:
+        # make empty string to hold final sequence
+        nonmoved_res = ""
+        target_positive_coordinates = []
+        target_positive_residue = max(positive_coordinates)
+
+        # identify residues to pull from final sequence
+        for residue in range(0, len(sequence)):
+            if residue == target_positive_residue:
+                moved_positive_residue = sequence[residue]
+            else:
+                nonmoved_res += sequence[residue]
+
+        for i in range(0, int(0.25*len(nonmoved_res))):
+            if i < target_positive_residue:
+                target_positive_coordinates.append(i)  
+        # if no negative_charges but have positive charges
+        #elif positive_weight > 0 and negative weight == 0:
+
+        if len(target_positive_coordinates) > 1:
+            chosen_positive_position = target_positive_coordinates[random.randint(0, len(target_positive_coordinates)-1)]
+        else:
+            chosen_positive_position = 0        
+
+        # build the final sequence
+        final_sequence = ""
+
+        for i in range(0, len(nonmoved_res)):
+            if i == chosen_positive_position:
+                final_sequence += moved_positive_residue
+                final_sequence += nonmoved_res[i]
+            else:
+                final_sequence += nonmoved_res[i]
+
+
+    else:
+        # randomly decide whether to target a positive or negative residue
+        chosen_val = random.randint(2, 10)
+        if chosen_val % 2 == 0:
+            change_positive = True
+            change_negative = False
+        else:
+            change_positive = False
+            change_negative = True
+
+        # make empty string to hold final sequence
+        nonmoved_res = ""
+        target_positive_coordinates = []
+        target_negative_coordinates = []
+        # figure out where to put residues
+        if positive_weight > negative_weight:
+            # decide if targeting postiive or negative
+            if change_positive == True:
+                target_positive_residue = min(positive_coordinates)
+            else:
+                target_negative_residue = max(negative_coordinates)
+
+            # identify residues to pull from final sequence
+            for residue in range(0, len(sequence)):
+                if change_positive == True:
+                    if residue == target_positive_residue:
+                        moved_positive_residue = sequence[residue]
+                    else:
+                        nonmoved_res += sequence[residue]
+
+                else:
+                    if residue == target_negative_residue:
+                        moved_negative_residue = sequence[residue]
+                    else:
+                        nonmoved_res += sequence[residue]
+
+            if change_positive == True:
+                for i in range(int(0.75*len(nonmoved_res)), len(nonmoved_res)):
+                    if i > target_positive_residue:
+                        target_positive_coordinates.append(i)
+            else:
+                for i in range(0, int(0.25*len(nonmoved_res))):
+                    if i < target_negative_residue:
+                        target_negative_coordinates.append(i)  
+
+        else:
+            if change_positive == True:
+                target_positive_residue = max(positive_coordinates)
+            else:
+                target_negative_residue = min(negative_coordinates)
+
+            # identify residues to pull from final sequence
+            for residue in range(0, len(sequence)):
+                if change_positive == True:
+                    if residue == target_positive_residue:
+                        moved_positive_residue = sequence[residue]
+                    else: 
+                        nonmoved_res += sequence[residue]
+                
+                else:
+                    if residue == target_negative_residue:
+                        moved_negative_residue = sequence[residue]
+                    else:
+                        nonmoved_res += sequence[residue]
+
+            if change_positive == True:
+                for i in range(0, int(0.75*len(nonmoved_res))):
+                    if i < target_positive_residue:
+                        target_positive_coordinates.append(i)
+            else:
+                for i in range(int(0.25*len(nonmoved_res)), len(nonmoved_res)):
+                    if i > target_negative_residue:
+                        target_negative_coordinates.append(i)            
+
+        # choose a random target residue
+        if change_positive == True:
+            if len(target_positive_coordinates) > 1:
+                chosen_positive_position = target_positive_coordinates[random.randint(0, len(target_positive_coordinates)-1)]
+            else:
+                if positive_weight > negative_weight:
+                    chosen_positive_position = len(nonmoved_res)-1
+                else:
+                    chosen_positive_position = 0
+        else:
+            if len(target_negative_coordinates) > 1:
+                chosen_negative_position = target_negative_coordinates[random.randint(0, len(target_negative_coordinates)-1)]
+            else:
+                if negative_weight > positive_weight:
+                    chosen_negative_position = len(nonmoved_res)-1
+                else:
+                    chosen_negative_position = 0        
+
+
+        # build the final sequence
+        final_sequence = ""
+
+        for i in range(0, len(nonmoved_res)):
+            if change_positive == True:
+                if i == chosen_positive_position:
+                    final_sequence += moved_positive_residue
+                    final_sequence += nonmoved_res[i]
+                else:
+                    final_sequence += nonmoved_res[i]
+
+            if change_negative == True:
+                if i == chosen_negative_position:
+                    final_sequence += moved_negative_residue
+                    final_sequence += nonmoved_res[i]
+                else:
+                    final_sequence += nonmoved_res[i]
+
+    return final_sequence
+
+
+
+
+def decrease_charge_asymmetry_once(sequence):
+    """
+    
+    Function to decrease charge asymmetry of an input sequence.
+    Uses some randomness during generation in case the generated 
+    does not reach the cutoff value (then can retry a different
+    sequence)
+
+    Parameters
+    -------------
+
+    sequence : String
+        The amino acid sequence as a string.
+
+    Returns
+    ---------
+        
+    sequence : String
+        Returns an amino acid sequence with an increased charge asymmetry
+
+    """
+
+
+    # set arbitrary lowest and highest ncpr areas
+    lowest_NCPR = 100
+    highest_NCPR = -100
+    N=0
+    bloblen=5
+
+    # make lists to hold possible coords to select from randomly
+    possible_lowest_NCPR_coords = []
+    possible_highest_NCPR_coords = []
+
+    for i in range(0, len(sequence)-bloblen):
+        cur_blob = sequence[i: i+bloblen]
+        cur_NCPR = Protein.calc_NCPR(cur_blob)
+        if cur_NCPR >= highest_NCPR:
+            if cur_NCPR > highest_NCPR:
+                possible_highest_NCPR_coords = [[i, i+bloblen]]
+            else:
+                possible_highest_NCPR_coords.append([i, i+bloblen])
+            highest_NCPR = cur_NCPR
+        if cur_NCPR <= lowest_NCPR:
+            if cur_NCPR < lowest_NCPR:
+                possible_lowest_NCPR_coords = [[i, i+bloblen]]
+            else:
+                possible_lowest_NCPR_coords.append([i, i+bloblen])
+            lowest_NCPR = cur_NCPR
+
+
+    # select random lowest and highest NCPR intervals
+    if len(possible_lowest_NCPR_coords) > 1:
+        lowest_NCPR_blob = possible_lowest_NCPR_coords[random.randint(0, len(possible_lowest_NCPR_coords)-1)]
+    else:
+        lowest_NCPR_blob = possible_lowest_NCPR_coords[0]
+
+    if len(possible_highest_NCPR_coords) > 1:
+        highest_NCPR_blob = possible_highest_NCPR_coords[random.randint(0, len(possible_highest_NCPR_coords)-1)]
+    else:
+        highest_NCPR_blob = possible_highest_NCPR_coords[0]
+
+
+    # figure out possible targets
+    possible_positive_targets = []
+    possible_negative_targets = []
+
+    for aa in range(highest_NCPR_blob[0], highest_NCPR_blob[1]):
+        if sequence[aa] == 'K' or sequence[aa] == 'R':
+            possible_positive_targets.append(aa)
+
+    for aa in range(lowest_NCPR_blob[0], lowest_NCPR_blob[1]):
+        if sequence[aa] == 'D' or sequence[aa] == 'E':
+            possible_negative_targets.append(aa)    
+
+
+    # select random residue to change
+    if len(possible_negative_targets) > 1:
+        selected_negative_residue = possible_negative_targets[random.randint(0, len(possible_negative_targets)-1)]
+    else:
+        if possible_negative_targets != []:
+            selected_negative_residue = possible_negative_targets[0]
+        else:
+            selected_negative_residue = ""
+
+    if len(possible_positive_targets) > 1:
+        selected_positive_residue = possible_positive_targets[random.randint(0, len(possible_positive_targets)-1)]
+    else:
+        if possible_positive_targets != []:
+            selected_positive_residue = possible_positive_targets[0]
+        else:
+            selected_positive_residue = ""
+
+    # make sure that there is a residue chosen to swap no matter what!
+
+    if selected_negative_residue == "":
+        selected_negative_residue = random.randint(lowest_NCPR_blob[0], lowest_NCPR_blob[1])
+
+    if selected_positive_residue == "":
+        selected_positive_residue = random.randint(highest_NCPR_blob[0], highest_NCPR_blob[1])
+
+    #build the final sequence
+    final_sequence = ""
+
+    for i in range(0, len(sequence)):
+        if i == selected_negative_residue:
+            final_sequence += sequence[selected_positive_residue]
+        elif i == selected_positive_residue:
+            final_sequence += sequence[selected_negative_residue]
+        else:
+            final_sequence += sequence[i]
+
+    return final_sequence
+
+
+
+
+
+def decrease_kappa_below_value(sequence, max_kappa, attempts=None):
+    '''
+    function to decrease the kappa value below
+    a target value.
+
+    Parameters
+    ----------
+    sequence : str
+        the amino acid sequence as a string
+
+    max_kappa : float
+        the max allowed kappa value as a float
+
+    Returns
+    -------
+    final_sequence : str
+        returns the sequence with a reduced kappa value as a string
+    '''
+    original_kappa = pr(sequence).kappa
+    if original_kappa < max_kappa:
+        return sequence
+
+    else:
+        # if user doesn't set number of attempts, set number
+        if attempts == None:
+            # set attempts to 20 * length of the seqeunece
+            attempts = 20*len(sequence)
+        new_sequence = decrease_charge_asymmetry_once(sequence)
+        curkappa = pr(new_sequence).kappa
+        # reduce kappa number ot times there are 
+        # residues in the sequence
+        for i in range(0, attempts):
+
+            if curkappa < max_kappa:
+                return new_sequence
+            else:
+                new_sequence = decrease_charge_asymmetry_once(new_sequence)
+                curkappa = pr(new_sequence).kappa
+    raise Exception('Unable to return sequence with kappa value below specified value')
+
+
+
+def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_KAPPA_ERROR, attempts=20000):
+    '''
+    Function to generate a sequence with a user-defined
+    kappa value. Requires kappa calculation using 
+    SPARROW.
+
+    parameters
+    -----------
+    sequence : str
+        the amino acid sequence as a sting
+
+    kappa : float
+        the desired kappa value between 0 and 1 as a float
+        1 = max asymmetry
+        0 = minimum charge asymmetry
+
+    allowed_kappa_error : float
+        How much difference there can be between the 
+        specified kappa value and the kappa value
+        calculated for the returned sequence
+    '''
+    if attempts==None:
+        attempts = len(sequence)*50
+
+
+    # first decrease kappa 
+    kappa_below = kappa - 0.01
+    if kappa_below < 0.005:
+        kappa_below = 0.005
+
+    decreased_kappa_seq = decrease_kappa_below_value(sequence, kappa_below)
+    starting_kappa = pr(decreased_kappa_seq).kappa
+    if abs(starting_kappa-kappa) < allowed_kappa_error:
+        return decreased_kappa_seq
+    else:
+        new_sequence = increase_charge_asymmetry_once(decreased_kappa_seq)
+        curkappa = pr(new_sequence).kappa
+        for i in range(0, attempts):
+            if abs(curkappa - kappa) < allowed_kappa_error:
+                return new_sequence
+            else:
+                new_sequence = increase_charge_asymmetry_once(new_sequence)
+                curkappa = pr(new_sequence).kappa
+                # if you go too high in value reset and try again.
+                # should be stochastic enough to work....
+                if curkappa > kappa + (allowed_kappa_error*3):
+                    new_sequence = decreased_kappa_seq
+                    curkappa = starting_kappa
+    raise Exception('unable to generate sequence with desired kappa')
+
+
+test = 'IKLANATKKVGTKPAESDKKEEEKSAETKE'
+print(Protein.calc_all_properties(test))
+print(Protein.calc_all_properties((test)))
+
+'''
+need to do the following:
+
+*when have multiple monitors, should definitely
+move common code between variant and sequence generation
+to a common backend location to import....
+
+
+1. Minimal variant
+3. Increase asymmetry (specific res or charge, polar, etc.)
+4. increase charge asymmetry
+
+then add all to docs and to the variant_generation.py stuff...
+
+variants to add to main generation point
+----------------------------------------
+
+gen_new_var_constant_class_nums => returned sequence has same properties and same number of residues by class as the input sequence but the order is not the same. POSITIONS OF RESIDUES WITHIN EACH CLASS CAN MOVE RELATIVE TO ONE ANOTHER!
+
+gen_constant_class_variant => returned sequence has same number AND POSITION of amino acis as input sequence BY CLASS. Properties will be same in returend sequence too.
+
+gen_new_variant => returned sequence will have the same properies as the input sequence. That's it. Number of amino acids by class is allowed to change.
+
+hydropathy_class_variant => will keep the position and number of all amino acids by class the same in the returned sequence. Allows adjustments to hydropathy while keeping everyhting else constant.
+
+gen_constant_residue_variant => returns sequence that has specified residues held constant. The returned sequence will have the same properties as the input sequence
+
+gen_minimal_variant -> change the properties of your input sequence while minimizing changes to the sequence
+
+gen_shuffle_variant -> choose indiviudal regions of your sequence to shuffle
+
+increase_asymmetry - > choose residue(s) or class of residues to increase asymmetry of in the sequence.
+
+increase_charge_asymmetry -> increase kappa
+
+***
+also need to add in the charge distribution functionality
+***
+
+
+
+#def_shuffle_variant:
+
+#def gen_minimal_variant:
+
+
+
+seq_var = 'IKLANATKKVGTKPAESDKKEEEKSAETKEPTKEPTKVEE'
+newseq = gen_new_variant(seq_var)
+
+print(Protein.calc_all_properties(seq_var))
+print(Protein.calc_all_properties(newseq))
+'''
+
 
 

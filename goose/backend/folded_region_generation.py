@@ -12,6 +12,10 @@ from random import randint
 
 from PredictDSSP import dssp
 
+from goose.backend.protein import Protein
+
+from goose.backend.lists import alpha_helix_lists
+
 
 ''' 
 general sequence generation
@@ -143,6 +147,32 @@ def gen_helix(length, cutoff=0.85, max_iters=500):
     raise Exception('Unable to generate specified sequence')
 
 
+
+'''
+specify hydro in a built helix
+'''
+
+def gen_helix_hydro(length, hydropathy, cutoff=0.85, itrs=10000):
+    
+    # first choose value for dict
+    rounded_hydro_val = round(hydropathy)
+    # make sure val is within possible values for dict
+    if rounded_hydro_val < 1:
+        rounded_hydro_val=1
+    if rounded_hydro_val > 8:
+        rounded_hydro_val=8
+
+    chosen_list = alpha_helix_lists[str(rounded_hydro_val)]
+
+    for i in range(0, itrs):
+        cur_helix = gen_sequence(length=length, usedlist=chosen_list)
+        if abs(Protein.calc_mean_hydro(cur_helix) - hydropathy) < 0.05:
+            if check_helicity(cur_helix, cutoff=cutoff):
+                return cur_helix
+
+    raise Exception('Unable to generate helix with specified hydro.')
+
+
 def gen_beta_strand(length=12, cutoff=0.6, max_iters=5000):
     '''
     function to generate a verified helix
@@ -245,7 +275,6 @@ def gen_beta_sheet(length, strand_length=14, coil_length=6):
         beta_strand_seq += cur_coil
     # return the seq
     return beta_strand_seq
-
 
 
 

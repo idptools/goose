@@ -1,11 +1,12 @@
 goose
 ==============================
-[//]: # (Badges)
-[![GitHub Actions Build Status](https://github.com/REPLACE_WITH_OWNER_ACCOUNT/goose/workflows/CI/badge.svg)](https://github.com/REPLACE_WITH_OWNER_ACCOUNT/goose/actions?query=workflow%3ACI)
-[![codecov](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/goose/branch/master/graph/badge.svg)](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/goose/branch/master)
-
 
 A Python package for making IDRs and IDR variants
+
+# WARNING
+
+**GOOSE is currently under final testing before full release. Use at your own risk! Final feature implementation is currently being wrapped up!**
+
 
 ### Copyright
 

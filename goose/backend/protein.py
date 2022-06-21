@@ -204,5 +204,5 @@ class Protein:
         properties_dict['FCR'] = Protein.calc_FCR(seq)
         properties_dict['NCPR'] = Protein.calc_NCPR(seq)
         properties_dict['hydropathy'] = Protein.calc_mean_hydro(seq)
-        properties_dict['SCD'] = Protein.calc_SCD(seq)
+        return properties_dict
             

@@ -140,7 +140,11 @@ def sequence_fractions(length, **kwargs):
     # return the seq
     return generated_seq
 
+'''
+MIGHT BE WORTH TESTING...
 
+CHANGE ALL GENERATORS TO MAKE A BUNCH OF SEQEUNCES WITH NECECSSARY PARAMETERS THAN TEST FOR DISORDER
+'''
 
 
 
