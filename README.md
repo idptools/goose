@@ -1,4 +1,4 @@
-![GOOSE_LOGO_FULL](https://github.com/ryanemenecker/goose/blob/main/images/goose_logo_fixed.png)
+![GOOSE_LOGO_FULL](https://github.com/ryanemenecker/goose/blob/main/images/goose_logo_3.png) GOOSE
 
 
 

@@ -5,6 +5,11 @@ __pycache__/
 
 # C extensions
 *.so
+.DS_Store
+
+# other .DS_store
+goose/.DS_Store
+images/.DS_Store
 
 # Distribution / packaging
 .Python
@@ -24,6 +29,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+goose/backend/beta_functions.py
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
