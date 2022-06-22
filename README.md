@@ -1,9 +1,5 @@
-![GOOSE_LOGO_FULL](https://github.com/ryanemenecker/goose/blob/main/images/goose_logo_3.png) GOOSE
-
-
-
-goose
-==============================
+![GOOSE_LOGO_FULL](https://github.com/ryanemenecker/goose/blob/main/images/goose_logo_3.png) 
+# GOOSE : Generate disOrdered prOtiens Specifying paramEters
 
 A Python package for making IDRs and IDR variants
 
