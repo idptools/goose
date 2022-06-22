@@ -1353,5 +1353,3 @@ print(Protein.calc_all_properties(seq_var))
 print(Protein.calc_all_properties(newseq))
 '''
 
-
-

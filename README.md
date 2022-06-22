@@ -1,3 +1,7 @@
+![Alt text](../goose/images/goose_logo_fixed_egg.png)
+
+
+
 goose
 ==============================
 
