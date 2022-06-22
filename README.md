@@ -1,4 +1,4 @@
-![Alt text](../goose/images/goose_logo_fixed_egg.png)
+![GOOSE_LOGO_FULL](https://github.com/ryanemenecker/goose/blob/main/images/goose_logo_fixed_egg.png)
 
 
 
