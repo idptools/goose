@@ -9,6 +9,8 @@ isn't ideal...
 import random
 import metapredict as meta
 
+from goose.goose_exceptions import GooseInputError, GooseFail
+from goose.backend import parameters
 from goose.backend.protein import Protein
 from goose.backend.sequence_generation_backend import get_optimal_residue, random_amino_acid
 from goose.backend.lists import aa_dis_val_4_v3
@@ -35,21 +37,18 @@ charged_list = ['D', 'E', 'D', 'E', 'D', 'E', 'D', 'E', 'K', 'R', 'K', 'R', 'K',
 amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
 
 
-def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_val):
-
+def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     """
-
     Function for determining if a sequence variant is disordered. The
     purpose of this over the typical check_disorder function for generated
     sequences is that the input sequence for a disordered variant may have
-    regions that are below the cutoff value (more ordered). Because GOOSE is 
-    attempting to make variants that often replicate aspects of the original
-    input sequence, these regions may not be possible for GOOSE to 'consider 
-    disordered' using a blanket cutoff_val, making variant generation difficult.
-    This allows a more flexible definition of disorder when checking the final
-    sequence variant where the variant doesn't have to necessarily be more 
-    disordered than the input sequence (though it typically is).
+    regions that are below the cutoff value (more ordered). This function
+    gets around that by allowing those regions that were originally not as disordered
+    in the variant sequence to remain less disordered. However, the region will
+    NEVER BE LESS DISORDERED than the input sequence, but it may become more disordered.
 
+    This function (if strict is set to False) will allow an occassional residue
+    to dip below the cutoff value.
 
     Parameters
     -------------
@@ -65,6 +64,10 @@ def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_v
         The cutoff value for disorder. A value of at least 0.6 is
         typically used by GOOSE.
 
+    strict : bool
+        if set to true, will not count a sequence as disordered even if a single amino
+        acid falls below the cutoff value.
+
     Returns
     ---------
 
@@ -75,12 +78,18 @@ def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_v
         the cutoff_val.
 
     """
+    # just... I know.
+    cutoff_val = cutoff
 
     # first get the list of disordered residues for the current sequence
-    disorder_list = meta.predict_disorder(current_sequence)
+    variant_disorder_list = meta.predict_disorder(current_sequence)
+
+    # first make a 'modified' disorder value list so that
+    # residues can go below cutoff.
+    adjusted_disorder_values = []
 
     # for the disorder values in the disorder list
-    for disorder_vals in range(0, len(disorder_list)):
+    for disorder_vals in range(0, len(variant_disorder_list)):
 
         # get the original disorder value at the current position
         input_disorder = original_disorder_list[disorder_vals]
@@ -95,17 +104,53 @@ def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_v
         else:
             input_disorder = input_disorder
 
-        # get the current disorder value for the current sequence variant
-        current_disorder = disorder_list[disorder_vals]
+        adjusted_disorder_values.append(input_disorder)
 
-        # if the current disorder value is less than the input disorder value
-        if current_disorder < input_disorder:
-            # return False
-            return False
+    # keep track of consecutively ordered residues and total ordered
+    cur_order_streak = 0
+    total_ordered_residues = 0
+
+    # allow up to 5 % of residues to be 'ordered' provided they aren't consecutive
+    allowed_order_residues = round(0.05*len(current_sequence))
+    if allowed_order_residues < 1:
+        allowed_order_residues = 1
+
+    # calculate number of conseuctively allowed residues
+    # going to allow up to the length of the sequence over 25 but 
+    # not greater than 10
+    consec_allowed = round(len(current_sequence)/25)
+    if consec_allowed < 1:
+        consec_allowed = 1
+    if consec_allowed > 10:
+        consec_allowed = 10
+
+    for disorder_val in range(0, len(adjusted_disorder_values)):
+        # get current values for the original and the variant
+        variant_disorder = variant_disorder_list[disorder_val]
+        original_disorder = adjusted_disorder_values[disorder_val]
+
+        # see if strict set to true
+        if strict == True:
+            if variant_disorder < original_disorder:
+                return False
+        else:
+            if variant_disorder < original_disorder:
+                cur_order_streak += 1
+                total_ordered_residues += 1
+            else:
+                cur_order_streak = 0
+            # check to see if order streak is too high
+            # or total num ordered residues too high
+            if cur_order_streak > consec_allowed:
+                return False
+            if total_ordered_residues > allowed_order_residues:
+                return False
 
     # if all residues in the sequence variant are greater than either
     # the original value or at least the cutoff value, return True
     return True
+
+
 
 
 def cleanup_sequence(sequence):
@@ -1315,6 +1360,7 @@ def optimize_charge_asymmetry(sequence, objective_charge_asymmetry, cutoff, iter
 
     """
 
+
     starting_charge_asymmetry = Protein.calc_SCD(sequence)
 
     # figure out current error
@@ -1369,7 +1415,12 @@ def optimize_charge_asymmetry(sequence, objective_charge_asymmetry, cutoff, iter
 
 
 
-def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net_charge = '', charge_asymmetry='', cutoff=0.65):
+def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net_charge = '', charge_asymmetry='', cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+
+    '''
+    tries to change the paramters you want 
+    while minimally changing the starting sequence
+    '''
 
     sequence = ""
     for i in input_sequence:
@@ -1378,8 +1429,14 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
     # clean up the input sequence
     input_sequence = cleanup_sequence(input_sequence)
 
-    # make sure that properties not specified are set to stay the same
+	# check for out of bounds ncpr
 
+    if fraction == '':
+    	if net_charge != '':
+    		if abs(net_charge) > Protein.calc_FCR(sequence):
+    			raise GooseInputError('The specified value for net_charge is not possible with the FCR value of the input sequence. Please increase fraction or decrease net_charge.')
+
+    # make sure that properties not specified are set to stay the same
     if mean_hydro == '':
         mean_hydro = Protein.calc_mean_hydro(sequence)
 
@@ -1563,7 +1620,7 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
 
     error = abs(Protein.calc_mean_hydro(sequence)-mean_hydro)
 
-    if error > 0.03:        
+    if error > parameters.HYDRO_ERROR:        
         attempted_optimization = 0
         number_iterations = len(sequence)
         # start initial optimizations
@@ -1578,7 +1635,7 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
             prev_seqs.append(sequence)            
             attempted_optimization = attempted_optimization + 1
 
-            if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < 0.03:
+            if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < parameters.HYDRO_ERROR:
                 attempted_optimization += number_iterations * 2
 
     #  Bringing out the slow optimizer if needed
@@ -1586,7 +1643,7 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
 
     error = abs(Protein.calc_mean_hydro(sequence)-mean_hydro)
 
-    if error > 0.03:          
+    if error > parameters.HYDRO_ERROR:          
         attempted_optimizations = 0
         number_iterations = len(sequence)
         # start initial optimizations
@@ -1600,11 +1657,11 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
             prev_seqs.append(sequence)            
             attempted_optimization = attempted_optimization + 1
 
-            if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < 0.03:
+            if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < parameters.HYDRO_ERROR:
                 attempted_optimization += number_iterations * 2
 
 
-    if sequence_variant_disorder(sequence, original_disorder, cutoff) == False:
+    if sequence_variant_disorder(sequence, original_disorder, cutoff=cutoff, strict=strict) == False:
 
         # get sequence disorder
         sequence_disorder = meta.predict_disorder(sequence)
@@ -1623,7 +1680,7 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
                 
                 # optimize the sequence
                 new_sequence = optimize_disorder(sequence, exclude=['D', 'E', 'K', 'R', 'P'])
-                if sequence_variant_disorder(sequence, original_disorder, cutoff) == True:
+                if sequence_variant_disorder(sequence, original_disorder, cutoff=cutoff, strict=strict) == True:
                     sequence = new_sequence
                     current_iteration = current_iteration + (number_ordered_residues * 3)
 
@@ -1633,7 +1690,7 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
                 # add 1 to the current iterations 
                 current_iteration = current_iteration + 1
 
-    if sequence_variant_disorder(sequence, original_disorder, cutoff) == False or abs(Protein.calc_mean_hydro(sequence) - mean_hydro) > 0.03:
+    if sequence_variant_disorder(sequence, original_disorder, cutoff=cutoff, strict=strict) == False or abs(Protein.calc_mean_hydro(sequence) - mean_hydro) > parameters.HYDRO_ERROR:
         
         # do some fast optimizations
         cur_iteration = 0
@@ -1641,17 +1698,17 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
         while cur_iteration < max_iterations:
             optimized_seq = fast_optimize_hydro(sequence, mean_hydro, use_charged=False)
             sequence = optimized_seq
-            if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) < 0.03:
+            if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) < parameters.HYDRO_ERROR:
                 cur_iteration += 100
             cur_iteration += 1
             
 
-    if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) > 0.03:
+    if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) > parameters.HYDRO_ERROR:
         cur_slow_iteration = 0
         max_slow_iterations = 5
         while cur_slow_iteration < max_slow_iterations:
             optimized_seq = slow_optimize_hydro(sequence, mean_hydro, use_charged=False)
-            if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) < 0.03:
+            if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) < parameters.HYDRO_ERROR:
                 return sequence
                 cur_slow_iteration += 100
             cur_slow_iteration += 1
@@ -1662,17 +1719,10 @@ def minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '', net
             sequence = optimize_charge_asymmetry(sequence, charge_asymmetry, cutoff=cutoff, iterations=100)
 
 
-    if sequence_variant_disorder(sequence, original_disorder, cutoff) == True:
-        if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < 0.03:
+    if sequence_variant_disorder(sequence, original_disorder, cutoff=cutoff, strict=strict) == True:
+        if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < parameters.HYDRO_ERROR:
             return sequence
 
-    return ("Unable to generate sequence.")
-
-
-
-test = 'IKLANATKKVGTKPAESDKKEEEKSAETKE'
-
-print(Protein.calc_all_properties(test))
-print(Protein.calc_all_properties(minimal_sequence_variant(test, mean_hydro=2.2, net_charge=-0.2)))
+    raise GooseFail('Unable to generate sequence.')
 
 

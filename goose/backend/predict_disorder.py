@@ -1,3 +1,14 @@
+'''
+Not currently being used in GOOSE. Could implement
+as a very inefficent but effective means of 
+optimizing disorder, but hasn't been necessary
+yet. Saving in case there are difficult edge
+cases my more computationally efficient (though
+hacky) functions can't handle.
+'''
+
+
+
 #import stuff
 import threading
 from threading import Thread

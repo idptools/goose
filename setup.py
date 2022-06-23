@@ -6,6 +6,7 @@ import sys
 from setuptools import setup, find_packages
 import versioneer
 
+
 short_description = "A Python package for making IDRs and IDR variants".split("\n")[0]
 
 # from https://github.com/pytest-dev/pytest-runner#conditional-requirement
@@ -47,7 +48,10 @@ setup(
     # Additional entries you may want simply uncomment the lines you want and fill in the data
     # url='http://www.my_package.com',  # Website
     install_requires=[
-                'metapredict'],              # Required packages, pulls from pip if needed; do not use for Conda deployment
+                'metapredict',
+                'PredictDSSP',
+                'cython', 
+                'numpy'],              # Required packages, pulls from pip if needed; do not use for Conda deployment
     # platforms=['Linux',
     #            'Mac OS-X',
     #            'Unix',

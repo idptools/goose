@@ -132,7 +132,7 @@ def get_optimal_residue(four_amino_acids, exclude_residues = [], cutoff_disorder
     # Need this if statement to avoid accidental infinite
     # loops due to my while statement downstream.
     if len(exclude_residues) >= 20:
-        raise Exception("You cannot exclude all amino acids.")
+        raise GooseInputError("You cannot exclude all amino acids.")
 
     # set order of amino acids for potential_AA_vals 
     # This order matches what was used for the input 5th
@@ -532,14 +532,25 @@ def random_optimization(sequence, min_random_iterations = 100, min_is_max = Fals
     # return the best sequence
     return best_sequence
 
-def check_hydropathy(sequence, objective_hydropathy, cutoff_val):
+def check_hydropathy(sequence, objective_hydropathy, hydro_error = parameters.HYDRO_ERROR):
     '''
     function to check the hydropathy of a sequence and see if it is 
-    within the appropriate error (cutoff_val) or not
+    within the appropriate error (hydro_error) or not
+
+    parameters
+    -----------
+    sequence : String
+        The sequence to be optimized as a string
+    objective_hydropathy : float
+        objective hydropathy value as a float
+    hydro_error : float
+        the max allowed error in the hydropathy between the sequence and the 
+        objective hydrpoatyh
+
     '''
     cur_hydro = round(Protein.calc_mean_hydro(sequence), 5)
     error = abs(cur_hydro-objective_hydropathy)
-    if error <= cutoff_val:
+    if error <= hydro_error:
         return True
     return False
 
@@ -971,7 +982,7 @@ def hydro_seq(length, mean_hydro, just_neutral=False, allowed_error=None, return
                 excluded_list.append(i)
         used_list = excluded_list
         if used_list == []:
-            raise Exception('The function hydro_seq in /backend/sequence_generation_backend.py is attempting to build a sequence with an empty list due to specified excluded residues.')
+            raise GooseInputError('The function hydro_seq in /backend/sequence_generation_backend.py is attempting to build a sequence with an empty list due to specified excluded residues.')
 
     # while the correct hydro is false, try to generate sequence with correct hydro
     while correct_hydro==False:
@@ -1011,6 +1022,24 @@ def generate_charged_residues(length, FCR, objective_hydropathy):
     make a charged list of residues that can actually
     result in a hydropathy value that is possible to
     generate to balance the final objective hydropathy
+
+    parameters
+    ----------
+    length : int
+        the length of the sequence
+
+    FCR : float
+        FCR fraction value as a float between 0 and 1
+
+    objective_hydropathy : float
+        the objective hydropathy value for the sequence.
+        helps determine number of each charged residue if the
+        hydropathy of the charged residues differ.
+
+    returns
+    -------
+    final_charged_res : string
+        returns the final_charged_res as a string
     '''
     # empty string to hold charged residues
     final_charged_res = ''
@@ -1079,9 +1108,6 @@ def generate_charged_residues(length, FCR, objective_hydropathy):
 
 
 
-
-
-
 def sigma_FCR_NCPR(length, sigma_value):
     """
     Returns NCPR and FCR values for a specific sigma value
@@ -1094,11 +1120,11 @@ def sigma_FCR_NCPR(length, sigma_value):
     sigma_value : Float
         The sigma_value as a decimal
 
-
     Returns
     -----------
-    String
-        Returns a protein sequence as a string
+    dict
+        returns a dict where:
+        {'FCR': FCR_value, 'NCPR': NCPR_value}
     """      
     # calculate interval for potential FCRs
     FCR_fraction = 1/length
@@ -1347,7 +1373,30 @@ def calculate_max_charge(hydropathy):
     return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_1])
 
 
-def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = 0.05):
+def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = parameters.HYDRO_ERROR):
+    '''
+    function to optimize hydropathy of a sequence to bring it closer to
+    the objective hydropathy
+
+    parameters
+    ----------
+    sequence : string
+        the amino acid sequence as as string
+
+    objective_hydropathy : float
+        the objective hydropathy of the sequence as a float
+
+    allowed_error : float
+        the allowed error between the hydropathy of the
+        returned sequence and the objective_hydropathy
+
+    returns
+    -------
+    current_sequence : string
+        returns the final sequence that I for some really
+        dumb reason named 'current_sequence'.
+    '''
+
     optimizer=0
     current_sequence = sequence
     # set number of possible optimizations to legnth * 3 to limit how long it does this.
@@ -1379,6 +1428,23 @@ def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = 0.05
 def replace_residues(sequence, residue, replacement):
     '''
     function to replace the first instance of a residue with a different residue
+
+    parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    residue : string
+        the residue to identify as a string
+
+    replacement : string
+        the amino acid to replace the first instance of the
+        residue 'residue' with
+
+    returns
+    --------
+    sequence : string
+        returns the sequnce with the altered residue as a string
     '''
     if residue in sequence:
         cur_res_loc = sequence.index(residue)
@@ -1393,12 +1459,30 @@ def replace_residues(sequence, residue, replacement):
 
 
 
-def FCR_optimization(sequence, objective_hydropathy, allowed_error):
+def FCR_optimization(sequence, objective_hydropathy, allowed_error=parameters.HYDRO_ERROR):
     '''
     function to modify residues in the hydropathy and FCR 
     function for when the charged residues interfere with
     a correct hydropathy value
+
+    parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    objective_hydropathy : float
+        the objective hydropathy of the sequence as a float
+
+    allowed error : float
+        the allowed error in hydropathy value between the final 
+        sequence hydropathy and the objective hydropathy
+
+    returns
+    -------
+    final_seq : string
+        returns the final sequence as a string
     '''
+    
     cur_hydro = Protein.calc_mean_hydro(sequence)
     if abs(objective_hydropathy-cur_hydro) > allowed_error:
         new_sequence = sequence
@@ -1437,6 +1521,8 @@ def FCR_optimization(sequence, objective_hydropathy, allowed_error):
     else:
         final_seq = sequence
     return final_seq   
+
+
 
 
 def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1, allowed_hydro_error = parameters.HYDRO_ERROR, exclude = []):

@@ -45,10 +45,12 @@ def check_disorder(sequence, disorder_threshold=parameters.DISORDER_THRESHOLD, s
         sequence_disorder = meta.predict_disorder(sequence[2:len(sequence)-2])
     else:
         sequence_disorder=meta.predict_disorder(sequence)
+
     # see what the min disorder is
     min_disorder = min(sequence_disorder)
     if min_disorder >= disorder_threshold:
         return True
+
     # if the minimum disorder is very low, just return false.
     elif min_disorder < 0.25:
         return False
@@ -92,7 +94,7 @@ def check_disorder(sequence, disorder_threshold=parameters.DISORDER_THRESHOLD, s
 
 
 
-def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, sigma=None, attempts=1, 
+def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, sigma=None, attempts=20, 
     allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
     '''
     Function to actually generate a disordered sequence.
@@ -155,7 +157,7 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
 
         # try to build the sequence
         try:
-            attempted_seq = create_seq_by_props(length, FCR=FCR, NCPR=NCPR, hydropathy=hydropathy, attempts=1, 
+            attempted_seq = create_seq_by_props(length, FCR=FCR, NCPR=NCPR, hydropathy=hydropathy, attempts=20, 
             allowed_hydro_error = parameters.HYDRO_ERROR)
 
         # if attempt to build the sequence failed, continue back at the 

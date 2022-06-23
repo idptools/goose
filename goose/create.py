@@ -16,6 +16,7 @@ from goose.backend.goose_tools import check_and_correct_fracs_kwargs as _check_a
 from goose.backend.goose_tools import check_fracs_parameters as _check_fracs_parameters
 
 
+
 from goose.backend import parameters
 
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
@@ -140,49 +141,74 @@ def sequence_fractions(length, **kwargs):
     # return the seq
     return generated_seq
 
-'''
-MIGHT BE WORTH TESTING...
 
-CHANGE ALL GENERATORS TO MAKE A BUNCH OF SEQEUNCES WITH NECECSSARY PARAMETERS THAN TEST FOR DISORDER
-'''
+"""
+now need to add variant creation to user facing functionality.
 
 
-
-'''
-# testing code below
-
-next steps:
-implement variant generation
-
-
-2 types of variants:
-class variants
-    accounts for classes of amino acids.
-
-non-class variants
-    doesn't care about the class of amino acids.
+def gen_minimal_sequence_variant(input_sequence, mean_hydro = '',
+ fraction = '', net_charge = '', charge_asymmetry='', cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    tries to change the paramters you want 
+    while minimally changing the starting sequence
+    '''
 
 
-Also want:
-minimal change variant
-charge asymmetry variants
+def gen_new_var_constant_class(sequence, attempts=5, 
+    disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    A function to generate a variant where the sequence composition is new but
+    the numbers of each residue from each class is the same. The overall properties
+    of the generated sequence will also be constant.
+
+def gen_constant_class_variant(sequence, attempts=5, 
+    disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function to generate a variant with the same properties as the 
+    input variant as well as the same order of amino acids as
+    far as class and the same number in each class
+
+def gen_new_variant(sequence, attempts=5, 
+    disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function to generate a variant that is completely different
+    in sequence to the input but has all the same overall parameters.
+    Does not account for specific classes of residues.
+
+def gen_hydropathy_class_variant(sequence, hydropathy, allowed_hydro_error = parameters.HYDRO_ERROR,
+    attempts=5, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function to take in a sequence and make a variant that adjusts the
+    hydropathy while keeping the position and nuimber of amino acids the
+    same by class of amino acid
 
 
-
-****
-For charge asymmetery variants, can basically just use the function
-from OG GOOSE and let the user specify how many times to run
-it where increased number of times increasinlgy changes the asymetry
-****
-
-
-need to import:
+def gen_constant_residue_variant(sequence, constant_residues = [],
+    attempts=5, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function that will generate a new sequence variant
+    where specific residues are held constant. The 
+    variant will have the same aggregate properties
+    as the original sequence.
 
 
+def gen_shuffle_variant(sequence, shuffle_regions = [], use_index=False,
+    attempts=5, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    Function that will shuffle specific regions of an IDR.
+    Multiple regions can be specified simultaneously.
 
-from goose.backend.protein import Protein
 
-test = sequence(100, FCR=0.1, NCPR=0.1)
-print(Protein.all_properties_library(test))
+def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_KAPPA_ERROR,
+    attempts=5, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    Function to generate a sequence with a user-defined
+    kappa value. Requires kappa calculation using 
+    SPARROW. Kappa is a function of charge asymmetry, larger
+    kappa values have more asymmetrically distributed
+    charged residues.
 
-'''
+Once done with that, update the docs!
+
+
+"""

@@ -10,3 +10,9 @@ class GooseInputError(Exception):
 
 class GooseFail(Exception):
     pass
+
+class GooseInstallError(Exception):
+    pass
+
+class GooseBackendBug(Exception):
+    pass

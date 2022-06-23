@@ -4,7 +4,7 @@ backend functionality for variant generation
 import random
 from random import randint
 
-from goose.goose_exceptions import GooseInputError
+from goose.goose_exceptions import GooseInputError, GooseInstallError, GooseBackendBug
 from goose.backend.protein import Protein
 from goose.backend.sequence_generation_backend import identify_residue_positions, get_optimal_residue, optimal_residue_key, random_amino_acid, create_seq_by_props, fast_predict_disorder
 from goose.backend import lists
@@ -12,19 +12,12 @@ from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
 
 
-# might have to remove
-from sparrow import Protein as pr
+# will update when sparrow is on pip
+try:
+    from sparrow import Protein as pr
+except:
+    raise GooseInstallError('\nSparrow is not installed. Please install Sparrow using : \n pip install git+https://github.com/holehouse-lab/sparrow.git ')
 
-
-
-
-'''
-=/=/=/=/=/=/=/=/=/=/=
-Backend functionality
-=/=/=/=/=/=/=/=/=/=/=
-Below is the backend functionality necessary for the variant
-generators.
-'''
 
 def return_num_for_class(sequence):
     '''
@@ -43,6 +36,14 @@ def return_num_for_class(sequence):
             Histidine (H)    
             Cystine (C)
 
+    parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    returns : dict
+        returns dict with number of amino acids in each
+        class as defined above
 
     '''
     # define which residues in each class
@@ -96,6 +97,21 @@ def get_optimal_res_within_class(residue_class, sequence, additional_exclusion=[
     function to get the optimal residues within a class 
     for a sequence where the residue returned will
     be the residue to add to the end of the sequence
+    
+    parameters  
+    ----------
+    residue_class : string
+        the residue class as an amino acid
+
+    sequence : string
+        the amino acid sequence as a string
+
+    additional_exclusion : list
+        a list of residues to not allow to be returned
+
+    return_all : Bool
+        whether to return all possible values or not
+
     '''
 
     # if the residue class is a single AA, just return it.
@@ -265,6 +281,23 @@ def residue_optimize_hydropathy_within_class(sequence, objective_hydropathy, tar
     class
 
     This function only changes one residue at a time, which corresponds to 'target_residue_index'!
+
+    parameters
+    ----------
+    sequence : string 
+        amino acid sequence as a string
+
+    objective_hydropathy : Float
+        objective hydropathy as a float value. Between 0 and 9.
+
+    target_residue_index : int
+        the index number of the target residue
+
+    returns
+    -------
+    build_sequence : string
+        returns the optimized sequence as a string
+
     '''
 
     # define which residues in each class
@@ -343,6 +376,23 @@ def optimize_hydropathy_within_class(sequence, objective_hydropathy, allowed_hyd
     This function will optimie the hydropathy of a sequence such that it is
     within the allowed_hydro_error value.
     Will not change the classes of residues in the sequence or their position.
+
+    parameters
+    ----------
+    sequence : string 
+        amino acid sequence as a string
+
+    objective_hydropathy : Float
+        objective hydropathy as a float value. Between 0 and 9.
+
+    allowed_error : float
+        the allowed amount of error between the objective hydropathy and the final hydropathy
+
+    returns 
+    -------
+    new_sequence : string
+        returns the new (optimzed) sequence as a string
+
     '''
     # first figure out if possible
     possible_hydro_range = hydro_range_constant_classes(sequence)
@@ -370,6 +420,21 @@ def get_charge_locs(sequence):
     function that returns the locations of residues
     in a sequence that are charegd. 
     Returns dict of negative locations and positive locationcs
+
+    parameter
+    ----------
+    sequence : string
+        amino acid sequence as a string
+
+    returns
+    -------
+    dict
+        returns a dictionary with the key 'negative'
+        corresponding to the location of negatively
+        charged residues a 'positive' for the location
+        of positively charged residues from the input
+        sequence.
+
     '''
 
     negatives = []
@@ -389,24 +454,31 @@ def get_charge_locs(sequence):
     return {'negative':negatives, 'positive':positives}
 
 
-'''
-=/=/=/=/=/=/=/=/=/=/=/=/=/=/
-VARIANT SEQUENCE GENERATORS
-=/=/=/=/=/=/=/=/=/=/=/=/=/=/
-'''
-
+#=/=/=/=/=/=/=/=/=/=/=/=/=/=/
+#VARIANT SEQUENCE GENERATORS
+#=/=/=/=/=/=/=/=/=/=/=/=/=/=/
 '''
 Below are the actual sequence generators.
-Once again these just generate the sequence.
+These just generate the sequence.
 They do not check for disorder.
 '''
 
-def gen_new_var_constant_class_nums(sequence):
+def create_new_var_constant_class_nums(sequence):
     '''
     function that takes an input sequence and returns 
     a sequence with the same properties generated from 
     residues that match the number for the number in that
     specific class in the input sequnece
+
+    parameters
+    ----------
+    sequence : string
+        amino acid sequence as a string
+
+    returns
+    -------
+    build_sequence : string
+        returns the final build sequence variant
     '''
 
     # define which residues in each class
@@ -446,12 +518,22 @@ def gen_new_var_constant_class_nums(sequence):
     return build_sequence
 
 
-
-def gen_constant_class_variant(sequence):
+def create_constant_class_variant(sequence):
     '''
     function to generate a variant with the same properties as the 
     input variant as well as the same order of amino acids as
     far as class and the same number in each class
+
+    parameters
+    ----------
+    sequence : string
+        amino acid sequence as a string
+
+    returns
+    -------
+    final_seq : string
+        returns the final build sequence variant
+
     '''
     # build sequence to optimize disorder
     build_sequence = ''
@@ -468,14 +550,14 @@ def gen_constant_class_variant(sequence):
             else:
                 build_sequence += potential_residues[randint(0, len(potential_residues)-1)]
     # now correct hydropathy
-    starting_disorder = Protein.calc_mean_hydro(sequence)
-    final_seq = optimize_hydropathy_within_class(build_sequence, starting_disorder)
+    starting_hydro = Protein.calc_mean_hydro(sequence)
+    final_seq = optimize_hydropathy_within_class(build_sequence, starting_hydro)
     return final_seq
 
 
 
 
-def gen_new_variant(sequence):
+def create_new_variant(sequence):
     '''
     function to generate a variant that is completely different
     in sequence to the input but has all the same overall parameters.
@@ -483,6 +565,17 @@ def gen_new_variant(sequence):
 
     Getting the SCD right is a little hacky, but this works fast and does a good
     job on the disorder.
+
+
+    parameters
+    ----------
+    sequence : string
+        amino acid sequence as a string
+
+    returns
+    -------
+    final_seq : string
+        returns the final build sequence variant    
     '''
     input_length = len(sequence)
     input_FCR = Protein.calc_FCR(sequence)
@@ -520,22 +613,33 @@ def gen_new_variant(sequence):
 
 
 
-def hydropathy_class_variant(sequence, hydro, allowed_hydro_error = parameters.HYDRO_ERROR):
+def create_hydropathy_class_variant(sequence, hydro, allowed_hydro_error = parameters.HYDRO_ERROR):
     '''
     function to take in a sequence and make a variant that adjusts the
     hydropathy while keeping the position and nuimber of amino acids the
     same by class of amino acid
 
-    MAKES THE SAME SEQUENCE EVERY TIME! MIGHT HAVE TO MODIFY THIS!
+    parameters
+    ----------
+    sequence : string
+        amino acid sequence as a string
+    hydro : float
+        the hydropathy value you want to change to as a float
+    allowed_hydro_error : float
+        the allowed error between the objective hydropathy (hydro)
+        and the hydropathy of the returned sequence
 
+    returns
+    -------
+    final_seq : string
+        returns the final build sequence variant
     '''
     # change the hydropathy using the optimization function
     final_seq = optimize_hydropathy_within_class(sequence, hydro, allowed_hydro_error)
     return final_seq
-    
 
 
-def gen_constant_residue_variant(sequence, constant_residues = []):
+def create_constant_residue_variant(sequence, constant_residues = []):
     '''
     function that will generate a new sequence variant
     where specific residues are held constant. The 
@@ -550,6 +654,10 @@ def gen_constant_residue_variant(sequence, constant_residues = []):
         constant_residues : list
             A list of residues to hold constant in the sequence variant
 
+    returns
+    -------
+    rebuilt_sequence : string
+        returns the final sequence as a string
 
     '''
     # make sure sequence is uppercase (this would otherwise wreck this function)
@@ -571,7 +679,7 @@ def gen_constant_residue_variant(sequence, constant_residues = []):
 
     # if K or R are in the constant variant, need to pull out both to make sure
     # they aren't altered during variant generation. Also need to do for D and E.
-    if 'K' in constant_residues:
+    if 'K' in constant_residues and 'R' not in constant_residues:
         if 'R' not in constant_residues:
             constant_residues.append('R')
 
@@ -641,7 +749,8 @@ def gen_constant_residue_variant(sequence, constant_residues = []):
                 negative_residues_for_var.append(res)
             else:
                 positive_residues_for_var.append(res)
-
+        else:
+            input_backbone += res
 
     # now rebuild the sequence
     rebuilt_sequence = ''
@@ -659,7 +768,7 @@ def gen_constant_residue_variant(sequence, constant_residues = []):
             cur_pos = positions_then_res.index(i)
             cur_res = positions_then_res[cur_pos+1]
         else:
-            cur_res = seq_variant[seq_variant_pos]
+            cur_res = input_backbone[seq_variant_pos]
             seq_variant_pos += 1
         # add the necessary residue
         rebuilt_sequence += cur_res
@@ -681,6 +790,13 @@ def seq_chunks_from_regions_list(sequence, regions=[]):
     regions : list of lists
         list of lists where sublists specify regions to break up 
         into chunks
+
+    returns 
+    -------
+    complete_list : list
+        returns a list of lists that cover all reagions of the
+        input sequence as opposed to just the regions that 
+        you want to change.
     '''
 
     # list to add additional lists to to close gaps
@@ -714,7 +830,7 @@ def seq_chunks_from_regions_list(sequence, regions=[]):
 
 
 
-def gen_shuffle_variant(sequence, shuffle_regions=[], use_index=False):
+def create_shuffle_variant(sequence, shuffle_regions=[], use_index=False):
     '''
     Function that will shuffle specific regions of an IDR.
     Multiple regions can be specified simultaneously.
@@ -756,10 +872,8 @@ def gen_shuffle_variant(sequence, shuffle_regions=[], use_index=False):
             full_list.append([i[0]-1, i[1]])
         shuffle_regions = full_list
 
-
     # get all regions
     all_regions = seq_chunks_from_regions_list(sequence, regions = shuffle_regions)
-
 
     #build the seq
     shuffled_sequence = ''
@@ -821,10 +935,8 @@ def find_middle_res(sequence, residues):
         elif sequence[len(sequence)] in residues:
             return len(sequence)
         else:
-            raise exception('Error in finding middle residue')
-    raise exception('Error in finding middle residue, made to end of function')
-
-
+            raise GooseBackendBug('Error in finding middle residue in find_middle_res in variant_generation_backend.py')
+    raise GooseBackendBug('Error in finding middle residue, made to end of function in find_middle_res in variant_generation_backend.py')
 
 
 def increase_charge_asymmetry_once(sequence, exclude = []):
@@ -891,7 +1003,6 @@ def increase_charge_asymmetry_once(sequence, exclude = []):
 
     N=0
 
-
     # if no charged residues just return the sequence
     if positive_weight == 0 and negative_weight == 0:
         return sequence
@@ -932,7 +1043,6 @@ def increase_charge_asymmetry_once(sequence, exclude = []):
             else:
                 final_sequence += nonmoved_res[i]
 
-
     # if no negative charges but have positive charges
     elif positive_weight > 0 and negative_weight == 0:
         # make empty string to hold final sequence
@@ -967,8 +1077,6 @@ def increase_charge_asymmetry_once(sequence, exclude = []):
                 final_sequence += nonmoved_res[i]
             else:
                 final_sequence += nonmoved_res[i]
-
-
     else:
         # randomly decide whether to target a positive or negative residue
         chosen_val = random.randint(2, 10)
@@ -1013,7 +1121,6 @@ def increase_charge_asymmetry_once(sequence, exclude = []):
                 for i in range(0, int(0.25*len(nonmoved_res))):
                     if i < target_negative_residue:
                         target_negative_coordinates.append(i)  
-
         else:
             if change_positive == True:
                 target_positive_residue = max(positive_coordinates)
@@ -1042,7 +1149,6 @@ def increase_charge_asymmetry_once(sequence, exclude = []):
                 for i in range(int(0.25*len(nonmoved_res)), len(nonmoved_res)):
                     if i > target_negative_residue:
                         target_negative_coordinates.append(i)            
-
         # choose a random target residue
         if change_positive == True:
             if len(target_positive_coordinates) > 1:
@@ -1060,7 +1166,6 @@ def increase_charge_asymmetry_once(sequence, exclude = []):
                     chosen_negative_position = len(nonmoved_res)-1
                 else:
                     chosen_negative_position = 0        
-
 
         # build the final sequence
         final_sequence = ""
@@ -1134,7 +1239,6 @@ def decrease_charge_asymmetry_once(sequence):
                 possible_lowest_NCPR_coords.append([i, i+bloblen])
             lowest_NCPR = cur_NCPR
 
-
     # select random lowest and highest NCPR intervals
     if len(possible_lowest_NCPR_coords) > 1:
         lowest_NCPR_blob = possible_lowest_NCPR_coords[random.randint(0, len(possible_lowest_NCPR_coords)-1)]
@@ -1145,7 +1249,6 @@ def decrease_charge_asymmetry_once(sequence):
         highest_NCPR_blob = possible_highest_NCPR_coords[random.randint(0, len(possible_highest_NCPR_coords)-1)]
     else:
         highest_NCPR_blob = possible_highest_NCPR_coords[0]
-
 
     # figure out possible targets
     possible_positive_targets = []
@@ -1158,7 +1261,6 @@ def decrease_charge_asymmetry_once(sequence):
     for aa in range(lowest_NCPR_blob[0], lowest_NCPR_blob[1]):
         if sequence[aa] == 'D' or sequence[aa] == 'E':
             possible_negative_targets.append(aa)    
-
 
     # select random residue to change
     if len(possible_negative_targets) > 1:
@@ -1178,7 +1280,6 @@ def decrease_charge_asymmetry_once(sequence):
             selected_positive_residue = ""
 
     # make sure that there is a residue chosen to swap no matter what!
-
     if selected_negative_residue == "":
         selected_negative_residue = random.randint(lowest_NCPR_blob[0], lowest_NCPR_blob[1])
 
@@ -1199,7 +1300,79 @@ def decrease_charge_asymmetry_once(sequence):
     return final_sequence
 
 
+def decrease_kappa_once(sequence):
+    '''
+    function to try to decrease kappa
+    when the function decrease_charge_asymmetry 
+    fails. This can happen with sequences that
+    have low numbers of charged residues
+    
+    parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
 
+    returns
+    -------
+    new_sequence : string
+        returns the new sequence as as string
+
+    '''
+    charged = ['K', 'R', 'D', 'E']
+    neg_charged = []
+    pos_charged = []
+
+    # first remove the charged residues.
+    neutral_seq = ''
+    for aa in sequence:
+        if aa not in charged:
+            neutral_seq += aa
+        else:
+            if aa == 'D' or aa == 'E':
+                neg_charged.append(aa)
+            else:
+                pos_charged.append(aa)
+
+    # get total number of charged residues
+    num_charged = len(neg_charged) + len(pos_charged)
+
+    # get interval at which to put down a charged residue
+    charge_interval = int(len(sequence)/num_charged)
+    if charge_interval > 2:
+        charge_interval = 2
+
+    # populate list with charge intervals
+    charge_locs = []
+    for i in range(1, num_charged+1):
+        cur_loc = i*charge_interval
+        if cur_loc < len(sequence):
+            charge_locs.append(cur_loc)
+        else:
+            cur_loc = i*charge_interval-(int(charge_interval/2))
+            charge_locs.append(cur_loc)
+
+    # make final list of charged residues
+    charge_residue_order = []
+
+    for i in range(0, num_charged):
+        if pos_charged != []:
+            charge_residue_order.append(pos_charged.pop())
+        if neg_charged != []:
+            charge_residue_order.append(neg_charged.pop())
+
+    # make final seq
+    final_seq = ''
+    # keep track of loc for the neutral_seq
+    neutral_seq_loc = 0
+    for i in range(0, len(sequence)):
+        if i in charge_locs:
+            final_seq += charge_residue_order.pop()
+        else:
+            final_seq += neutral_seq[neutral_seq_loc]
+            neutral_seq_loc += 1
+
+    #return final seq
+    return final_seq
 
 
 def decrease_kappa_below_value(sequence, max_kappa, attempts=None):
@@ -1224,6 +1397,12 @@ def decrease_kappa_below_value(sequence, max_kappa, attempts=None):
     if original_kappa < max_kappa:
         return sequence
 
+    # first line of defense, quickly reduces kappa
+    quick_reduce = decrease_kappa_once(sequence)
+    curkappa = pr(quick_reduce).kappa
+    if curkappa < max_kappa:
+        return quick_reduce
+
     else:
         # if user doesn't set number of attempts, set number
         if attempts == None:
@@ -1240,11 +1419,12 @@ def decrease_kappa_below_value(sequence, max_kappa, attempts=None):
             else:
                 new_sequence = decrease_charge_asymmetry_once(new_sequence)
                 curkappa = pr(new_sequence).kappa
-    raise Exception('Unable to return sequence with kappa value below specified value')
+
+    raise GooseBackendBug('Unable to generate sequence with desired below kappa value using decrease_kappa_below_value in variant_generation_backend.py')
 
 
 
-def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_KAPPA_ERROR, attempts=20000):
+def create_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_KAPPA_ERROR, attempts=2000):
     '''
     Function to generate a sequence with a user-defined
     kappa value. Requires kappa calculation using 
@@ -1276,6 +1456,7 @@ def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_
 
     decreased_kappa_seq = decrease_kappa_below_value(sequence, kappa_below)
     starting_kappa = pr(decreased_kappa_seq).kappa
+
     if abs(starting_kappa-kappa) < allowed_kappa_error:
         return decreased_kappa_seq
     else:
@@ -1290,66 +1471,17 @@ def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_
                 # if you go too high in value reset and try again.
                 # should be stochastic enough to work....
                 if curkappa > kappa + (allowed_kappa_error*3):
+                    for i in range(0, 10):
+                        new_sequence = decrease_charge_asymmetry_once(new_sequence)
+                        curkappa = pr(new_sequence).kappa
+                        if abs(curkappa - kappa) < allowed_kappa_error:
+                            return new_sequence
+                    # reset if that failed
                     new_sequence = decreased_kappa_seq
                     curkappa = starting_kappa
-    raise Exception('unable to generate sequence with desired kappa')
-
-
-test = 'IKLANATKKVGTKPAESDKKEEEKSAETKE'
-print(Protein.calc_all_properties(test))
-print(Protein.calc_all_properties((test)))
-
-'''
-need to do the following:
-
-*when have multiple monitors, should definitely
-move common code between variant and sequence generation
-to a common backend location to import....
-
-
-1. Minimal variant
-3. Increase asymmetry (specific res or charge, polar, etc.)
-4. increase charge asymmetry
-
-then add all to docs and to the variant_generation.py stuff...
-
-variants to add to main generation point
-----------------------------------------
-
-gen_new_var_constant_class_nums => returned sequence has same properties and same number of residues by class as the input sequence but the order is not the same. POSITIONS OF RESIDUES WITHIN EACH CLASS CAN MOVE RELATIVE TO ONE ANOTHER!
-
-gen_constant_class_variant => returned sequence has same number AND POSITION of amino acis as input sequence BY CLASS. Properties will be same in returend sequence too.
-
-gen_new_variant => returned sequence will have the same properies as the input sequence. That's it. Number of amino acids by class is allowed to change.
-
-hydropathy_class_variant => will keep the position and number of all amino acids by class the same in the returned sequence. Allows adjustments to hydropathy while keeping everyhting else constant.
-
-gen_constant_residue_variant => returns sequence that has specified residues held constant. The returned sequence will have the same properties as the input sequence
-
-gen_minimal_variant -> change the properties of your input sequence while minimizing changes to the sequence
-
-gen_shuffle_variant -> choose indiviudal regions of your sequence to shuffle
-
-increase_asymmetry - > choose residue(s) or class of residues to increase asymmetry of in the sequence.
-
-increase_charge_asymmetry -> increase kappa
-
-***
-also need to add in the charge distribution functionality
-***
+                    
+    raise GooseBackendBug('Unable to generate sequence with desired kappa using gen_kappa_variant in variant_generation_backend.py')
 
 
 
-#def_shuffle_variant:
-
-#def gen_minimal_variant:
-
-
-
-seq_var = 'IKLANATKKVGTKPAESDKKEEEKSAETKEPTKEPTKVEE'
-newseq = gen_new_variant(seq_var)
-
-print(Protein.calc_all_properties(seq_var))
-print(Protein.calc_all_properties(newseq))
-'''
 
