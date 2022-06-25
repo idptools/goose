@@ -2,6 +2,7 @@
 
 # Add imports here
 from .create import *
+from .analyze import *
 
 # Handle versioneer
 from ._version import get_versions

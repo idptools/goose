@@ -11,9 +11,7 @@ import random
 from random import randint
 
 from PredictDSSP import dssp
-
 from goose.backend.protein import Protein
-
 from goose.backend.lists import alpha_helix_lists
 
 
@@ -148,6 +146,7 @@ def gen_helix(length, cutoff=0.85, max_iters=500):
 
 
 
+
 '''
 specify hydro in a built helix
 '''
@@ -192,6 +191,8 @@ def gen_beta_strand(length=12, cutoff=0.6, max_iters=5000):
         if check_beta_strand(seq, cutoff=cutoff):
             return seq
     raise Exception('Unable to generate specified sequence')
+
+
 
 
 def gen_coil(length=7, cutoff=0.9, max_iters=500):
@@ -277,65 +278,6 @@ def gen_beta_sheet(length, strand_length=14, coil_length=6):
     return beta_strand_seq
 
 
-
-
-
-'''
-***
-***
-***
-***
-***
-***
-
-For beta strand dev:
-    play with lengths over 100 as far as increasing the strand length! Trend
-    suggests that longer -> longer strand, but not sure if limit is at 14 for strand_len!
-
-***
-***
-***
-***
-***
-***
-'''
-
-
-
-'''
-functionality for generating seq lists
-'''
-
-
-def gen_seq_list_beta(num_seqs=10000, seq_len=14, cutoff=0.7):
-    successful_seqs = []
-    for numseqs in range(0, num_seqs):
-        curseq = gen_beta_starter(seq_len)
-        if check_beta_strand(curseq, cutoff=cutoff):
-            successful_seqs.append(curseq)
-    print(successful_seqs)
-    print(len(successful_seqs))
-
-
-
-def gen_seq_list_helix(num_seqs=10000, seq_len=100, cutoff=0.7):
-    successful_seqs = []
-    for numseqs in range(0, num_seqs):
-        curseq = gen_helix_starter(seq_len)
-        if check_helicity(curseq, cutoff=cutoff):
-            successful_seqs.append(curseq)
-    print(successful_seqs)
-    print(len(successful_seqs))
-
-
-def gen_seq_list_coil(num_seqs=10000, seq_len=7, cutoff=0.7):
-    successful_seqs = []
-    for numseqs in range(0, num_seqs):
-        curseq = gen_coil_starter(seq_len)
-        if check_coil(curseq, cutoff=cutoff):
-            successful_seqs.append(curseq)
-    print(successful_seqs)
-    print(len(successful_seqs))
 
 
 

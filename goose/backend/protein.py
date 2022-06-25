@@ -32,10 +32,10 @@ class Protein:
         self.scd = Protein.calc_SCD(seq)
         self.hydro = Protein.calc_mean_hydro(seq)
         self.hydropathy = Protein.calc_mean_hydro(seq)
-        self.properties = Protein.all_properties(seq)
+        self.properties = Protein.calc_all_properties(seq)
         self.percent_polar = Protein.calc_percent_polar(seq)
         self.percent_aliphatic = Protein.calc_percent_aliphatic(seq)
-        self.basic_properties = Protein.basic_properties(seq)
+        self.basic_properties = Protein.calc_basic_properties(seq)
 
     #function that returns the fraction of each amino acid in a sequence    
     def calc_frac(seq):
@@ -192,10 +192,10 @@ class Protein:
         properties_dict['NCPR'] = Protein.calc_NCPR(seq)
         properties_dict['hydropathy'] = Protein.calc_mean_hydro(seq)
         properties_dict['sigma'] = Protein.calc_sigma(seq)
-        # properties_dict['delta'] = Protein.calc_delta(seq)
+        properties_dict['delta'] = Protein.calc_delta(seq)
         properties_dict['SCD'] = Protein.calc_SCD(seq)
-        properties_dict['fractions'] = Protein.calc_frac(seq)
-        properties_dict['sequence'] = seq
+        #properties_dict['fractions'] = Protein.calc_frac(seq)
+        #properties_dict['sequence'] = seq
         return properties_dict
 
     def calc_basic_properties(seq):
@@ -204,5 +204,6 @@ class Protein:
         properties_dict['FCR'] = Protein.calc_FCR(seq)
         properties_dict['NCPR'] = Protein.calc_NCPR(seq)
         properties_dict['hydropathy'] = Protein.calc_mean_hydro(seq)
+        #properties_dict['fractions'] = Protein.calc_frac(seq)
         return properties_dict
             

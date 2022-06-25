@@ -713,7 +713,7 @@ def gen_shuffle_variant(sequence, shuffle_regions = [], use_index=False,
 
 
 def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_KAPPA_ERROR,
-    attempts=5, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    attempts=10, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
     '''
     Function to generate a sequence with a user-defined
     kappa value. Requires kappa calculation using 

@@ -18,6 +18,21 @@ from goose.backend import parameters
 from goose.backend.sequence_generation_backend import calculate_max_charge
 
 
+def length_check(input_val):
+    '''
+    function to make sure length parameters don't go out of bounds
+    '''
+    if type(input_val) == str:
+        length = len(input_val)
+    elif type(input_val) == int:
+        length = input_val
+    else:
+        raise GooseError('length check function in goose tools got an input value not string or int.')
+
+    if length > parameters.MAXIMUM_LENGTH or length < parameters.MINIMUM_LENGTH:
+        error_message = f'\nLength of {length} is not within the allowed range for length of between {parameters.MINIMUM_LENGTH} and {parameters.MAXIMUM_LENGTH}'
+        raise GooseInputError(error_message)
+
 
 def write_csv(input_list, output_file, properties):
     """
@@ -86,6 +101,11 @@ def write_csv(input_list, output_file, properties):
 
     except Exception:
             raise GooseError('Unable to write to file destination %s' % (output_file))                  
+
+
+
+
+
 
 
 def remove_None(**kwargs):
@@ -184,6 +204,25 @@ def check_props_parameters(**kwargs):
             error_message = f'The NCPR value of {valncpr} is not possible given the FCR value of {valfcr}'
             raise GooseInputError(error_message)
 
+    # check kappa
+    if kwargs['kappa'] != None:
+        val_kappa = kwargs['kappa']
+        if kwargs['kappa'] > 1:
+            error_message = f'The kappa value of {val_kappa} is not possible. Values are between 0 and 1'
+            raise GooseInputError(error_message)
+        if kwargs['kappa'] < 0:
+            error_message = f'The kappa value of {val_kappa} is not possible. Values are between 0 and 1'
+            raise GooseInputError(error_message)        
+
+    # check kappa based on FCR stuff
+    if kwargs['kappa'] != None:
+        if kwargs['FCR'] == 0:
+            raise GooseInputError('Cannot specifiy kappa values when FCR is 0.')
+        if kwargs['FCR'] != None:
+            if kwargs['NCPR'] != None:
+                if kwargs['NCPR'] == kwargs['FCR']:
+                    raise GooseInputError('Cannot have NCPR = FCR for kappa to be a value other than -1.')
+
 
     # now check for charge AND hydro
     if kwargs['NCPR'] != None and kwargs['hydropathy'] != None:
@@ -246,12 +285,15 @@ def check_and_correct_props_kwargs(**kwargs):
     # possible sigma values
     possible_sigma = ['sigma', 'Sigma', 'sigma_value', 'Sigma_value', 'Sigma_Value']
 
+    # possible kappa values
+    possible_kappa=['kappa', 'Kappa']
+
     # amino acid values
     amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
     lower_amino_acids = ['a', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'v', 'w', 'y']
 
     # make a list of all possible kwargs
-    all_possible_kwargs = [possible_FCR, possible_NCPR, possible_hydro, possible_cutoff, possible_sigma]
+    all_possible_kwargs = [possible_FCR, possible_NCPR, possible_hydro, possible_cutoff, possible_sigma, possible_kappa]
 
     # make an empty return kwarg dict
     return_kwarg = {}
@@ -266,10 +308,10 @@ def check_and_correct_props_kwargs(**kwargs):
                     return_kwarg[correct_kwarg_key] = kwargs[individual_kwarg]
 
     # make list of various essential kwargs
-    essential_kwargs = ['FCR', 'NCPR', 'hydropathy', 'sigma', 'cutoff']
+    essential_kwargs = ['FCR', 'NCPR', 'hydropathy', 'sigma', 'cutoff', 'kappa']
 
     # make a dict of essential kwarg values
-    essential_kwarg_vals = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'sigma': None}
+    essential_kwarg_vals = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'sigma': None, 'kappa': None}
 
     # make sure essential_kwargs are in the final return kwarg
     for individual_kwarg in essential_kwargs:
