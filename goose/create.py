@@ -2,8 +2,8 @@
 user-facing functionality
 '''
 
-
-#__all__ =  ['sequence', 'seq_fractions']
+# if any new functions are added to create.py, you need to add them here.
+__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'new_var', 'constant_class_var', 'constant_class_hydro_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'alpha_helix', 'beta_strand', 'beta_sheet']
 
 import os
 import sys
@@ -107,7 +107,7 @@ def sequence(length, **kwargs):
         generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
             sigma = kwargs['sigma'], attempts = 1, allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = kwargs['cutoff'])
     except:
-        raise goose_excaptions.GooseFail('Unable to generate sequence. Please try again with different parameters or a lower cutoff value.')
+        raise goose_exceptions.GooseFail('Unable to generate sequence. Please try again with different parameters or a lower cutoff value.')
 
     # this is a bit hacky for now, but it works.
     if kwargs['kappa'] != None:
@@ -388,14 +388,9 @@ def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR,
 '''
 
 
-'''
-
 from goose.backend.folded_region_generation import gen_helix as _gen_helix
 from goose.backend.folded_region_generation import gen_beta_strand as _gen_beta_strand
 from goose.backend.folded_region_generation import gen_beta_sheet as _gen_beta_sheet
-
-'''
-
 
 
 def alpha_helix(length):

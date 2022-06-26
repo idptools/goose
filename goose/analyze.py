@@ -81,21 +81,21 @@ def phosphosites(sequence, raw_vals = False):
 			if 'Y' in curslice:
 				ylocation = sequence.index(curslice)+curslice.index('Y')
 				if sequence[ylocation] == 'Y':
-					if ylocation not in potential_Y:
-						potential_Y.append(ylocation)
+					if ylocation+1 not in potential_Y:
+						potential_Y.append(ylocation+1)
 
 		if curT >= 0.6:
 			if 'T' in curslice:
 				tlocation = sequence.index(curslice)+curslice.index('T')
 				if sequence[tlocation] == 'T':
-					if tlocation not in potential_T:
-						potential_T.append(tlocation)
+					if tlocation+1 not in potential_T:
+						potential_T.append(tlocation+1)
 		if curS >= 0.6:
 			if 'S' in curslice:
 				slocation = sequence.index(curslice)+curslice.index('S')
 				if sequence[slocation] == 'S':
-					if slocation not in potential_S:
-						potential_S.append(slocation)
+					if slocation+1 not in potential_S:
+						potential_S.append(slocation+1)
 
 		phosphosite_dict = {}
 		if 	potential_S != []:
@@ -290,4 +290,3 @@ def everything(sequence):
 
 	return all_info
 
-print(phosphosites('GNGGNRAENRTSSKSERKGEQTHKSNHNDGARHTDRRRSHYDKNAASRE'))
