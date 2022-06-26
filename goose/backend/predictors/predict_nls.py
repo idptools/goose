@@ -10,7 +10,7 @@ def predict_nls_seq(sequence):
     PATH = os.path.dirname(os.path.realpath(__file__))
     
     # selcet the chosen network, kept as separate line of code in 
-    used_predictor = 'NLS_predictor_200e_nl1_v1_beta_3.pt'
+    used_predictor = 'NLS_predictor_200e_nl1_v1.pt'
     
     # set location of chosen network
     predictor_path = f'{PATH}/networks/{used_predictor}'
