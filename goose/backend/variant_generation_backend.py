@@ -3,14 +3,17 @@ backend functionality for variant generation
 '''
 import random
 from random import randint
+import numpy as np
 
+
+from sparrow import Protein as pr
 from goose.goose_exceptions import GooseInputError, GooseInstallError, GooseBackendBug
 from goose.backend.protein import Protein
-from goose.backend.sequence_generation_backend import identify_residue_positions, get_optimal_residue, optimal_residue_key, random_amino_acid, create_seq_by_props, fast_predict_disorder
+from goose.backend.sequence_generation_backend import identify_residue_positions, get_optimal_residue, optimal_residue_key, random_amino_acid, create_seq_by_props, fast_predict_disorder, calculate_max_charge, fraction_net_charge
 from goose.backend import lists
 from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
-
+from goose.backend.ginell_clustering_parameter import calculate_average_inverse_distance_from_sequence as clustering_param
 
 # will update when sparrow is on pip
 try:
@@ -1479,9 +1482,678 @@ def create_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIM
                     # reset if that failed
                     new_sequence = decreased_kappa_seq
                     curkappa = starting_kappa
+    fail_message = 'Unable to make kappa sequence in variant_generation_backend.py'        
+    raise GooseBackendBug(fail_message)
+
+
+
+def radiate_out(starting_value):
+    # radiates outward from starting value to get value as close to original as possible
+    closest_vals = []
+    for i in np.arange(0, 1, 0.005):
+        i = float(i)
+        val_1 = round(starting_value - i, 5)
+        val_2 = round(starting_value + i, 5)
+        if val_1 >= 0 and val_1 <= 1:
+            if val_1 not in closest_vals:
+                closest_vals.append(val_1)
+        if val_2 >= 0 and val_2 <= 1:
+            if val_2 not in closest_vals:
+                closest_vals.append(val_2)
+    return closest_vals
+
+
+def create_closest_kappa_variant(sequence, ideal_value):
+    if ideal_value == -1:
+        return sequence
+    else:
+        # makes the closest kappa variant possible
+        all_values = radiate_out(ideal_value)
+        for i in all_values:
+            seq = create_kappa_variant(sequence, kappa=i, attempts=2000)
+            if seq != 'Unable to make kappa sequence in variant_generation_backend.py':
+                return seq
+            
+
+
+
+def possible_fcr_vals(sequence):
+    # figure out possible FCR vals without changing NCPR
+    all_fcr_vals = []
+    fractional_val = 1/len(sequence)
+    minimal_fcr = abs(Protein.calc_NCPR(sequence))
+    num_vals = round(1/fractional_val)+2
+    for i in range(0, num_vals):
+        curval = round(minimal_fcr + (i*fractional_val), 6)
+        if curval < 1:
+            all_fcr_vals.append(curval)
+    return all_fcr_vals
+
+def get_closest_fcr(sequence, input_fcr_val):
+    all_fcr_vals = possible_fcr_vals(sequence)
+    closest = 1000
+    for val in all_fcr_vals:
+        if abs(val-input_fcr_val) < closest:
+            closest = abs(val-input_fcr_val)
+            best_val = val
+    return best_val
+
+
+
+def count_charged(sequence):
+    '''
+    mini fucntion to count charged residues
+    '''
+    num_pos = sequence.count('K') + sequence.count('R')
+    num_neg = sequence.count('D') + sequence.count('E')
+    return{'negative':num_neg, 'positive':num_pos}
+
+
+def create_fcr_class_variant(sequence, fraction, constant_ncpr=True, use_closest = True):
+    '''
+    function that will alter the FCR of a sequence
+    and keep everything else the same while also 
+    minimizing change to aromatics and 'special' amino acids
+    ie. W, F, Y, P, C.
+
+    **Will change between W, F, and Y as needed, but will
+    try to keep it aromatic.
+
+    parameters
+    -----------
+    sequence : str
+        The amino acid sequence as a string
+
+    fraction : float
+        the FCR value between 0 and 1
+
+    constant_ncpr : Bool
+        whether to allow changes to the NCPR when changing the FCR
+
+    use_closest : Bool
+        whether to just use the closest FCR val to the input value.
+
+
+    '''
+    # get starting hydropathy
+    original_hydropathy = Protein.calc_mean_hydro(sequence)
+    original_kappa = pr(sequence).kappa
+    original_fcr = Protein.calc_FCR(sequence)
+    original_ncpr = Protein.calc_NCPR(sequence)
+
+    # figure out max possible FCR that can maintain disorder
+    max_FCR = calculate_max_charge(original_hydropathy)
+    if fraction > max_FCR:
+        error_message = f'\n\nThe input FCR of {fraction} is greater than the max possible FCR to keep hydropathy the same and maintain disorder, which is {max_FCR}\n'
+        raise GooseInputError(error_message)
+
+    # first figure out best changes to modify charge.
+    first_changes = ['N', 'Q']
+    second_changes = ['S', 'T', 'G']
+    third_changes = ['I', 'A', 'L', 'V', 'M']
+    cant_change = ['W', 'Y', 'F', 'P', 'C', 'D', 'E', 'K', 'R', 'H']
+    change_in_order = ['N', 'Q', 'S', 'T', 'G', 'A','L','M', 'V', 'I']
+    
+    # now figure out how many charged residues
+    original_charged_dict = count_charged(sequence)
+    num_negative = original_charged_dict['negative']
+    num_positive = original_charged_dict['positive']
+    original_total_charged = num_negative+num_positive
+
+    # figure out closest number of fcr to use without changing ncpr
+    if fraction != 0:
+        new_closest_fraction = get_closest_fcr(sequence, fraction)
+    else:
+        new_closest_fraction=0
+
+    # if FCR won't change just return it
+    if new_closest_fraction == original_fcr:
+        return sequence
+
+    # otherwise get to it
+    neg_res_locs = []
+    if 'D' in sequence:
+        neg_res_locs.extend(identify_residue_positions(sequence, 'D'))
+    if 'E' in sequence:
+        neg_res_locs.extend(identify_residue_positions(sequence, 'E'))
+    if len(neg_res_locs) > 1:
+        random.shuffle(neg_res_locs)
+
+    pos_res_locs =[]
+    if 'K' in sequence:
+        pos_res_locs.extend(identify_residue_positions(sequence, 'K'))
+    if 'R' in sequence:
+        pos_res_locs.extend(identify_residue_positions(sequence, 'R'))
+    if len(pos_res_locs) > 1:
+        random.shuffle(pos_res_locs)
+
+    # figure otu total number of residus to change
+    num_residues_to_change = abs(original_total_charged - round(new_closest_fraction*len(sequence)))
+
+    # if reducing fcr ...
+    if new_closest_fraction < original_fcr:
+        # get number of times to take out 1 positive and 1 negative residue
+        target_residues=[]
+        if new_closest_fraction != 0:
+            num_changes = round(num_residues_to_change/2)
+            for i in range(0, num_changes):
+                target_residues.append(neg_res_locs.pop())
+                target_residues.append(pos_res_locs.pop())
+        else:
+            target_residues = []
+            target_residues.extend(pos_res_locs)
+            target_residues.extend(neg_res_locs)
+        # build the starting sequence
+        starter_seq=''
+        for aa in range(0, len(sequence)):
+            if aa not in target_residues:
+                starter_seq += sequence[aa]
+            else:
+                starter_seq += random_amino_acid(first_changes)
+    else:
+        residues_to_change = []
+        for res in change_in_order:
+            if len(residues_to_change) < num_residues_to_change:
+                if res in sequence:
+                    possible_residues = identify_residue_positions(sequence, res)
+                    random.shuffle(possible_residues)
+                    for aa in possible_residues:
+                        if len(residues_to_change) < num_residues_to_change:
+                            residues_to_change.append(aa)
+
+        # just a check to make sure we have found enough residues to target
+        if len(residues_to_change) < num_residues_to_change:
+            raise GooseInputError('Unable to find enough residues that can be changed without altering H, P, W, F, Y, or C.')
+
+        # build the seq
+        starter_seq = ''
+        add_a_negative=True
+        for aa in range(0, len(sequence)):
+            if aa not in residues_to_change:
+                starter_seq += sequence[aa]
+            else:
+                if add_a_negative == True:
+                    starter_seq += random_amino_acid(['D', 'E', 'D', 'E'])
+                    add_a_negative=False
+                else:
+                    starter_seq += random_amino_acid(['K', 'R', 'K', 'R'])
+                    add_a_negative=True
+
+    # now fix kappa, don't try to fix if val is -1!
+    if pr(starter_seq).kappa != -1:
+        fixed_kappa_seq = create_closest_kappa_variant(starter_seq, original_kappa)
+    else:
+        fixed_kappa_seq = starter_seq
+
+    # now fix hyropathy
+    fixed_hydro_seq = optimize_hydropathy_within_class(fixed_kappa_seq, original_hydropathy)
+
+    # now return the seq
+    return fixed_hydro_seq
+
+
+
+
+# function to calculate the linear profile of some sequence parameter
+def calculate_linear_sequence_profile(sequence, mode, window_size=6):
+    # first break seq up into windows
+    seq_windows = []
+    num_windows = len(sequence)-window_size+1
+    for i in range(0, num_windows):
+        seq_windows.append(sequence[i:i+window_size])
+    # get vals over windows
+    seq_vals = []
+    # correct some modes
+    if mode == 'fcr':
+        mode = 'FCR'
+    if mode == 'ncpr':
+        mode = 'NCPR'
+    if mode == 'hydrophobicity':
+        mode == 'hydropathy'
+    if mode == 'hydro':
+        mode = 'hydropathy'
+    # if mode is a list, just calculate the fractions of specified amino acids across
+    # the sequence
+    if type(mode) == list:
+        for seq in seq_windows:
+            temp_val = 0
+            for i in mode:
+                temp_val+=seq.count(i)
+            seq_vals.append(round(temp_val/window_size, 5))
+    elif mode == 'FCR':
+        for seq in seq_windows:
+            seq_vals.append(Protein.calc_FCR(seq))
+    elif mode == 'NCPR':
+        for seq in seq_windows:
+            seq_vals.append(Protein.calc_NCPR(seq))    
+    elif mode == 'hydropathy':
+        for seq in seq_windows:
+            seq_vals.append(Protein.calc_mean_hydro(seq))
+    elif mode == 'aromatic':
+        for seq in seq_windows:
+            temp_val = 0
+            for i in ['W', 'Y', 'F']:
+                temp_val+=seq.count(i)
+            seq_vals.append(round(temp_val/window_size, 5))
+    elif mode == 'aliphatic':
+        for seq in seq_windows:
+            temp_val = 0
+            for i in ['I', 'V', 'L', 'A', 'M']:
+                temp_val+=seq.count(i)
+            seq_vals.append(round(temp_val/window_size, 5))    
+    elif mode == 'polar':
+        for seq in seq_windows:
+            temp_val = 0
+            for i in ['Q', 'N', 'S', 'T']:
+                temp_val+=seq.count(i)
+            seq_vals.append(round(temp_val/window_size, 5))            
+    elif mode == 'proline':
+        for seq in seq_windows:
+            temp_val = 0
+            temp_val+=seq.count('P')
+            seq_vals.append(round(temp_val/window_size, 5))     
+    elif mode == 'positive':
+        for seq in seq_windows:
+            temp_val = 0
+            for i in ['K', 'R']:
+                temp_val+=seq.count(i)
+            seq_vals.append(round(temp_val/window_size, 5)) 
+    elif mode == 'negative':
+        for seq in seq_windows:
+            temp_val = 0
+            for i in ['D', 'E']:
+                temp_val+=seq.count(i)
+            seq_vals.append(round(temp_val/window_size, 5)) 
+    else:
+        raise GooseInputError('Specified mode does not exist. Please input a list of amino acids or a property.')
+    return seq_vals
+
+
+def create_asymmetry_variant_once(sequence, increase_decrease, aa_class, window_size=6):
+    '''
+    function to change the asymmetry of a rseidue in a sequence
+
+    paramters
+    ---------
+    sequence : str
+        the amino acid sequence as a string
+    increase_decrease : str
+        whether to increase or decrease the charge asymmetry
+            set to 'decrease' to decrease the asymmetry
+            set to 'increase' to increase the charge asymmetry
+    aa_class : string or list
+        the residues or parameter to increase or decrease asymmetry of
+            string options include 
+                'negative' - negative residues
+                'positive' - positive residues    
+                'proline' - prolines
+                'aromatic' - W Y F
+                'aliphatic' - I V L A M
+                'polar' - Q N S T
+            you can also specify a list of amino acids to change.
+            To do this, simply input a list. Ex. 
+    window_size : Int
+        The size of the window to break the sequence down into as 
+        far as regions calcualted for the specific res class.
+    '''
+
+    # define classes
+    class_dict = {'aromatic':['W', 'Y', 'F'], 'aliphatic':['I', 'V', 'L', 'A', 'M'], 'polar':['Q', 'N', 'S', 'T'], 'proline': ['P'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+    # if user inputs a list, use that list
+    if type(aa_class) == list:
+        target_amino_acids = aa_class
+    else:
+        try:
+            target_amino_acids = class_dict[aa_class]
+        except:
+            raise GooseInputError('The specified aa_class is not a list of amino acids or a class. Classes allowed are: 1. aromatic, 2. aliphatic, 3. polar, 4. proline')
+
+    # get the profile of the specified class        
+    seq_profile = calculate_linear_sequence_profile(sequence, target_amino_acids, window_size=window_size)
+    
+    # find regions with values for specified val.
+    if increase_decrease == 'increase':
+        target_frac_region = max(seq_profile)
+    else:
+        target_frac_region = min(seq_profile)
+    window_index = []
+    for i in range(0, len(seq_profile)):
+        curval = seq_profile[i]
+        if curval == target_frac_region:
+            window_index.append(i)
+    
+    # now convert into seq coordinates.
+    seq_coords = []
+    for i in window_index:
+        seq_coords.append([i, i+window_size])
+    
+    # now get positions of all other parts of sequence with the specified residue
+    residue_positions = []
+    for i in target_amino_acids:
+        residue_positions.extend(identify_residue_positions(sequence, i))
+
+    # now try to get a residue position not within the various regions
+    off_limits = []
+    for i in seq_coords:
+        for j in range(i[0], i[1]+1):
+            if j < len(sequence):
+                if sequence[j] in target_amino_acids:
+                    if j not in off_limits:
+                        off_limits.append(j)
+
+    if off_limits == residue_positions:
+        target_residue_pos = residue_positions[random.randint(0, len(off_limits)-1)]
+    else:
+        potential_targets = []
+        for i in residue_positions:
+            if i not in off_limits:
+                potential_targets.append(i)
+
+        if len(potential_targets) > 1:
+            target_residue_pos = potential_targets[random.randint(0, len(potential_targets)-1)]
+        elif potential_targets == []:
+            return sequence
+        else:
+            target_residue_pos = potential_targets[0]
+
+    # select random region to add the residue to.
+    target_placement_region = seq_coords[random.randint(0, len(seq_coords)-1)]
+    target_indices = []
+    for i in range(target_placement_region[0], target_placement_region[1]+1):
+        if i < len(sequence):
+            if i != target_residue_pos:
+                target_indices.append(i)
+    # select final target placement
+    final_target_placement = target_indices[random.randint(0, len(target_indices)-1)]
+    # build final sequence
+    pulled_residue = sequence[target_residue_pos]
+    built_sequence=''
+    for i in range(0, len(sequence)):
+        if i == final_target_placement:
+            built_sequence += pulled_residue
+            built_sequence += sequence[i]
+        elif i == target_residue_pos:
+            built_sequence += ''
+        else:
+            built_sequence += sequence[i]
+
+    return built_sequence
+
+def total_asym(sequence, residues):
+    '''
+    quick mini function to take in a list of residues for the 
+    clustering_param function and return the total
+    asymmetry of those residues for the sequence
+    '''
+    if type(residues) == str:
+        residues = list(residues)
+    else:
+        cur_val = 0
+        for i in residues:
+            cur_val += clustering_param(sequence, i)
+    return cur_val
+
+
+def create_asymmetry_variant(sequence, increase_decrease, aa_class, window_size=6, num_change=None):
+    '''
+    function to change the asymmetry of a rseidue in a sequence
+
+    paramters
+    ---------
+    sequence : str
+        the amino acid sequence as a string
+    increase_decrease : str
+        whether to increase or decrease the charge asymmetry
+            set to 'decrease' to decrease the asymmetry
+            set to 'increase' to increase the charge asymmetry
+    aa_class : string or list
+        the residues or parameter to increase or decrease asymmetry of
+            string options include 
+                'negative' - negative residues
+                'positive' - positive residues    
+                'proline' - prolines
+                'aromatic' - W Y F
+                'aliphatic' - I V L A M
+                'polar' - Q N S T
+            you can also specify a list of amino acids to change.
+            To do this, simply input a list. Ex. 
+    window_size : Int
+        The size of the window to break the sequence down into as 
+        far as regions calcualted for the specific res class.
+    num_change : int
+        the number of times to increase / decrease the asymmetry of the residue in the sequence
+    '''
+    # define classes
+    class_dict = {'aromatic':['W', 'Y', 'F'], 'aliphatic':['I', 'V', 'L', 'A', 'M'], 'polar':['Q', 'N', 'S', 'T'], 'proline': ['P'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+    # if user inputs a list, use that list
+    if type(aa_class) == list:
+        target_amino_acids = aa_class
+    else:
+        try:
+            target_amino_acids = class_dict[aa_class]
+        except:
+            raise GooseInputError('The specified aa_class is not a list of amino acids or a class. Classes allowed are: 1. aromatic, 2. aliphatic, 3. polar, 4. proline')
+
+    # get number of residues in the sequence
+    total_res = 0
+    for aa in target_amino_acids:
+        total_res += sequence.count(aa)
+    if total_res == 0:
+        return sequence
+    # if the number of times not listed, do 1/10 the len of the seq
+    if num_change == None:
+        num_change = int(total_res/10)
+    if num_change == 0:
+        num_change = 1
+    # keep track of the seqs made.
+    list_of_seqs =[]
+    newseq = create_asymmetry_variant_once(sequence, increase_decrease, aa_class, window_size=window_size)
+    if num_change==1:
+        return newseq
+    else:
+        bestseq=newseq
+        cur_asym = total_asym(newseq, target_amino_acids)
+        increase_window=False
+        for i in range(0, num_change-1):
+            newseq = create_asymmetry_variant_once(newseq, increase_decrease, aa_class, window_size=window_size)
+            new_asym = total_asym(newseq, target_amino_acids)
+            if increase_decrease == 'decrease':
+                if new_asym < cur_asym:
+                    cur_asym = new_asym
+                    bestseq=newseq
+            else:
+                if new_asym > cur_asym:
+                    cur_asym = new_asym
+                    bestseq=newseq
+            # add new seq to growing list of seqs
+            list_of_seqs.append(newseq)
+            # if a reallllly high number is listed, eventually the asymmetry wont change and
+            # you end up with the same sequence. This will kill the function if that happens too much.
+            if list_of_seqs.count(newseq) >= 2:
+                # reduce window size by 1 and try again
+                if window_size >= 3:
+                    if window_size == 3:
+                        increase_window = True
+                    if increase_window == False:
+                        if window_size != 3:
+                            window_size = window_size-1
+                    else:
+                        if window_size < 6:
+                            window_size = window_size + 1
+                        else:
+                            increase_window=False
                     
-    raise GooseBackendBug('Unable to generate sequence with desired kappa using gen_kappa_variant in variant_generation_backend.py')
+
+                    #newseq = create_asymmetry_variant_once(newseq, increase_decrease, aa_class, window_size=window_size)
+                    #list_of_seqs.append(newseq)
+
+                if list_of_seqs.count(newseq) >=4:
+                    # if you now have gotten the sequence AGAIN
+                    return bestseq
+    # return the final seq
+    return bestseq
 
 
+
+def needed_charged_residues(length, fraction, net_charge):
+    '''
+    function to figure out how many positive and 
+    how many negative charged residues are need
+    to satisfy the ncpr and fcr of a 
+    given sequence.
+    '''
+    total_charged = fraction_net_charge(length, fraction, net_charge)
+
+    if net_charge > 0:
+        num_positive = total_charged['NCPR_residues'] + round(total_charged['FCR_residues'])
+        num_negative = round(total_charged['FCR_residues'])
+    elif net_charge < 0:
+        num_negative = total_charged['NCPR_residues'] + round(total_charged['FCR_residues'])
+        num_positive = round(total_charged['FCR_residues'])
+    else:
+        num_positive = round(total_charged['FCR_residues'])
+        num_negative = round(total_charged['FCR_residues'])
+
+    return {'positive':num_positive, 'negative':num_negative}
+
+
+
+def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_closest = True):
+    '''
+    function that will alter the FCR of a sequence
+    and keep everything else the same while also 
+    minimizing change to aromatics and 'special' amino acids
+    ie. W, F, Y, P, C.
+
+    **Will change between W, F, and Y as needed, but will
+    try to keep it aromatic.
+
+    parameters
+    -----------
+    sequence : str
+        The amino acid sequence as a string
+
+    net_charge : float
+        the NCPR value between -1 and 1
+
+    constant_fcr : Bool
+        whether to allow changes to the FCR when changing the NCPR
+
+    use_closest : Bool
+        whether to just use the closest FCR val to the input value.
+
+
+    '''
+    # get starting hydropathy, kappa, fcr
+    original_hydropathy = Protein.calc_mean_hydro(sequence)
+    original_kappa = pr(sequence).kappa
+    original_FCR = Protein.calc_FCR(sequence)
+
+    # figure out max possible FCR that can maintain disorder
+    max_FCR = calculate_max_charge(original_hydropathy)
+    if abs(net_charge) > max_FCR:
+        error_message = f'\n\nThe input NCPR of {net_charge} is not within the range of possible NCPR values to keep hydropathy the same and maintain disorder, which is {max_FCR}\n'
+        raise GooseInputError(error_message)
+
+
+    # get numbers for final objective residues
+    if constant_fcr == True:
+        if abs(net_charge) > original_FCR:
+            raise GooseInputError('Cannot have constant FCR with a variant NCPR greater than the input sequence FCR.')
+        final_objective = fraction_net_charge(len(sequence), original_FCR, net_charge)
+    else:
+        if abs(net_charge) > original_FCR:
+            new_FCR = abs(net_charge)
+            sequence = create_fcr_class_variant(sequence, new_FCR)
+            final_objective = fraction_net_charge(len(sequence), new_FCR, net_charge)
+        else:
+            final_objective = fraction_net_charge(len(sequence), original_FCR, net_charge)
+
+    # figure out how many negative and positively charged res needed for
+    # new sequence
+    needed_charged = needed_charged_residues(len(sequence), Protein.calc_FCR(sequence), net_charge)
+    num_negative_needed = needed_charged['negative']
+    num_positive_needed = needed_charged['positive']
+
+    # figure out how many residues to change
+    current_negative = sequence.count('D') + sequence.count('E')
+    current_positive = sequence.count('K') + sequence.count('R')
+
+    # get original ncpr
+    original_ncpr = Protein.calc_NCPR(sequence)
+
+    # figure out what direction changing
+    if net_charge == original_ncpr:
+        return sequence
+    elif net_charge > original_ncpr:
+        change_residues = num_positive_needed - current_positive
+        target_residues = ['D', 'E']
+        swap_residues = ['K', 'R']
+    else:
+        change_residues = num_negative_needed - current_negative
+        target_residues = ['K', 'R']
+        swap_residues = ['D', 'E']
+
+    # get target residues locs
+    target_residue_locs = []
+    for aa in target_residues:
+        if aa in sequence:
+            target_residue_locs.extend(identify_residue_positions(sequence, aa))
+    
+    # shuffle the locs
+    random.shuffle(target_residue_locs)
+
+    # get final targets
+    final_target_locs = []
+    for i in range(0, change_residues):
+        final_target_locs.append(target_residue_locs.pop())
+
+    # build initial seq
+    built_sequence=''
+    for i in range(0, len(sequence)):
+        if i in final_target_locs:
+            built_sequence += random_amino_acid(swap_residues)
+        else:
+            built_sequence += sequence[i]
+
+    # now fix kappa
+    if pr(built_sequence).kappa != -1:
+        fixed_kappa_seq = create_closest_kappa_variant(built_sequence, original_kappa)
+    else:
+        fixed_kappa_seq = built_sequence
+    
+    # now fix hyropathy
+    fixed_hydro_seq = optimize_hydropathy_within_class(fixed_kappa_seq, original_hydropathy)
+
+    # now return the seq
+    return fixed_hydro_seq
+
+
+def create_all_props_class_variant(sequence, hydropathy=None, fraction=None, net_charge=None, kappa=None):
+    '''
+    function to make a variant where you can change hydropathy, fraction charged
+    residues, net charge, and kappa all at once while minimizing the changes to
+    residues by class in the sequence. As you change the sequence more, you will
+    further alter the sequence, even outside of the classes of amino acids. This
+    function simply attempts to minimize those changes.
+    '''
+    original_kappa = pr(sequence).kappa
+    if fraction != None:
+        if net_charge!= None:
+            sequence = create_fcr_class_variant(sequence, fraction, constant_ncpr=False, use_closest = True)
+        else:
+            sequence = create_fcr_class_variant(sequence, fraction, constant_ncpr=False, use_closest = True)
+    if net_charge != None:
+        if fraction == None:
+            sequence = create_ncpr_class_variant(sequence, net_charge, constant_fcr=False)
+        else:
+            sequence = create_ncpr_class_variant(sequence, net_charge, constant_fcr=False)
+    if hydropathy != None:
+        sequence = create_hydropathy_class_variant(sequence, hydro=hydropathy)
+    if kappa == None:
+        sequence = create_closest_kappa_variant(sequence, original_kappa)
+    else:
+        sequence = create_closest_kappa_variant(sequence, kappa)
+    return sequence
 
 

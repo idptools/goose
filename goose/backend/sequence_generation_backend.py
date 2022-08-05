@@ -1370,7 +1370,7 @@ def calculate_max_charge(hydropathy):
     MAXIMUM_CHARGE_WITH_HYDRO_1 = 1.1907 + (-0.2050 * hydropathy)
     MAXIMUM_CHARGE_WITH_HYDRO_2 = 1.2756 + (-0.2289 * hydropathy)
     # return the lower value between the 2 possibilities.
-    return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_1])
+    return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2])
 
 
 def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = parameters.HYDRO_ERROR):

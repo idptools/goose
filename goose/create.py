@@ -3,7 +3,7 @@ user-facing functionality
 '''
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'new_var', 'constant_class_var', 'constant_class_hydro_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'alpha_helix', 'beta_strand', 'beta_sheet']
+__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'new_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet']
 
 import os
 import sys
@@ -27,6 +27,10 @@ from goose.backend.variant_generation import gen_hydropathy_class_variant as _ge
 from goose.backend.variant_generation import gen_new_variant as _gen_new_variant
 from goose.backend.variant_generation import gen_constant_class_variant as _gen_constant_class_variant
 from goose.backend.variant_generation import gen_new_var_constant_class as _gen_new_var_constant_class
+from goose.backend.variant_generation import gen_asymmetry_variant as _gen_asymmetry_variant
+from goose.backend.variant_generation import gen_fcr_class_variant as _gen_fcr_class_variant
+from goose.backend.variant_generation import gen_ncpr_class_variant as _gen_ncpr_class_variant
+from goose.backend.variant_generation import gen_all_props_class_variant as _gen_all_props_class_variant
 from goose.backend.gen_minimal_variant_backend import gen_minimal_sequence_variant as _gen_minimal_sequence_variant
 
 # for folded structure generation
@@ -192,6 +196,9 @@ def minimal_var(input_sequence, hydropathy = '', fcr = '',
     tries to make a sequence as similar to the input sequence as possible all while
     minimizing the number of amino acids changed. 
     '''
+    # make sure that the input sequence is all caps
+    input_sequence = input_sequence.upper()
+
     # check length
     _length_check(input_sequence)
 
@@ -213,6 +220,9 @@ def new_seq_constant_class_var(sequence,
     the numbers of each residue from each class is the same. The overall properties
     of the generated sequence will also be constant.
     '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
     # check length
     _length_check(sequence)
 
@@ -233,6 +243,9 @@ def constant_class_var(sequence,
     input variant as well as the same order of amino acids as
     far as class and the same number in each class
     '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
     # check length
     _length_check(sequence)
 
@@ -252,6 +265,9 @@ def new_var(sequence,
     in sequence to the input but has all the same overall parameters.
     Does not account for specific classes of residues.
     '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
     # check length
     _length_check(sequence)
 
@@ -264,13 +280,15 @@ def new_var(sequence,
     return final_sequence
 
 
-def constant_class_hydro_var(sequence, hydropathy, hydro_error = parameters.HYDRO_ERROR,
+def hydro_class_var(sequence, hydropathy, hydro_error = parameters.HYDRO_ERROR,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     function to take in a sequence and make a variant that adjusts the
     hydropathy while keeping the position and number of amino acids the
     same by class of amino acid
     '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
 
     # check length
     _length_check(sequence)
@@ -294,6 +312,9 @@ def constant_residue_var(sequence, constant=[],
     variant will have the same aggregate properties
     as the original sequence.
     '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
     # check length
     _length_check(sequence)
 
@@ -313,6 +334,9 @@ def shuffle_var(sequence, shuffle=[],
     Function that will shuffle specific regions of an IDR.
     Multiple regions can be specified simultaneously.
     '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
     # check length
     _length_check(sequence)
 
@@ -352,7 +376,6 @@ def shuffle_var(sequence, shuffle=[],
 
 
 
-
 def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR, 
     cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
@@ -362,6 +385,9 @@ def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR,
     kappa values have more asymmetrically distributed
     charged residues.
     '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
     # check length
     _length_check(sequence)
 
@@ -379,6 +405,131 @@ def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR,
     return final_sequence
 
 
+def asymmetry_var(sequence, increase_decrease, aa_class, changes=None,
+    cutoff = parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    user facing function for generating a variant that has 
+    altered asymmetry of some class of residues or user specificed
+    list of residues.
+    '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+    if len(sequence) < 6:
+        raise GooseInputError('Cannot have sequence with a length less than 6')
+
+    try:
+        final_sequence = _gen_asymmetry_variant(sequence, increase_decrease, aa_class, num_change=changes, disorder_threshold=cutoff, strict_disorder=strict)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value or with different specified amino acids')
+    return final_sequence    
+
+
+def fcr_class_var(sequence, fcr, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    user facing funcitonality to generate variants where
+    the fcr is changed and the changes to classes of amino
+    acids is minimized
+    '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+    if len(sequence) < 6:
+        raise GooseInputError('Cannot have sequence with a length less than 6')
+
+    if fcr > 1 or fcr < 0:
+        raise goose_exceptions.GooseInputError('fcr values must be between 0 and 1.')
+
+    try:
+        final_sequence = _gen_fcr_class_variant(sequence, fcr=fcr, disorder_threshold=cutoff, strict_disorder=strict)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different fcr value or a different cutoff value.')
+    return final_sequence       
+    
+
+
+def ncpr_class_var(sequence, ncpr, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    user facing funcitonality to generate variants where
+    the ncpr is changed and the changes to classes of amino
+    acids is minimized
+    '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+    if len(sequence) < 6:
+        raise GooseInputError('Cannot have sequence with a length less than 6')
+
+    if ncpr > 1 or ncpr < -1:
+        raise goose_exceptions.GooseInputError('fcr values must be between -1 and 1.')
+
+    try:
+        final_sequence = _gen_ncpr_class_variant(sequence, ncpr=ncpr, disorder_threshold=cutoff, strict_disorder=strict, constant_fcr=False)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different ncpr value or a different cutoff value.')
+    return final_sequence   
+
+
+def all_props_class_var(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=None,
+    cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    user facing funcitonality to generate variants where
+    the ncpr, fcr, and/or hydropathy is/are changed and 
+    the changes to classes of amino acids is minimized
+    '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+    if len(sequence) < 6:
+        raise GooseInputError('Cannot have sequence with a length less than 6')
+
+    if ncpr != None:
+        if ncpr > 1 or ncpr < -1:
+            raise goose_exceptions.GooseInputError('fcr values must be between -1 and 1.')
+
+    if hydropathy != None:
+        if hydropathy < 0 or hydropathy > 6.4:
+            raise goose_exceptions.GooseInputError('hydropathy values must be between 0 and 6.4')
+
+    if fcr != None:
+        if fcr > 1 or fcr < 0:
+            raise goose_exceptions.GooseInputError('fcr values must be between 0 and 1.')
+
+    if kappa != None:
+        if kappa > 1 or kappa < 0:
+            raise goose_exceptions.GooseInputError('kappa values must be between 0 and 1')
+
+
+    try:
+        final_sequence = _gen_all_props_class_variant(sequence, hydropathy=hydropathy, fcr=fcr,
+        ncpr=ncpr, kappa=kappa, disorder_threshold=cutoff, strict_disorder=strict)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
+    return final_sequence   
+
+
+
+
 '''
 /-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
 /-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
@@ -386,12 +537,6 @@ def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR,
 /-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
 /-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
 '''
-
-
-from goose.backend.folded_region_generation import gen_helix as _gen_helix
-from goose.backend.folded_region_generation import gen_beta_strand as _gen_beta_strand
-from goose.backend.folded_region_generation import gen_beta_sheet as _gen_beta_sheet
-
 
 def alpha_helix(length):
     '''

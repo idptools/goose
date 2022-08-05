@@ -91,9 +91,6 @@ def check_disorder(sequence, disorder_threshold=parameters.DISORDER_THRESHOLD, s
     return True
 
 
-
-
-
 def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, sigma=None, attempts=20, 
     allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
     '''

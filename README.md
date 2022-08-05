@@ -27,7 +27,7 @@ There are four main functionalities currently in GOOSE.
 
 ## How can I use GOOSE?
 
-**GOOSE is currently a Python API only.** I will be bringing out the command-line interface soon!
+**GOOSE is a Python API only.** I am also working on making a Google Colab notebook to make it as easy as possible for anyone to generate their own sequences or sequence variants, but that is still in development.
 
 ## Installing GOOSE - GOOSE takes flight!
 
@@ -35,7 +35,7 @@ Right now you can only install GOOSE through Github. It will be on PyPi to allow
 
 To clone the GitHub repository - 
 
-	$ git clone https://github.com/ryanemenecker/goose.git
+	$ git clone https://github.com/idptools/goose.git
 	$ cd goose
 	$ pip install .
 
@@ -274,8 +274,6 @@ One problem we encountered when finding ways for people to easily make sequence 
 
 #### Types of sequence variants
 
-``constant_class_var()`` - function to generate a variant with the same properties as the input variant as well as the same order of amino acids as far as class and the same number in each class. It will try to change the sequence as much as possible within these constraints.
-
 ``new_seq_constant_class_var()`` - A function to generate a variant where the sequence composition is new but the numbers of each residue from each class is the same. The overall properties of the generated sequence will also be constant. The order of the amino acids by class from the input sequence is not a constraint when making this variant.
 
 ``new_var()`` - Function to generate a variant sequence that is completely different in sequence to the input but has all the same overall properties. Does not account for specific classes of residues.
@@ -284,11 +282,26 @@ One problem we encountered when finding ways for people to easily make sequence 
 
 ``shuffle_var()`` - Variant that will shuffle specific regions of an IDR. Multiple regions can be specified simultaneously.
 
-``constant_class_hydro_var()`` - Function to make a sequence variant that adjusts the hydropathy while keeping the position and number of amino acids the same by class of amino acid, similar to the ``constant_class_var()``. Hydropathy is simply adjusted by changing what the residue at that position is by swapping that residue with others that are in the same class but have differing hydropathy values.
 
 ``kappa_var()`` - Variant where you can alter the charge asymmetry by changing the kappa value. Requires the presence of positively charged and negatively charged residues in the original sequence. Higher kappa values increase charge asymmetry, lower kappa values reduce charge asymmetry. Values can be between 0 and 1. 
 
 ``minimal_var()`` - Function for generating a variant that will change any parameters including hydropathy, fcr, ncpr, and scd (sequence charge decoration, which is another measurement of sequence charge asymmetry) to those that you want to change while minimizing the number of residues changed in the returned variant sequence from the original sequence. The more you change a given parameter, the more the returned variant sequence will differ from the original.
+
+``constant_class_var()`` - function to generate a variant with the same properties as the input variant as well as the same order of amino acids as far as class and the same number in each class. It will try to change the sequence as much as possible within these constraints.
+
+``hydro_class_var()`` - Function to make a sequence variant that adjusts the hydropathy while keeping the position and number of amino acids the same by class of amino acid, similar to the ``constant_class_var()``. Hydropathy is simply adjusted by changing what the residue at that position is by swapping that residue with others that are in the same class but have differing hydropathy values.
+
+**A note about FCR, NCPR, and all props class vars**
+For the ``fcr_class_var()``, ``ncpr_class_var()``, and ``all_props_class_var()`` variants, the changes to amino acid classes is **MINIMIZED** but not entirely avoidable. This is because if you (for example) change FCR in your sequence, it is IMPOSSIBLE to keep the order and number of all amino acids by class the same in the returned variant. Similarly, with the NCPR variant, if you change the NCPR to the extent that the FCR has to change as well, then it will change the order / number of amino acids by class. Finally, for FCR and NCPR values for these variants, GOOSE will get AS CLOSE AS POSSIBLE. However, sometimes FCR/NCPR value pairs are not mathematically possible, so GOOSE has to try to get as close as is possible.
+
+``fcr_class_var()`` - Function to make a sequence variant that adjusts the FCR while minimizing changes to the position and number of amino acids by class.
+
+``ncpr_class_var()`` - Function to make a sequence variant that adjusts the NCPR while minimizing changes to the position and number of amino acids by class.
+
+``all_props_class_var()`` - Function to make a sequence variant that adjusts the FCR, NCPR, hydropathy, and kappa values while minimizing changes to the position and number of amino acids by class. If you don't specify one of the values, GOOSE will keep it the same as it was in the input sequence.
+
+``asymmetry_var()`` - Function to make a sequence where a class of residues (see below for classes) or a user-specified list of residues is changed to become more or less asymmetrically distributed throughout the sequence. Does NOT change sequence composition. The returned sequence will be as disordered as the input sequence at minimum, but you might not be able to increase asymmetry past a certain threshold due to it reducing predicted disorder.
+
 
 For all class variants, the classes are categorized as followed:
 
@@ -374,26 +387,87 @@ The ``shuffle_var()`` generates a variant sequence that will shuffle specific re
 **The following variants can change the overall parameters of the generated sequence, unlike previous variants.**
 
 
-### The constant_class_hydro_var()
+### The hydro_class_var()
 
-The ``constant_class_hydro_var()`` makes a variant sequence that adjusts the hydropathy only by switching between amino acids with different hydropathy values within the same class. Therefore, the order of amino acids *by class* will be the same in the returned variant, but the hydropathy will be adjusted to your desired value. There is only a limited extent to which the hydropathy can be altered due to the fact that amino acid classes cannot be changed. If you try to change to a value outside of the possible hydropathy values, the error message will include the minimum and maximum possible theoretical values.
+The ``hydro_class_var()`` makes a variant sequence that adjusts the hydropathy only by switching between amino acids with different hydropathy values within the same class. Therefore, the order of amino acids *by class* will be the same in the returned variant, but the hydropathy will be adjusted to your desired value. There is only a limited extent to which the hydropathy can be altered due to the fact that amino acid classes cannot be changed. If you try to change to a value outside of the possible hydropathy values, the error message will include the minimum and maximum possible theoretical values.
 
 
 **Example decreasing hydropathy** - 
 The starting hydropathy of the sequence below is  2.0272. Let's raise it to around 2.7.
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
-    create.constant_class_hydro_var(test, hydropathy=2.7)
+    create.hydro_class_var(test, hydropathy=2.7)
     GTGGTKIETKTEKKGETTHKTTHTDGLKHTDKKKTHDKSAASRE
 
 **Example where hydropathy is raised higher than possible**
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
-    create.constant_class_hydro_var(test, hydropathy=3.7)
+    create.hydro_class_var(test, hydropathy=3.7)
     goose.goose_exceptions.GooseInputError:
     Unable to get to objective hydropathy without changing classes of residues.
 	For this sequence the lowest possible hydrpathy is 1.611364.
 	For this sequence the highest possible hydropathy is 2.834091.
+
+
+### The fcr_class_var()
+
+The ``fcr_class_var()`` makes a variant sequence that adjusts the FCR while minimizing changes to the order/number of amino acids *by class*. There is only a limited extent to which the fcr can be altered due to the fact that some FCR/hydropathy values are not compatible.
+
+
+**Example decreasing FCR** - 
+The starting FCR of the sequence is 0.409. Let's lower it to 0.23.
+
+    test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
+    create.fcr_class_var(test, fcr=0.23)
+    GNGGNRAQNNTNRNGEQTHQSNHNRGADHTQRDRSHRQNAASRN
+
+
+**Example increasing FCR** - 
+The starting FCR of the sequence is 0.409. Let's increase it to 0.5.
+
+    test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
+    create.fcr_class_var(test, fcr=0.23)
+    GNGGREARNKTDKDGRQTHDSRHRDGARHTKEKESHRRDAASRE
+
+
+### The ncpr_class_var()
+
+The ``ncpr_class_var()`` makes a variant sequence that adjusts the ncpr while minimizing changes to the order/number of amino acids *by class*. There is only a limited extent to which the ncpr can be altered due to the fact that if you change the ncpr outside of the range that is possible for the FCR value, GOOSE will automatically alter the FCR value to make the generation of the variant possible. However, some FCR/hydropathy value combinations are not possible to make.
+
+**Example decreasing NCPR** - 
+The starting NCPR of the sequence is 0.909. Let's lower it to 0.0.
+
+    test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
+    create.ncpr_class_var(test, ncpr=0)
+    GNEGRGENRAENRTDGKQDTKHDSRNDHRNDGKAEHRTSHNAAS
+
+
+**Example increasing NCPR** - 
+The starting NCPR of the sequence is 0.909. Let's increase it to 0.4.
+
+    test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
+    create.ncpr_class_var(test, ncpr=0.4)
+    GTGGSRARNRTKRKGRQTHKSNHNKGARHTRRRRSHRKNAASRK
+
+
+### The all_props_class_var()
+
+The ``all_props_class_var()`` makes a variant sequence that adjusts the FCR, NCPR, kappa, and mean hydropathy while minimizing changes to the order/number of amino acids *by class*. There is only a limited extent to which the NCPR or NCPR can be altered due to the fact that some FCR/hydropathy values are not compatible.
+
+**Example changing all parameters** - 
+In this example we will change all 4 possible parameters.
+
+    test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
+    create.all_props_class_var(test, hydropathy=2.5, fcr=0.23, ncpr=0, kappa=0.1)
+    GTDGGETIETTESNDGQTHSNHNQGAHTNKSHQKQNAARSKNKQ
+
+
+**Example changing 2 parameters** - 
+In this example we will just change kappa and hydropathy.
+
+    test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
+    create.all_props_class_var(test, kappa=0.3, hydropathy=2.6)
+    KGKRTKGGTKKKIKKTKRTGTTHTTHTGAHTSDHDENAADSEEE
 
 
 ### The kappa_var()
@@ -435,6 +509,42 @@ The ``minimal_var()`` variant allows you to input a sequence of interest and the
     create.minimal_var(test, hydropathy=3, fcr=0.2)
     GSGGSRAENRTEQQGEQTSSSSSSGGARSTTRRSSSSKSAASRG
 
+
+
+### The asymmetry_var()
+
+The ``asymmetry_var()`` allows you to change the distribution of either a class of amino acids or a user-specified list of amino acids. You can increase or decrease residue distribution in your sequence of interest. By default will only slightly change the asymmetry of the sequence, but you can specify the ``changes`` parameter to increase or decrease the amount that the function changes the asymmetry.
+
+**Example** - 
+
+**Changing aliphatics, no specification of changes parameter** - 
+
+    test = 'GNGGNIVRAENRTERKGEQLATHKSNHNDGARHTDRRLMRSHDKNAASRE'
+    create.asymmetry_var(test, 'decrease', 'aliphatic')
+    GNGGNIVRAAENRTERKGEQLATHKSNHNDGARHTDRRLMRSHDKNASRE
+    
+**Example** - 
+
+**Changing aliphatics, increased number of changes** - 
+
+    test = 'GNGGNIVRAENRTERKGEQLATHKSNHNDGARHTDRRLMRSHDKNAASRE'
+    create.asymmetry_var(test, 'increase', 'aliphatic', changes=20)
+    RNNGGLAIVLAAAAMGENRTERKGEQTHKSGHNDDRHTDRRRSHNKNSRE
+    
+
+**Changing aliphatics, decrease asymmetry** - 
+
+    test = 'RNNGGLAIVLAAAAMGENRTERKGEQTHKSGHNDDRHTDRRRSHNKNSRE'
+    create.asymmetry_var(test, 'decrease', 'aliphatic', changes=20)
+    RNNGGLAGEANRTERMKGEQATHKSGAHNDDRHVITDLRRRSHNAKNSRE
+    
+
+**Changing custom list, increase asymmetry** - 
+
+    test = 'RNNGGLAIVLGAAAMGGGGNRTERKGEQTHKSGGNDDRHTDRGGSHNKNGRE'
+    create.asymmetry_var(test, 'increase', ['G'], changes=20)
+    RNNLAIVLAAAMGGGGGGGGGGGGGNRTERKEQTHKSNDDRHTDRSHNKNRE
+    
 
 
 ## Generating sequences with predicted secondary structure

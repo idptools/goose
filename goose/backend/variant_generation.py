@@ -7,7 +7,7 @@ from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
 from goose.backend.protein import Protein
 from goose.goose_exceptions import GooseError, GooseInputError, GooseFail, GooseException
-from goose.backend.variant_generation_backend import create_kappa_variant, create_shuffle_variant, create_constant_residue_variant, create_hydropathy_class_variant, create_new_variant, create_constant_class_variant, create_new_var_constant_class_nums
+from goose.backend.variant_generation_backend import create_kappa_variant, create_shuffle_variant, create_constant_residue_variant, create_hydropathy_class_variant, create_new_variant, create_constant_class_variant, create_new_var_constant_class_nums, create_asymmetry_variant, create_fcr_class_variant, create_ncpr_class_variant, create_all_props_class_variant
 
 import metapredict as meta
 
@@ -249,7 +249,7 @@ def optimize_disorder_within_class_once(sequence):
     return rebuilt_sequence
 
 
-def optimize_disorder_within_class(sequence, num_iterations=500):
+def optimize_disorder_within_class(sequence, num_iterations=500, cutoff=parameters.DISORDER_THRESHOLD):
     '''
     function that uses optimize_disorder_within_class
     but follows multiple iterations to try to get a better
@@ -265,6 +265,9 @@ def optimize_disorder_within_class(sequence, num_iterations=500):
     num_iterations : int
         the number of times to run the optimizer.
 
+    cutoff : float
+        The min value required for an amino acid to be considered disordered
+
     returns
     -------
     rebuilt_sequence : string
@@ -273,9 +276,22 @@ def optimize_disorder_within_class(sequence, num_iterations=500):
     '''
     # make an optimized seq before puting it in for iterations
     opt_seq = optimize_disorder_within_class_once(sequence)
-    for i in range(0, num_iterations):
-        new_seq = optimize_disorder_within_class_once(opt_seq)
-        opt_seq = new_seq
+    min_disorder = min(meta.predict_disorder(opt_seq))
+    if min_disorder >= cutoff:
+        return opt_seq
+    else:
+        for i in range(0, num_iterations):
+            new_seq = optimize_disorder_within_class_once(opt_seq)
+            new_dis = meta.predict_disorder(new_seq)
+            # if the min disorder of the new seq is greater than the min
+            # of the previous seq, update min_disorder and opt_seq values
+            if min(new_dis) > min_disorder:
+                min_disorder = min(new_dis)
+                opt_seq=new_seq
+            # if disordered enough, kill the loop and return the seq
+            if min(new_dis) >= cutoff:
+                return opt_seq
+    # if haven't goptten to objective, return seq as is.
     return opt_seq
 
 
@@ -371,7 +387,7 @@ def optimize_disorder_once_constant_residues(sequence, constant_residues = []):
 
 
 
-def optimize_disorder_constant_residues(sequence, constant_residues=[], num_iterations=500):
+def optimize_disorder_constant_residues(sequence, constant_residues=[], num_iterations=500, cutoff=parameters.DISORDER_THRESHOLD):
     '''
     function that uses optimize_disorder_within_class
     but follows multiple iterations to try to get a better
@@ -387,6 +403,9 @@ def optimize_disorder_constant_residues(sequence, constant_residues=[], num_iter
     num_iterations : int
         the number of times to run the optimizer.
 
+    cutoff : float
+        The min value required for an amino acid to be considered disordered
+
     returns
     -------
     rebuilt_sequence : string
@@ -396,10 +415,22 @@ def optimize_disorder_constant_residues(sequence, constant_residues=[], num_iter
 
     # optimize the sequence once
     opt_seq = optimize_disorder_once_constant_residues(sequence, constant_residues=constant_residues)
-    # now go through and continue optimizations
-    for i in range(0, num_iterations):
-        new_seq = optimize_disorder_once_constant_residues(opt_seq, constant_residues=constant_residues)
-        opt_seq = new_seq
+    min_disorder = min(meta.predict_disorder(opt_seq))
+    if min_disorder >= cutoff:
+        return opt_seq
+    else:
+        for i in range(0, num_iterations):
+            new_seq = optimize_disorder_once_constant_residues(opt_seq, constant_residues=constant_residues)
+            new_dis = meta.predict_disorder(new_seq)
+            # if the min disorder of the new seq is greater than the min
+            # of the previous seq, update min_disorder and opt_seq values
+            if min(new_dis) > min_disorder:
+                min_disorder = min(new_dis)
+                opt_seq=new_seq
+            # if disordered enough, kill the loop and return the seq
+            if min(new_dis) >= cutoff:
+                return opt_seq
+    # return the best sequence
     return opt_seq
 
 
@@ -767,3 +798,255 @@ def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_
                 cutoff_val=disorder_threshold, strict=strict_disorder) == True:
                 return newsequence
     raise GooseFail('Unable to generate sequence.')
+
+
+def gen_asymmetry_variant(sequence, increase_decrease, aa_class, num_change=None, window_size = 6,
+    attempts=10, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function to change the asymmetry of a residue / residue class in a sequence
+
+    paramters
+    ---------
+    sequence : str
+        the amino acid sequence as a string
+    increase_decrease : str
+        whether to increase or decrease the charge asymmetry
+            set to 'decrease' to decrease the asymmetry
+            set to 'increase' to increase the charge asymmetry
+    aa_class : string or list
+        the residues or parameter to increase or decrease asymmetry of
+            string options include 
+                'negative' - negative residues
+                'positive' - positive residues    
+                'proline' - prolines
+                'aromatic' - W Y F
+                'aliphatic' - I V L A M
+                'polar' - Q N S T
+            you can also specify a list of amino acids to change.
+            To do this, simply input a list. Ex. 
+    window_size : Int
+        The size of the window to break the sequence down into as 
+        far as regions calcualted for the specific res class.
+    num_change : Int
+        The number of times to change the asymmetry of the sequence for the variant
+    attempts : int
+        the number of times ot try to make the sequence
+
+    disorder_threshold : float
+        the threshold value required for an amino acid
+        to be considered disordered
+
+    strict_disorder : Bool
+        whether or not to require all disorder values to be 
+        over threshold or if it si okay to use the values
+        from the input sequence
+    returns
+    -------
+    disorder_seq : string
+        returns the amino acid sequence of teh generated sequence as a string
+    '''
+    # get original sequence disorder
+    starting_disorder = meta.predict_disorder(sequence)
+
+    # define classes
+    class_dict = {'aromatic':['W', 'Y', 'F'], 'aliphatic':['I', 'V', 'L', 'A', 'M'], 'polar':['Q', 'N', 'S', 'T'], 'proline': ['P'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+    # if user inputs a list, use that list
+    if type(aa_class) == list:
+        target_amino_acids = aa_class
+    else:
+        try:
+            target_amino_acids = class_dict[aa_class]
+        except:
+            raise GooseInputError('The specified aa_class is not a list of amino acids or a class. Classes allowed are: 1. aromatic, 2. aliphatic, 3. polar, 4. proline')
+
+
+    for attempt_num in range(0, attempts):
+        disordered_seq = create_asymmetry_variant(sequence, increase_decrease=increase_decrease, 
+                            aa_class = aa_class, window_size=window_size, num_change=num_change)
+
+        if sequence_variant_disorder(disordered_seq, starting_disorder, 
+            cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+            # if passes the 'disorder test', return the seq
+            return disordered_seq
+        else:
+            newsequence = optimize_disorder_constant_residues(disordered_seq, constant_residues=target_amino_acids, num_iterations=500)
+            if sequence_variant_disorder(newsequence, starting_disorder, 
+                cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+                return newsequence
+    raise GooseFail('Unable to generate sequence.')
+
+
+def gen_fcr_class_variant(sequence, fcr, constant_ncpr=True, use_closest=True, attempts=10, 
+    disorder_threshold=parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function that will alter the FCR of a sequence
+    and keep everything else the same while also 
+    minimizing change to aromatics and 'special' amino acids
+    ie. W, F, Y, P, C.
+
+    **Will change between W, F, and Y as needed, but will
+    try to keep it aromatic.
+
+    parameters
+    -----------
+    sequence : str
+        The amino acid sequence as a string
+
+    fcr : float
+        the FCR value between 0 and 1
+
+    constant_ncpr : Bool
+        whether to allow changes to the NCPR when changing the FCR
+
+    use_closest : Bool
+        whether to just use the closest FCR val to the input value.
+    
+    attempts : int
+        the number of times ot try to make the sequence
+
+    disorder_threshold : float
+        the threshold value required for an amino acid
+        to be considered disordered
+
+    strict_disorder : Bool
+        whether or not to require all disorder values to be 
+        over threshold or if it si okay to use the values
+        from the input sequence
+    '''    
+    # get original sequence disorder
+    starting_disorder = meta.predict_disorder(sequence)    
+    
+    # attempt to build sequence
+    for attempt_num in range(0, attempts):
+        disordered_seq = create_fcr_class_variant(sequence, fraction=fcr,
+         constant_ncpr=constant_ncpr, use_closest=use_closest)
+
+        if sequence_variant_disorder(disordered_seq, starting_disorder, 
+            cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+            # if passes the 'disorder test', return the seq
+            return disordered_seq
+        else:
+            newsequence = optimize_disorder_within_class(disordered_seq, num_iterations=500)
+            if sequence_variant_disorder(newsequence, starting_disorder, 
+                cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+                return newsequence
+    raise GooseFail('Unable to generate sequence.')
+
+
+
+def gen_ncpr_class_variant(sequence, ncpr, constant_fcr=True, use_closest=True, attempts=10, 
+    disorder_threshold=parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function that will alter the FCR of a sequence
+    and keep everything else the same while also 
+    minimizing change to aromatics and 'special' amino acids
+    ie. W, F, Y, P, C.
+
+    **Will change between W, F, and Y as needed, but will
+    try to keep it aromatic.
+
+    parameters
+    -----------
+    sequence : str
+        The amino acid sequence as a string
+
+    ncpr : float
+        the ncpr value between -1 and 1
+
+    constant_fcr : Bool
+        whether to allow changes to the fcr when changing the ncpr
+
+    use_closest : Bool
+        whether to just use the closest ncpr val to the input value.
+    
+    attempts : int
+        the number of times ot try to make the sequence
+
+    disorder_threshold : float
+        the threshold value required for an amino acid
+        to be considered disordered
+
+    strict_disorder : Bool
+        whether or not to require all disorder values to be 
+        over threshold or if it si okay to use the values
+        from the input sequence
+    '''    
+    # get original sequence disorder
+    starting_disorder = meta.predict_disorder(sequence)    
+    
+    # attempt to build sequence
+    for attempt_num in range(0, attempts):
+        disordered_seq = create_ncpr_class_variant(sequence, net_charge=ncpr,
+         constant_fcr=constant_fcr, use_closest=use_closest)
+
+        if sequence_variant_disorder(disordered_seq, starting_disorder, 
+            cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+            # if passes the 'disorder test', return the seq
+            return disordered_seq
+        else:
+            newsequence = optimize_disorder_within_class(disordered_seq, num_iterations=500)
+            if sequence_variant_disorder(newsequence, starting_disorder, 
+                cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+                return newsequence
+    raise GooseFail('Unable to generate sequence.')
+
+
+def gen_all_props_class_variant(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=None, 
+    attempts=10, disorder_threshold=parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function to make a variant where you can change hydropathy, fraction charged
+    residues, net charge, and kappa all at once while minimizing the changes to
+    residues by class in the sequence. As you change the sequence more, you will
+    further alter the sequence, even outside of the classes of amino acids. This
+    function simply attempts to minimize those changes.
+
+    parameters
+    ----------
+    sequence : string
+        the amino acid sequence to use to make the variant
+
+    hydropathy : float
+        a value for mean hydropathy between 0 6.1
+
+    fcr : float
+        the FCR value between 0 and 1
+    
+    ncpr : float
+        the ncpr value between -1 and 1
+
+    kappa : float
+        the kappa vlaue for the variant between 0 and 1
+
+    attempts : int
+        the number of times ot try to make the sequence
+
+    disorder_threshold : float
+        the threshold value required for an amino acid
+        to be considered disordered
+
+    strict_disorder : Bool
+        whether or not to require all disorder values to be 
+        over threshold or if it si okay to use the values
+        from the input sequence
+    '''
+    # get original sequence disorder
+    starting_disorder = meta.predict_disorder(sequence)    
+    
+    # attempt to build sequence
+    for attempt_num in range(0, attempts):
+        disordered_seq = create_all_props_class_variant(sequence, hydropathy=hydropathy,
+        fraction=fcr, net_charge=ncpr,kappa=kappa)
+
+        if sequence_variant_disorder(disordered_seq, starting_disorder, 
+            cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+            # if passes the 'disorder test', return the seq
+            return disordered_seq
+        else:
+            newsequence = optimize_disorder_within_class(disordered_seq, num_iterations=500)
+            if sequence_variant_disorder(newsequence, starting_disorder, 
+                cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+                return newsequence
+    raise GooseFail('Unable to generate sequence.')
+
+
+
