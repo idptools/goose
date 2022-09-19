@@ -118,7 +118,10 @@ Here is some more info on the various arguemnts -
 
 ``kappa`` - The kappa value of the sequence. 1 is maximum charge asymmetry, 0 is minimal asymmetry. The value must be between 0 and 1. The function can have a hard time hitting specific values if there are few charged residues in your sequence, so you might have to adjust this slightly when making a sequence.
 
-In addition, it's important to note that ``sigma`` values must be between 0 and 1.
+``sigma`` - is another charge asymmetry paramter based on the FCR and NCPR of the sequence. If sigma is specified, no other parameters can be simultaneously specified. ``sigma`` values must be between 0 and 1. 
+
+``cutoff`` - the cutoff value for disorder. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you are having difficulty making your sequence, you might want to try lowering the cutoff value. 
+
 
 Finally, I added in a 'spell check' function, so if you accidentally spell something wrong like *hydropath* instead of *hydropathy*, it'll still work for ya! 
 
@@ -237,6 +240,8 @@ For each amino acid, possible maximum values are as follows -
 "Y" - 0 : 0.22, 
 "V" - 0 : 0.3
 
+``cutoff`` - In addition, like with the creating sequences with parameters functionality, you can also specify the disorder cutoff threshold by specifying ``cutoff``. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you are having difficulty making your sequence, you might want to try lowering the cutoff value. 
+
 **Examples**
 
 **Just specifying a single amino acid fraction -**
@@ -313,6 +318,7 @@ hydrophobic' : 'I', 'V', 'L', 'A', 'M'
 Special Cases : 'C', 'P', 'G', and 'H'
 The 'Special Cases' residues are, for any function that accounts for the class of a residue, not interchangable with any other residues. 
 
+**For ALL** sequence variants, you can specify ``cutoff``, which changes the disorder cutoff value. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6.
 
 ### The constant_class_var()
 
