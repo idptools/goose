@@ -212,10 +212,9 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
 
 
     '''
-
     # check for necessary kwargs
     if 'attempts' not in list(kwargs.keys()):
-        attempts = 1
+        attempts = 20
     else:
         attempts = kwargs['attempts']
 
@@ -240,6 +239,8 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
 
     # try the number of specified attempts to build the seq
     for attempt_num in range(0, attempts):
+        # set attempted seq to empty string
+        attempted_seq=''
 
         # try to build the sequence
         try:
@@ -251,8 +252,9 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
             continue
 
         # if the sequence is disordered, return it
-        if check_disorder(attempted_seq, disorder_threshold=cutoff, strict=strict_disorder):
-            return attempted_seq
+        if attempted_seq != '':
+            if check_disorder(attempted_seq, disorder_threshold=cutoff, strict=strict_disorder):
+                return attempted_seq
 
     # if no disordered sequence in number of attempts, raise GooseFail
     raise GooseFail('Unable to generate sequence!')

@@ -2222,7 +2222,7 @@ def create_seq_by_fracs(length, **kwargs):
             raise GooseInputError(exception_value)
 
     total_fraction = sum(kwargs.values())
-    if total_fraction > 1:
+    if round(total_fraction, 5) > 1:
         raise GooseInputError('Cannot specify a total fraction of residues greater than 1!')
 
 
@@ -2271,6 +2271,7 @@ def create_seq_by_fracs(length, **kwargs):
         all_fraction_sequence = "".join(sequence_list)
         # shuffle the seq before returning    
         sequence = shuffle_seq(all_fraction_sequence)
+        return sequence
 
     # ELSE we still need some extra residues
     else:

@@ -362,12 +362,17 @@ def check_and_correct_fracs_kwargs(**kwargs):
                     correct_kwarg_key = individual_kwarg.upper()
                     return_kwarg[correct_kwarg_key] = kwargs[individual_kwarg]
 
+    additional_kwargs=['attempts', 'strict_disorder', 'cutoff']
+
+    for add_kw in additional_kwargs:
+        if add_kw in kwargs.keys():
+            return_kwarg[add_kw]=kwargs[add_kw]
 
     # list of essential kwargs, can add more here if needed
     essential_kwargs = ['cutoff', 'strict_disorder', 'attempts']
 
     # make a dict of essential kwarg values
-    essential_kwarg_vals = {'cutoff': parameters.DISORDER_THRESHOLD, 'strict_disorder': False, 'attempts': 1}
+    essential_kwarg_vals = {'cutoff': parameters.DISORDER_THRESHOLD, 'strict_disorder': False, 'attempts': 100}
 
     # make sure essential_kwargs are in the final return kwarg
     for individual_kwarg in essential_kwargs:

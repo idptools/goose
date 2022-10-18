@@ -109,7 +109,7 @@ def sequence(length, **kwargs):
     # make the sequence
     try:
         generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
-            sigma = kwargs['sigma'], attempts = 1, allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = kwargs['cutoff'])
+            sigma = kwargs['sigma'], attempts = 20, allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = kwargs['cutoff'])
     except:
         raise goose_exceptions.GooseFail('Unable to generate sequence. Please try again with different parameters or a lower cutoff value.')
 
