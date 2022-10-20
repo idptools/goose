@@ -1,5 +1,5 @@
 ![GOOSE_LOGO_FULL](https://github.com/ryanemenecker/goose/blob/main/images/goose_logo_3.png) 
-# GOOSE : Generate disOrdered prOtiens Specifying paramEters
+# GOOSE : Generate disOrdered prOtiens Specifying propErties
 
 ## What is GOOSE?
 GOOSE is a python package developed to make the generation of IDRs with specific properties or the generation of IDR variants easy. This was the original goal, but some of the functionality has expanded into other areas such as generating sequences that have predicted secondary structure. Basically, we want to make it easy for you to design IDRs or IDR variants for your research. GOOSE currently only works from Python, but a CLI is in the works. 
@@ -17,7 +17,7 @@ It is rather difficult to know which properties of any given intrinsically disor
 
 There are four main functionalities currently in GOOSE. 
 
-**1.** GOOSE can let you generatae IDRs where you can specify the parameters *length*, *average hydropathy*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa*, which is a parameter that defines charge separation in a sequence. These parameters are all very important for the biophysical behavior of any IDR! 
+**1.** GOOSE can let you generatae IDRs where you can specify the properties *length*, *average hydropathy*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa*, which is a property that defines charge separation in a sequence. These properties are all very important for the biophysical behavior of any IDR! 
 
 **2.** GOOSE can let you generate IDR variants. The different variants I currently have implemented should allow you to address many questions you might be interested in by letting you choose which parts of your IDR to hold constant. Importantly, most of the variant generators **keep the overall properties of your IDR constant**. This means that you can generate numerous sequences with the same overall properties but differing in various different ways to really narrow down on *what makes your IDR of interest work*? More on the variants later though.
 
@@ -61,24 +61,24 @@ GOOSE allows you to easily generate sequences. GOOSE verifies disorder ofthe gen
 
 ## Some important limitations to be aware of
 
-**A quick note on discrepencies between input parameters and the actual values of generated sequences**. GOOSE by default allows a small amount of error for hydropathy (it is allowed to be off by 0.05, which is honestly negligible) and for kappa (it is allowed to be off by 0.02). This is basically a balance between accuracy and speed. If you go into goose/backend/parameters, you can modify these parameters globally if you install GOOSE locally. Finally, if you choose an NCPR / FCR combination that is mathematically impossible, GOOSE will get as close as it can.
+**A quick note on discrepencies between input properties and the actual values of generated sequences**. GOOSE by default allows a small amount of error for hydropathy (it is allowed to be off by 0.05, which is honestly negligible) and for kappa (it is allowed to be off by 0.02). This is basically a balance between accuracy and speed. If you go into goose/backend/properties, you can modify these properties globally if you install GOOSE locally. Finally, if you choose an NCPR / FCR combination that is mathematically impossible, GOOSE will get as close as it can.
 
 
 ### An important note on the speed of sequence generation
 
-The protein disorder field is not a slow moving one, and we are not here to slow you and your research down. Therefore, it was important for us to make GOOSE as fast as possible. However, because GOOSE incorporates stochasticity into sequence generation (see below for more on that), GOOSE still has to do some work when designing your disordered sequence. Importantly *the more parameters you specify, or the more constraints you put on sequence design, the more time it will take GOOSE to generate your sequence*. 
+The protein disorder field is not a slow moving one, and we are not here to slow you and your research down. Therefore, it was important for us to make GOOSE as fast as possible. However, because GOOSE incorporates stochasticity into sequence generation (see below for more on that), GOOSE still has to do some work when designing your disordered sequence. Importantly *the more properties you specify, or the more constraints you put on sequence design, the more time it will take GOOSE to generate your sequence*. 
 
  
 ### Stochasticity of sequences generated using GOOSE
 
-Making a sequence generator to generate IDRs is not a challenging problem provided you simply choose the most disordered residue possible at each step. However, that would result in the same sequence being generated over and over again, which massively limits the utility of the sequence generator. We designed GOOSE to have a bit of stochasticity in that it will *generally* not make the same sequence twice. For example, when we made 100,000 sequences that were 100 amino acids in length using GOOSE, every single sequence was unique. However, we want to emphasize that *the more parameters you specify when making sequences, the less available sequence space there is for GOOSE to explore. This will increase the chance that GOOSE will make the same sequence twice*. This is generally not a problem, but it is something that we wanted users to be aware of.
+Making a sequence generator to generate IDRs is not a challenging problem provided you simply choose the most disordered residue possible at each step. However, that would result in the same sequence being generated over and over again, which massively limits the utility of the sequence generator. We designed GOOSE to have a bit of stochasticity in that it will *generally* not make the same sequence twice. For example, when we made 100,000 sequences that were 100 amino acids in length using GOOSE, every single sequence was unique. However, we want to emphasize that *the more properties you specify when making sequences, the less available sequence space there is for GOOSE to explore. This will increase the chance that GOOSE will make the same sequence twice*. This is generally not a problem, but it is something that we wanted users to be aware of.
 
 *An important exception to this rule is the ``create.minimal_var()`` function because it attempts to change as little of the input sequence as possible and therefore will frequently return the same sequenece multiple times.*
 
 
 ### An important note on failed sequence generation
 
-Sometimes GOOSE can't make your sequence. We did our best to make sure that you will not run across a situation where this occurs, but with the enormous amount of possible different combinations of parameters and sequence properties, it is possible that GOOSE will be unable to make something you would like. This can often be easily overcome by *slightly* adjusting your parameters or reducing the cutoff value (the cutoff value is the value required for something to be considered disordered). You can also just make GOOSE try to make your sequence a few more times, GOOSE will often eventually get something that works (thanks to the inherent stochasticity in sequence generation).
+Sometimes GOOSE can't make your sequence. We did our best to make sure that you will not run across a situation where this occurs, but with the enormous amount of possible different combinations of properties and sequence properties, it is possible that GOOSE will be unable to make something you would like. This can often be easily overcome by *slightly* adjusting your properties or reducing the cutoff value (the cutoff value is the value required for something to be considered disordered). You can also just make GOOSE try to make your sequence a few more times, GOOSE will often eventually get something that works (thanks to the inherent stochasticity in sequence generation).
 
 
 ### Incompatible FCR, NCPR, and hydropathy values
@@ -99,7 +99,7 @@ To use GOOSE from within Python, first import *create from goose*
 
 Once *create* has been imported, you can start making seqeunces and sequence variants!
 
-## Generating sequences with specified sequence parameters
+## Generating sequences with specified sequence properties
 
 The ``create.sequence()`` function lets you create sequences predicted to be disordered with various specified properties. With this function you must specify length (first arguement) and can also specify: 1. hydropathy, 2. fraction of charged residues (FCR), 3. net charge per residue (NCPR), and 4. kappa (charge asymmetry paramter where higher values mean greater charge asymmetry). You can also specify sigma, but if you specify sigma **you cannot specify other properties**.
 
@@ -118,14 +118,14 @@ Here is some more info on the various arguemnts -
 
 ``kappa`` - The kappa value of the sequence. 1 is maximum charge asymmetry, 0 is minimal asymmetry. The value must be between 0 and 1. The function can have a hard time hitting specific values if there are few charged residues in your sequence, so you might have to adjust this slightly when making a sequence.
 
-``sigma`` - is another charge asymmetry paramter based on the FCR and NCPR of the sequence. If sigma is specified, no other parameters can be simultaneously specified. ``sigma`` values must be between 0 and 1. 
+``sigma`` - is another charge asymmetry paramter based on the FCR and NCPR of the sequence. If sigma is specified, no other properties can be simultaneously specified. ``sigma`` values must be between 0 and 1. 
 
 ``cutoff`` - the cutoff value for disorder. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you are having difficulty making your sequence, you might want to try lowering the cutoff value. 
 
 
 Finally, I added in a 'spell check' function, so if you accidentally spell something wrong like *hydropath* instead of *hydropathy*, it'll still work for ya! 
 
-**Importantly, you do not need to specify all of these sequence parameters simultaneously.** For example, if you specify FCR and hydropathy, GOOSE will return sequences that have varying NCPR values while making sure that the specified hydropathy and FCR values are what you input. In this way, you can generate many sequences that have the fixed parameters that you want to stay fixed while other parameters can vary. Alternatively, if you need to specify values for all parameters, you can do that too!
+**Importantly, you do not need to specify all of these sequence properties simultaneously.** For example, if you specify FCR and hydropathy, GOOSE will return sequences that have varying NCPR values while making sure that the specified hydropathy and FCR values are what you input. In this way, you can generate many sequences that have the fixed properties that you want to stay fixed while other properties can vary. Alternatively, if you need to specify values for all properties, you can do that too!
 
 **Examples**
 
@@ -189,7 +189,7 @@ You cannot have values for NCPR where the absolute value of NCPR is greater than
     create.sequence(100, FCR = 0.3, hydro = 3.2)
     'KVDSGTTSCSGERESDSGDLKSSKEGSSGSGSSSKSSKSKEATGSSTDTTAAAGGKGGGGGGDGGKGDGRGKGGGGGGEGRDGGGGGGEGGRGGGGRKRD'
 
-When specifying hydropathy with FCR or NCPR, the max possible hydropathy value is 5.8. In addition, after extensive testing I found that sequences with high hydropathy values and high FCR values will never be predicted to be disordered by metapredict. Therefore, I restricted the ability to input these parameter combinations (no sense being stuck waiting for a sequence to be generated that will never actually end up generated). In general, the maximum possible FCR value will equal (hydro x -0.2289)+1.2756.
+When specifying hydropathy with FCR or NCPR, the max possible hydropathy value is 5.8. In addition, after extensive testing I found that sequences with high hydropathy values and high FCR values will never be predicted to be disordered by metapredict. Therefore, I restricted the ability to input these property combinations (no sense being stuck waiting for a sequence to be generated that will never actually end up generated). In general, the maximum possible FCR value will equal (hydro x -0.2289)+1.2756.
 
 **NCPR & Hydropathy**
 
@@ -240,7 +240,7 @@ For each amino acid, possible maximum values are as follows -
 "Y" - 0 : 0.22, 
 "V" - 0 : 0.3
 
-``cutoff`` - In addition, like with the creating sequences with parameters functionality, you can also specify the disorder cutoff threshold by specifying ``cutoff``. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you are having difficulty making your sequence, you might want to try lowering the cutoff value. 
+``cutoff`` - In addition, like with the creating sequences with properties functionality, you can also specify the disorder cutoff threshold by specifying ``cutoff``. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you are having difficulty making your sequence, you might want to try lowering the cutoff value. 
 
 **Examples**
 
@@ -290,7 +290,7 @@ One problem we encountered when finding ways for people to easily make sequence 
 
 ``kappa_var()`` - Variant where you can alter the charge asymmetry by changing the kappa value. Requires the presence of positively charged and negatively charged residues in the original sequence. Higher kappa values increase charge asymmetry, lower kappa values reduce charge asymmetry. Values can be between 0 and 1. 
 
-``minimal_var()`` - Function for generating a variant that will change any parameters including hydropathy, fcr, ncpr, and scd (sequence charge decoration, which is another measurement of sequence charge asymmetry) to those that you want to change while minimizing the number of residues changed in the returned variant sequence from the original sequence. The more you change a given parameter, the more the returned variant sequence will differ from the original.
+``minimal_var()`` - Function for generating a variant that will change any properties including hydropathy, fcr, ncpr, and scd (sequence charge decoration, which is another measurement of sequence charge asymmetry) to those that you want to change while minimizing the number of residues changed in the returned variant sequence from the original sequence. The more you change a given property, the more the returned variant sequence will differ from the original.
 
 ``constant_class_var()`` - function to generate a variant with the same properties as the input variant as well as the same order of amino acids as far as class and the same number in each class. It will try to change the sequence as much as possible within these constraints.
 
@@ -390,7 +390,7 @@ The ``shuffle_var()`` generates a variant sequence that will shuffle specific re
 **Notice that when you specify 2 regions, you use a list of lists (a nested list).**
 
 **Note**- 
-**The following variants can change the overall parameters of the generated sequence, unlike previous variants.**
+**The following variants can change the overall properties of the generated sequence, unlike previous variants.**
 
 
 ### The hydro_class_var()
@@ -460,15 +460,15 @@ The starting NCPR of the sequence is 0.909. Let's increase it to 0.4.
 
 The ``all_props_class_var()`` makes a variant sequence that adjusts the FCR, NCPR, kappa, and mean hydropathy while minimizing changes to the order/number of amino acids *by class*. There is only a limited extent to which the NCPR or NCPR can be altered due to the fact that some FCR/hydropathy values are not compatible.
 
-**Example changing all parameters** - 
-In this example we will change all 4 possible parameters.
+**Example changing all properties** - 
+In this example we will change all 4 possible properties.
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
     create.all_props_class_var(test, hydropathy=2.5, fcr=0.23, ncpr=0, kappa=0.1)
     GTDGGETIETTESNDGQTHSNHNQGAHTNKSHQKQNAARSKNKQ
 
 
-**Example changing 2 parameters** - 
+**Example changing 2 properties** - 
 In this example we will just change kappa and hydropathy.
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
@@ -499,17 +499,17 @@ Now we can take this newly generated and make the charges more moderately symmet
 
 ### The minimal_var()
 
-The ``minimal_var()`` variant allows you to input a sequence of interest and then choose parameters including hydropathy, fcr, ncpr, and scd (sequence charge decoration, which is another measurement of sequence charge asymmetry(SCD)) to alter in your returned sequence. SCD will eventually be changed over to kappa for charge asymmetry. The objective of this variant is to generate a sequence with the desired input parameters while changing as few amino acids in the sequence as possible. The more you change a given parameter, the more the returned variant sequence will differ from the original.
+The ``minimal_var()`` variant allows you to input a sequence of interest and then choose properties including hydropathy, fcr, ncpr, and scd (sequence charge decoration, which is another measurement of sequence charge asymmetry(SCD)) to alter in your returned sequence. SCD will eventually be changed over to kappa for charge asymmetry. The objective of this variant is to generate a sequence with the desired input properties while changing as few amino acids in the sequence as possible. The more you change a given property, the more the returned variant sequence will differ from the original.
 
 **Example** - 
 
-**Changing one parameter** - 
+**Changing one property** - 
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
     create.minimal_var(test, hydropathy=3)
     AGAGGRAEGRGERKGEGGGKGGAGDGARGGDRRRGGDKGAAGRE
 
-**Changing multiple parameters** - 
+**Changing multiple properties** - 
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
     create.minimal_var(test, hydropathy=3, fcr=0.2)
@@ -519,11 +519,11 @@ The ``minimal_var()`` variant allows you to input a sequence of interest and the
 
 ### The asymmetry_var()
 
-The ``asymmetry_var()`` allows you to change the distribution of either a class of amino acids or a user-specified list of amino acids. You can increase or decrease residue distribution in your sequence of interest. By default will only slightly change the asymmetry of the sequence, but you can specify the ``changes`` parameter to increase or decrease the amount that the function changes the asymmetry.
+The ``asymmetry_var()`` allows you to change the distribution of either a class of amino acids or a user-specified list of amino acids. You can increase or decrease residue distribution in your sequence of interest. By default will only slightly change the asymmetry of the sequence, but you can specify the ``changes`` property to increase or decrease the amount that the function changes the asymmetry.
 
 **Example** - 
 
-**Changing aliphatics, no specification of changes parameter** - 
+**Changing aliphatics, no specification of changes property** - 
 
     test = 'GNGGNIVRAENRTERKGEQLATHKSNHNDGARHTDRRLMRSHDKNAASRE'
     create.asymmetry_var(test, 'decrease', 'aliphatic')
