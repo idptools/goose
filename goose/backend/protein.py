@@ -91,10 +91,10 @@ class Protein:
     #    
     @property
     def delta(self):
-        b5 = kappa.calculate_delta(seq, ['E','D'],['R','K'], 5)
-        b6 = kappa.calculate_delta(seq, ['E','D'],['R','K'], 6)
+        b5 = kappa.calculate_delta(self.seq, ['E','D'],['R','K'], 5)
+        b6 = kappa.calculate_delta(self.seq, ['E','D'],['R','K'], 6)
 
-        return round( (b5+b6)/2, 6)
+        return round( (b5+b6)/2, 7)
 
 
     # ......................................................................
