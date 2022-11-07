@@ -319,7 +319,7 @@ def residue_optimize_hydropathy_within_class(sequence, objective_hydropathy, tar
     build_sequence = ''
 
     # get starting hydropathy
-    starting_hydro = Protein.calc_mean_hydro(sequence)
+    starting_hydro = Protein(sequence).hydropathy
 
     # decide whether to increase or decrease hydropathy
     if starting_hydro > objective_hydropathy:
@@ -408,7 +408,7 @@ def optimize_hydropathy_within_class(sequence, objective_hydropathy, allowed_hyd
         # iterate over every residue in the sequence as necessary
         for amino_acid in range(0, len(sequence)):
             new_sequence = residue_optimize_hydropathy_within_class(sequence, objective_hydropathy, amino_acid)
-            cur_hydro = Protein.calc_mean_hydro(new_sequence)
+            cur_hydro = Protein(new_sequence).hydropathy
             if abs(cur_hydro - objective_hydropathy) <= allowed_hydro_error:
                 return new_sequence
             sequence = new_sequence
@@ -492,7 +492,7 @@ def create_new_var_constant_class_nums(sequence):
     negative = ['D', 'E']
 
     # get starting hydropathy of sequence
-    starting_hydropathy = Protein.calc_mean_hydro(sequence)
+    starting_hydropathy = Protein(sequence).hydropathy
 
     # get the amount of each class
     residues_by_class = return_num_for_class(sequence)
@@ -553,7 +553,7 @@ def create_constant_class_variant(sequence):
             else:
                 build_sequence += potential_residues[randint(0, len(potential_residues)-1)]
     # now correct hydropathy
-    starting_hydro = Protein.calc_mean_hydro(sequence)
+    starting_hydro = Protein(sequence).hydropathy
     final_seq = optimize_hydropathy_within_class(build_sequence, starting_hydro)
     return final_seq
 
@@ -581,9 +581,9 @@ def create_new_variant(sequence):
         returns the final build sequence variant    
     '''
     input_length = len(sequence)
-    input_FCR = Protein.calc_FCR(sequence)
-    input_NCPR = Protein.calc_NCPR(sequence)
-    input_hydro = Protein.calc_mean_hydro(sequence)
+    input_FCR = Protein(sequence).FCR
+    input_NCPR = Protein(sequence).NCPR
+    input_hydro = Protein(sequence).hydropathy
     new_sequence = create_seq_by_props(input_length, FCR=input_FCR, NCPR=input_NCPR, hydropathy=input_hydro)
     
     # now fix charged locations to keep kappa / scd constant
@@ -732,9 +732,9 @@ def create_constant_residue_variant(sequence, constant_residues = []):
             seq_variant += res
 
     # Now calculate sequence backbone paramters
-    input_FCR = Protein.calc_FCR(seq_variant)
-    input_NCPR = Protein.calc_NCPR(seq_variant)
-    input_hydro = Protein.calc_mean_hydro(seq_variant)
+    input_FCR    = Protein(seq_variant).FCR
+    input_NCPR   = Protein(seq_variant).NCPR 
+    input_hydro  = Protein(seq_variant).hydropathy 
     input_length = len(seq_variant)
 
 
@@ -1228,7 +1228,7 @@ def decrease_charge_asymmetry_once(sequence):
 
     for i in range(0, len(sequence)-bloblen):
         cur_blob = sequence[i: i+bloblen]
-        cur_NCPR = Protein.calc_NCPR(cur_blob)
+        cur_NCPR = Protein(cur_blob).NCPR
         if cur_NCPR >= highest_NCPR:
             if cur_NCPR > highest_NCPR:
                 possible_highest_NCPR_coords = [[i, i+bloblen]]
@@ -1521,7 +1521,7 @@ def possible_fcr_vals(sequence):
     # figure out possible FCR vals without changing NCPR
     all_fcr_vals = []
     fractional_val = 1/len(sequence)
-    minimal_fcr = abs(Protein.calc_NCPR(sequence))
+    minimal_fcr = abs(Protein(sequence).NCPR)
     num_vals = round(1/fractional_val)+2
     for i in range(0, num_vals):
         curval = round(minimal_fcr + (i*fractional_val), 6)
@@ -1576,10 +1576,10 @@ def create_fcr_class_variant(sequence, fraction, constant_ncpr=True, use_closest
 
     '''
     # get starting hydropathy
-    original_hydropathy = Protein.calc_mean_hydro(sequence)
+    original_hydropathy = Protein(sequence).hydropathy
     original_kappa = pr(sequence).kappa
-    original_fcr = Protein.calc_FCR(sequence)
-    original_ncpr = Protein.calc_NCPR(sequence)
+    original_fcr = Protein(sequence).FCR
+    original_ncpr = Protein(sequence).NCPR
 
     # figure out max possible FCR that can maintain disorder
     max_FCR = calculate_max_charge(original_hydropathy)
@@ -1722,13 +1722,13 @@ def calculate_linear_sequence_profile(sequence, mode, window_size=6):
             seq_vals.append(round(temp_val/window_size, 5))
     elif mode == 'FCR':
         for seq in seq_windows:
-            seq_vals.append(Protein.calc_FCR(seq))
+            seq_vals.append(Protein(seq).FCR)
     elif mode == 'NCPR':
         for seq in seq_windows:
-            seq_vals.append(Protein.calc_NCPR(seq))    
+            seq_vals.append(Protein(seq).NCPR)    
     elif mode == 'hydropathy':
         for seq in seq_windows:
-            seq_vals.append(Protein.calc_mean_hydro(seq))
+            seq_vals.append(Protein(seq).hydropathy)
     elif mode == 'aromatic':
         for seq in seq_windows:
             temp_val = 0
@@ -2045,9 +2045,10 @@ def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_close
 
     '''
     # get starting hydropathy, kappa, fcr
-    original_hydropathy = Protein.calc_mean_hydro(sequence)
-    original_kappa = pr(sequence).kappa
-    original_FCR = Protein.calc_FCR(sequence)
+    original_protein = Protein(sequence)
+    original_hydropathy = original_protein.hydropathy
+    original_kappa = original_protein.hydropathy
+    original_FCR = original_protein.FCR
 
     # figure out max possible FCR that can maintain disorder
     max_FCR = calculate_max_charge(original_hydropathy)
@@ -2071,7 +2072,7 @@ def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_close
 
     # figure out how many negative and positively charged res needed for
     # new sequence
-    needed_charged = needed_charged_residues(len(sequence), Protein.calc_FCR(sequence), net_charge)
+    needed_charged = needed_charged_residues(len(sequence), Protein(sequence).FCR, net_charge)
     num_negative_needed = needed_charged['negative']
     num_positive_needed = needed_charged['positive']
 
@@ -2080,7 +2081,7 @@ def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_close
     current_positive = sequence.count('K') + sequence.count('R')
 
     # get original ncpr
-    original_ncpr = Protein.calc_NCPR(sequence)
+    original_ncpr = Protein(sequence).NCPR
 
     # figure out what direction changing
     if net_charge == original_ncpr:

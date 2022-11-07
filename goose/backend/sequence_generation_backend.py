@@ -548,7 +548,7 @@ def check_hydropathy(sequence, objective_hydropathy, hydro_error = parameters.HY
         objective hydrpoatyh
 
     '''
-    cur_hydro = round(Protein.calc_mean_hydro(sequence), 5)
+    cur_hydro = round(Protein(sequence).hydropathy, 5)
     error = abs(cur_hydro-objective_hydropathy)
     if error <= hydro_error:
         return True
@@ -700,14 +700,14 @@ def all_excluded_residues_hydro(sequence, objective_hydropathy, no_charge=False,
             exclude_amino_acids.append(i)
 
     # if the objective hydro is less than the current hydro add residues greater than objective to list
-    if Protein.calc_mean_hydro(sequence) > objective_hydropathy:
+    if Protein(sequence).hydropathy > objective_hydropathy:
         for i in lists.amino_acids:
             if AminoAcid.hydro(i) > objective_hydropathy:
                 if i not in exclude_amino_acids:
                     exclude_amino_acids.append(i)
 
     # if the objective hydro is greater than the current hydro add residues less than objective to list
-    if Protein.calc_mean_hydro(sequence) < objective_hydropathy:
+    if Protein(sequence).hydropathy < objective_hydropathy:
         for i in lists.amino_acids:
             if AminoAcid.hydro(i) < objective_hydropathy:
                 if i not in exclude_amino_acids:
@@ -788,7 +788,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
     """
 
     #set current_hydro equal to the current hydropathy of the sequence
-    current_hydro = Protein.calc_mean_hydro(sequence)
+    current_hydro = Protein(sequence).hydropathy
     
     #set worst value to 0
     value_coordinate = 0
@@ -817,7 +817,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
         worst_value = -100
         for amino_acid_index in range(3, len(sequence)):
             if sequence[amino_acid_index] not in exclude_these_residues:
-                cur_hydro_value = Protein.calc_mean_hydro(sequence[amino_acid_index])
+                cur_hydro_value = Protein(sequence[amino_acid_index]).hydropathy
                 if cur_hydro_value > worst_value:
                     worst_value = cur_hydro_value
                     value_coordinate = amino_acid_index
@@ -828,7 +828,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
         worst_value = 100
         for amino_acid_index in range(3, len(sequence)):
             if sequence[amino_acid_index] not in exclude_these_residues:
-                cur_hydro_value = float(Protein.calc_mean_hydro(sequence[amino_acid_index]))
+                cur_hydro_value = float(Protein(sequence[amino_acid_index]).hydropathy)
                 if cur_hydro_value < float(worst_value):
                     worst_value = cur_hydro_value
                     value_coordinate = amino_acid_index
@@ -989,7 +989,7 @@ def hydro_seq(length, mean_hydro, just_neutral=False, allowed_error=None, return
         # make a sequence
         current_sequence = gen_sequence(length, usedlist=used_list)
         # figure out hydropathy
-        current_hydropathy = round(Protein.calc_mean_hydro(current_sequence), 4)
+        current_hydropathy = round(Protein(current_sequence).hydropathy, 4)
         # figure out current error
         cur_error = abs(mean_hydro - current_hydropathy)
         # see if it matches mean_hydro within allowed_error
@@ -1073,7 +1073,7 @@ def generate_charged_residues(length, FCR, objective_hydropathy):
             final_charged_res = 'K'
             remaining_hydro = total_hydro_charged - 0.6
             for i in range(0, number_charged-1):
-                cur_average_hydro = Protein.calc_mean_hydro(final_charged_res)
+                cur_average_hydro = Protein(final_charged_res).hydropathy
                 if remaining_hydro == 0:
                     final_charged_res += 'R'
                 elif remaining_hydro == 0.6:
@@ -1091,7 +1091,7 @@ def generate_charged_residues(length, FCR, objective_hydropathy):
             final_charged_res = 'R'
             remaining_hydro = total_hydro_charged
             for i in range(0, number_charged-1):
-                cur_average_hydro = Protein.calc_mean_hydro(final_charged_res)
+                cur_average_hydro = Protein(final_charged_res).hydropathy
                 if remaining_hydro == 0:
                     final_charged_res += 'R'
                 elif remaining_hydro == 0.6:
@@ -1217,7 +1217,7 @@ def K_R_optimization(sequence, objective_hydropathy):
         The final amino acid sequence as a string
 
     '''
-    seq_hydropathy = Protein.calc_mean_hydro(sequence)
+    seq_hydropathy = Protein(sequence).hydropathy
     
     if objective_hydropathy < seq_hydropathy:
         KtoR = True
@@ -1414,7 +1414,7 @@ def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = para
         # add one to optimizer value
         optimizer = optimizer + 1
 
-        current_hydropathy = round(Protein.calc_mean_hydro(current_sequence), 4)
+        current_hydropathy = round(Protein(current_sequence).hydropathy, 4)
         # see if it matches mean_hydro within allowed_error
         if abs(objective_hydropathy - current_hydropathy) <= allowed_error:
             # set final sequence
@@ -1483,21 +1483,22 @@ def FCR_optimization(sequence, objective_hydropathy, allowed_error=parameters.HY
         returns the final sequence as a string
     '''
     
-    cur_hydro = Protein.calc_mean_hydro(sequence)
+    cur_hydro = Protein(sequence).hydropathy
+    
     if abs(objective_hydropathy-cur_hydro) > allowed_error:
         new_sequence = sequence
         if cur_hydro > objective_hydropathy:
             # replace D's with K
             count_D = sequence.count('D')
             for i in range(0, count_D):
-                cur_hydro = Protein.calc_mean_hydro(new_sequence)
+                cur_hydro = Protein(new_sequence).hydropathy
                 if cur_hydro > objective_hydropathy:
                     new_sequence = replace_residues(new_sequence, 'D', 'K')
             # replace E's with K
             if cur_hydro > objective_hydropathy:
                 count_E = sequence.count('E')
                 for i in range(0, count_E):
-                    cur_hydro = Protein.calc_mean_hydro(new_sequence)
+                    cur_hydro = Protein(new_sequence).hydropathy
                     if cur_hydro > objective_hydropathy:
                         new_sequence = replace_residues(new_sequence, 'E', 'K')
                 # return the sequence after K_R optimizations
@@ -1506,14 +1507,14 @@ def FCR_optimization(sequence, objective_hydropathy, allowed_error=parameters.HY
             # replace K's with D
             count_K = sequence.count('K')
             for i in range(0, count_K):
-                cur_hydro = Protein.calc_mean_hydro(new_sequence)
+                cur_hydro = Protein(new_sequence).hydropathy
                 if cur_hydro < objective_hydropathy:
                     new_sequence = replace_residues(new_sequence, 'K', 'D')
             # replace R's with E
             if cur_hydro < objective_hydropathy:
                 count_R = sequence.count('R')
                 for i in range(0, count_R):
-                    cur_hydro = Protein.calc_mean_hydro(new_sequence)
+                    cur_hydro = Protein(new_sequence).hydropathy
                     if cur_hydro > objective_hydropathy:
                         new_sequence = replace_residues(new_sequence, 'R', 'E')
             # return the sequence after K_R optimizations
@@ -1800,7 +1801,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                     charged_residues += random_amino_acid(lists.charged_list)
 
                 # figure out how much hydropathy is taken by charged residues
-                charged_residue_hydropathy = Protein.calc_mean_hydro(charged_residues)
+                charged_residue_hydropathy = Protein(charged_residues).SCD
 
 
                 # now figure out hydropathy needed to balance the charged residues
@@ -1816,7 +1817,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                         charged_residues = generate_charged_residues(length, FCR, hydropathy)
 
                     # figure out how much hydropathy is taken by charged residues
-                    charged_residue_hydropathy = Protein.calc_mean_hydro(charged_residues)
+                    charged_residue_hydropathy = Protein(charged_residues).hydropathy
 
 
                     # now figure out hydropathy needed to balance the charged residues
@@ -1964,7 +1965,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                 number_hydro_res = length - len(charged_residues)
 
                 # figure out how much hydropathy is taken by charged residues
-                charged_residue_hydropathy = Protein.calc_mean_hydro(charged_residues)
+                charged_residue_hydropathy = Protein(charged_residues).hydropathy
 
                 # now figure out hydropathy needed to balance the charged residues
                 total_charged_hydro = charged_residue_hydropathy * len(charged_residues)
@@ -2077,7 +2078,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                 number_hydro_res = length - len(charged_residues)
 
                 # figure out how much hydropathy is taken by charged residues
-                charged_residue_hydropathy = Protein.calc_mean_hydro(charged_residues)
+                charged_residue_hydropathy = Protein(charged_residues).hydropathy
 
                 # now figure out hydropathy needed to balance the charged residues
                 total_charged_hydro = charged_residue_hydropathy * len(charged_residues)
@@ -2148,9 +2149,11 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
 
 def test_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None):
     final_sequence = create_seq_by_props(length, FCR=FCR, NCPR=NCPR, hydropathy=hydropathy)
-    seq_NCPR = Protein.calc_NCPR(final_sequence)
-    seq_FCR = Protein.calc_FCR(final_sequence)
-    seq_hydropathy = Protein.calc_mean_hydro(final_sequence)
+
+    tmp = Protein(final_sequence)
+    seq_NCPR = tmp.NCPR
+    seq_FCR = tmp.FCR
+    seq_hydropathy = tmp.hydropathy
     if FCR != None:
         print(f'Objective FCR = {FCR} : Actual FCR = {seq_FCR}')
     if NCPR != None:
