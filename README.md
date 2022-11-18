@@ -33,7 +33,11 @@ There are four main functionalities currently in GOOSE.
 
 Right now you can only install GOOSE through Github. It will be on PyPi to allow for pip installation soon!
 
-To clone the GitHub repository - 
+To install directly from the git repository simply run:
+
+	$ pip install git+https://github.com/idptools/goose.git
+
+Or to clone the GitHub repository and install locally run - 
 
 	$ git clone https://github.com/idptools/goose.git
 	$ cd goose
