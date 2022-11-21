@@ -2,7 +2,8 @@
 Backend for generation of the minimal variant.
 This is code from an old version of GOOSE that I intend
 to rewrite, but haven't had the chance to. It works, it just
-isn't ideal...
+... was written when I **REALLY** didn't know what I was doing...
+But yeah, it is ... functional.
 '''
 
 
