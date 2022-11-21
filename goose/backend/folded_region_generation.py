@@ -165,11 +165,12 @@ def gen_helix_hydro(length, hydropathy, cutoff=0.85, itrs=10000):
 
     for i in range(0, itrs):
         cur_helix = gen_sequence(length=length, usedlist=chosen_list)
-        if abs(Protein.calc_mean_hydro(cur_helix) - hydropathy) < 0.05:
+                
+        if abs(Protein(cur_helix).hydropathy - hydropathy) < 0.05:
             if check_helicity(cur_helix, cutoff=cutoff):
                 return cur_helix
 
-    raise Exception('Unable to generate helix with specified hydro.')
+    raise Exception('Unable to generate helix with specified hydrophobicity')
 
 
 def gen_beta_strand(length=12, cutoff=0.6, max_iters=5000):

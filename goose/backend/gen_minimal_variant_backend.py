@@ -680,7 +680,7 @@ def decrease_charge_asymmetry(sequence, cutoff=0.65, attempts=100, check_disorde
 
         for i in range(0, len(sequence)-bloblen):
             cur_blob = sequence[i: i+bloblen]
-            cur_NCPR = Protein.calc_NCPR(cur_blob)
+            cur_NCPR = Protein(cur_blob).NCPR
             if cur_NCPR >= highest_NCPR:
                 if cur_NCPR > highest_NCPR:
                     possible_highest_NCPR_coords = [[i, i+bloblen]]
@@ -1361,7 +1361,7 @@ def optimize_charge_asymmetry(sequence, objective_charge_asymmetry, cutoff, iter
     """
 
 
-    starting_charge_asymmetry = Protein.calc_SCD(sequence)
+    starting_charge_asymmetry = Protein(sequence).SCD
 
     # figure out current error
     starting_error = abs(starting_charge_asymmetry - objective_charge_asymmetry)
@@ -1381,7 +1381,7 @@ def optimize_charge_asymmetry(sequence, objective_charge_asymmetry, cutoff, iter
         # go about iterations
         while charge_optimizations <  iterations:
 
-            current_charge_asymmetry = Protein.calc_SCD(input_sequence)
+            current_charge_asymmetry = Protein(input_sequence).SCD 
 
             # figure out if to increase or decrease charge asymetry
             if objective_charge_asymmetry > current_charge_asymmetry:
@@ -1395,7 +1395,7 @@ def optimize_charge_asymmetry(sequence, objective_charge_asymmetry, cutoff, iter
                     new_sequence = current_best_sequence 
 
             # figure out how the new sequence is doing
-            new_sequence_asymetry = abs(Protein.calc_SCD(new_sequence) - objective_charge_asymmetry)
+            new_sequence_asymetry = abs(Protein(new_sequence).SCD - objective_charge_asymmetry)
 
             # overwrite best of new is better
             if new_sequence_asymetry < current_best_error:
@@ -1433,18 +1433,18 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
 
     if fraction == '':
     	if net_charge != '':
-    		if abs(net_charge) > Protein.calc_FCR(sequence):
+    		if abs(net_charge) > Protein(sequence).FCR:
     			raise GooseInputError('The specified value for net_charge is not possible with the FCR value of the input sequence. Please increase fraction or decrease net_charge.')
 
     # make sure that properties not specified are set to stay the same
     if mean_hydro == '':
-        mean_hydro = Protein.calc_mean_hydro(sequence)
+        mean_hydro = Protein(sequence).hydropathy
 
     if fraction == '':
-        fraction = Protein.calc_FCR(sequence)
+        fraction = Protein(sequence).FCR
 
     if net_charge == '':
-        net_charge = Protein.calc_NCPR(sequence)
+        net_charge = Protein(sequence).NCPR
 
     # keep track of original disorder
     original_disorder = meta.predict_disorder(input_sequence)
@@ -1549,7 +1549,7 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
     if needed_negative > input_negative_residues:
         difference = int(needed_negative-input_negative_residues)
         for i in range(0, difference):
-            current_sequence_hydropathy = Protein.calc_mean_hydro(sequence)
+            current_sequence_hydropathy = Protein(sequence).hydropathy
 
             if current_sequence_hydropathy > mean_hydro:               
                 best_position = 0
@@ -1584,7 +1584,7 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
     if needed_positive > input_positive_residues:
         difference = int(needed_positive-input_positive_residues)
         for i in range(0, difference):
-            current_sequence_hydropathy = Protein.calc_mean_hydro(sequence)
+            current_sequence_hydropathy = Protein(sequence).hydropathy
             
             if current_sequence_hydropathy > mean_hydro:               
                 best_position = 0
@@ -1618,7 +1618,7 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
     #      altering hydropathy as needed
     #=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#    
 
-    error = abs(Protein.calc_mean_hydro(sequence)-mean_hydro)
+    error = abs(Protein(sequence).hydropathy-mean_hydro)
 
     if error > parameters.HYDRO_ERROR:        
         attempted_optimization = 0
@@ -1635,13 +1635,13 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
             prev_seqs.append(sequence)            
             attempted_optimization = attempted_optimization + 1
 
-            if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < parameters.HYDRO_ERROR:
+            if abs(Protein(sequence).hydropathy-mean_hydro) < parameters.HYDRO_ERROR:
                 attempted_optimization += number_iterations * 2
 
     #  Bringing out the slow optimizer if needed
     #=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#    
 
-    error = abs(Protein.calc_mean_hydro(sequence)-mean_hydro)
+    error = abs(Protein(sequence).hydropathy-mean_hydro)
 
     if error > parameters.HYDRO_ERROR:          
         attempted_optimizations = 0
@@ -1657,7 +1657,7 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
             prev_seqs.append(sequence)            
             attempted_optimization = attempted_optimization + 1
 
-            if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < parameters.HYDRO_ERROR:
+            if abs(Protein(sequence).hydropathy-mean_hydro) < parameters.HYDRO_ERROR:
                 attempted_optimization += number_iterations * 2
 
 
@@ -1690,7 +1690,7 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
                 # add 1 to the current iterations 
                 current_iteration = current_iteration + 1
 
-    if sequence_variant_disorder(sequence, original_disorder, cutoff=cutoff, strict=strict) == False or abs(Protein.calc_mean_hydro(sequence) - mean_hydro) > parameters.HYDRO_ERROR:
+    if sequence_variant_disorder(sequence, original_disorder, cutoff=cutoff, strict=strict) == False or abs(Protein(sequence).hydropathy - mean_hydro) > parameters.HYDRO_ERROR:
         
         # do some fast optimizations
         cur_iteration = 0
@@ -1698,29 +1698,29 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
         while cur_iteration < max_iterations:
             optimized_seq = fast_optimize_hydro(sequence, mean_hydro, use_charged=False)
             sequence = optimized_seq
-            if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) < parameters.HYDRO_ERROR:
+            if abs(Protein(sequence).hydropathy - mean_hydro) < parameters.HYDRO_ERROR:
                 cur_iteration += 100
             cur_iteration += 1
             
 
-    if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) > parameters.HYDRO_ERROR:
+    if abs(Protein(sequence).hydropathy - mean_hydro) > parameters.HYDRO_ERROR:
         cur_slow_iteration = 0
         max_slow_iterations = 5
         while cur_slow_iteration < max_slow_iterations:
             optimized_seq = slow_optimize_hydro(sequence, mean_hydro, use_charged=False)
-            if abs(Protein.calc_mean_hydro(sequence) - mean_hydro) < parameters.HYDRO_ERROR:
+            if abs(Protein(sequence).hydropathy - mean_hydro) < parameters.HYDRO_ERROR:
                 return sequence
                 cur_slow_iteration += 100
             cur_slow_iteration += 1
 
     if charge_asymmetry != '':
-        cur_charge_asymmetry = Protein.calc_SCD(sequence)
+        cur_charge_asymmetry = Protein(sequence).SCD
         if abs(cur_charge_asymmetry - charge_asymmetry) > 0.5:
             sequence = optimize_charge_asymmetry(sequence, charge_asymmetry, cutoff=cutoff, iterations=100)
 
 
     if sequence_variant_disorder(sequence, original_disorder, cutoff=cutoff, strict=strict) == True:
-        if abs(Protein.calc_mean_hydro(sequence)-mean_hydro) < parameters.HYDRO_ERROR:
+        if abs(Protein(sequence).hydropathy-mean_hydro) < parameters.HYDRO_ERROR:
             return sequence
 
     raise GooseFail('Unable to generate sequence.')

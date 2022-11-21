@@ -9,7 +9,12 @@ import os
 from sparrow import Protein as pr
 
 from goose.backend.protein import Protein 
+<<<<<<< HEAD
 from goose.tests.local_data import test_prop_dicts
+=======
+#from goose.tests.local_data import test_prop_dicts
+from ..tests.local_data import test_prop_dicts
+>>>>>>> origin/sparrow_predictions
 from goose.backend.predictors.predict_mito import predict_mitochondrial_targeting
 from goose.backend.predictors.predict_nes import predict_nes_seq
 from goose.backend.predictors.predict_nls import predict_nls_seq
@@ -28,6 +33,7 @@ def test_goose_property_calculations():
     for seq_and_props in test_prop_dicts:
         # grab current sequence
         current_sequence = seq_and_props['sequence']
+<<<<<<< HEAD
         # test FCR
         assert Protein.calc_FCR(current_sequence) == seq_and_props['FCR']
         # test NCPR
@@ -36,6 +42,17 @@ def test_goose_property_calculations():
         assert Protein.calc_mean_hydro(current_sequence) == seq_and_props['hydro']        
         # test kappa
         assert pr(current_sequence).kappa == seq_and_props['kappa']
+=======
+        current_sequence = Protein(current_sequence)
+        # test FCR
+        assert current_sequence.FCR == seq_and_props['FCR']
+        # test NCPR
+        assert current_sequence.NCPR == seq_and_props['NCPR']
+        # test mean hydropathy
+        assert current_sequence.hydropathy == seq_and_props['hydro']        
+        # test kappa
+        assert current_sequence.kappa == seq_and_props['kappa']
+>>>>>>> origin/sparrow_predictions
 
 
 def within_spec(list_vals1, list_vals2, acceptable_diff = 0.000001):
@@ -91,8 +108,23 @@ def test_goose_analyze_predictions():
     for seq_and_props in test_prop_dicts:
         # grab current sequence
         current_sequence = seq_and_props['sequence']
+<<<<<<< HEAD
         # make sure all predictions in the analyze.everything function come back correct
         assert everything(current_sequence) == seq_and_props['complete_analysis']
+=======
+        # get current predictions
+        current_predictions = everything(current_sequence)
+        # make sure all predictions in the analyze.everything function come back correct
+        known_predictions = seq_and_props['complete_analysis']
+        # tests
+        testing_factors = list(current_predictions.keys())
+        # need to round because sparrow implementation...
+        round_me = ['FCR', 'NCPR', 'hydropathy', 'sigma', 'delta']
+        for factor in testing_factors:
+            if factor in round_me:
+                assert round(current_predictions[factor], 6) == round(known_predictions[factor], 6)
+
+>>>>>>> origin/sparrow_predictions
 
 
 
