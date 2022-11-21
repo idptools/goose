@@ -1801,7 +1801,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                     charged_residues += random_amino_acid(lists.charged_list)
 
                 # figure out how much hydropathy is taken by charged residues
-                charged_residue_hydropathy = Protein(charged_residues).SCD
+                charged_residue_hydropathy = Protein(charged_residues).hydropathy
 
 
                 # now figure out hydropathy needed to balance the charged residues

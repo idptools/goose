@@ -171,6 +171,9 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
     # if no disordered sequence in number of attempts, raise GooseFail
     raise GooseFail('Unable to generate sequence!')
 
+print(generate_disordered_seq_by_props(100, hydropathy=3, FCR=0.2))
+
+
 
 
 
