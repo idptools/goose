@@ -25,6 +25,8 @@ There are four main functionalities currently in GOOSE.
 
 **4.** GOOSE comes with a bunch of sequence analysis tools. This is for a few reasons. First, sometimes it's nice to just analyze an IDR you're interested in before making variants. It's good to know whether your IDR may have a transcriptional activation domain or a phosphosite. Additionally, it allows you to analyze the IDRs you generate using GOOSE to make sure you don't accidentally send it to the nucleus or something of the sort due to GOOSE adding an NLS to your sequence during sequence generation.
 
+**5.** GOOSE lets you make sequence libraries. This is currently under development, so it is currently limited to generating sequence libraries by sequence properties. 
+
 ## How can I use GOOSE?
 
 **GOOSE is a Python API only.** I am also working on making a Google Colab notebook to make it as easy as possible for anyone to generate their own sequences or sequence variants, but that is still in development.
@@ -688,6 +690,23 @@ If you just want a summary of... well basically everything we've covered so far 
 
 The analyze.everything() function will return a dictionary holding all of the information from sequence properties to predicted phosphosites, cellular localization, and transcriptional activation domains all from one simple function!
 
+## Generating sequence libraries in GOOSE
+
+### Generating sequnce libraries by properties
+
+To generate sequence libraries by specifying properties, use the ``create.seq_property_library()`` function. An important things to note ***GOOSE automatically gets rid of sequences not possible to make***. For example, a sequence with an NCPR value where the absolute value of the NCPR value is greater than the FCR will not be included because it's not possible to generate. In addition, GOOSE will check the hydropathy value and see if it is possible based on the FCR. If it's not possible, GOOSE will not make it. However **for incompatible hydropathy / charge values**, GOOSE will print out the sequences it was not able to generate and print them unless you set ``silent_failed_seqs`` to True. In this function, you can specify the length, FCR, NCPR, hydropathy, kappa, and disorder cutoff values. **Note** GOOSE will do it's best to get the kappa value spot on, but it does allow for some error. It will also also adjust the FCR to match the NCPR if the two values are not compatible. This function will return a dictionary of sequences where each sequence is named after the property specified for generating the sequence.
+
+ 
+For this function, you can specify the property as a single value, a list of two values, or a list with three values where GOOSE will make all possible values from the first number of the list to the second number of the list at an interval equal to the third value of the list.
+
+**Examples**
+
+    create.seq_property_library(40, FCR=0.1, NCPR=[0, 0.1], hydropathy=[2, 4, 0.5])
+
+    {'sequence_FCR_0.1_NCPR_0_hydropathy_2.0': 'DQDPHQQMNGPNSQSHNQPPQTNNGPRHNGKQNQSNQPPG', 'sequence_FCR_0.1_NCPR_0_hydropathy_2.5': 'PHGSSQDSPRHPQAAHNNDAQQNPRHNHTSGSGPQQSSSP', 'sequence_FCR_0.1_NCPR_0_hydropathy_3.0': 'MSTHDPQANPTQTSKANGGPSHDGPPAPGPTQQSKPNNLS', 'sequence_FCR_0.1_NCPR_0_hydropathy_3.5': 'PSQNGPKAGSAGASPGNKAGTSPAQTESEVQQSPGSALNG', 'sequence_FCR_0.1_NCPR_0_hydropathy_4': 'PRSNLAAGAAGPTNLGACPDTQAGRTNAATSGGCSANPEH', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_2.0': 'HPNNSGNQRGQGNNNTQPHKGQTTRPQRGQHQHGQPNHSH', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_2.5': 'QMRTHPPPPQQNGHSTNSRNHNRPSGPPTSAPPRQTPPPQ', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_3.0': 'PSHHSPHSRSPGKHPQPPALAPTPPSTPPTPAPPPANKKQ', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_3.5': 'RRGSSPAPSSGWAPPSAMTGGTRGKAPGPGQNHHGGTTAS', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_4': 'AAPRSSSMPIPGLPASVKPSGPPHSAQTGKGSLATHSTGR'}
+
+In the example above, the first value in the function is the length. This value must be a singlue integer value and is **required**. The second value, ``FCR`` is specified as a single value, so all sequences generated will have that value. The third value ``NCPR`` is specified as a list, so GOOSE made a set of sequences where NCPR was equal to the first value in the list and then a set where NCPR was equal to the second value in the list. Finally, ``hydropathy`` was set equal to a list with 3 values. This means GOOSE was told to generate sequences with a range of the first value of the list ``2``, to the second value in the list, ``4``, at an interval equal to the third value of the list ``0.5``. This resulted in the creation of sequences with values 2.0, 2.5, 3.0, 3.5, and 4.0.
+**If the third value, which is the interval value, is cannot be equally used between the range of sequences, GOOSE will just use the maximum value as the last value.** For example, hydropathy = [2, 4, 1.1] would result in hydropathy values of 2, 3.1, and 4. In this example ``kappa`` was not specified, so GOOSE had no constraints on kappa values.
 
 ## How to cite GOOSE
 

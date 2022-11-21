@@ -3,7 +3,7 @@ user-facing functionality
 '''
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'new_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet']
+__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'new_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library']
 
 import os
 import sys
@@ -32,6 +32,9 @@ from goose.backend.variant_generation import gen_fcr_class_variant as _gen_fcr_c
 from goose.backend.variant_generation import gen_ncpr_class_variant as _gen_ncpr_class_variant
 from goose.backend.variant_generation import gen_all_props_class_variant as _gen_all_props_class_variant
 from goose.backend.gen_minimal_variant_backend import gen_minimal_sequence_variant as _gen_minimal_sequence_variant
+
+# library creation
+from goose.backend.library_generation_backend import generate_library_by_parameter_ranges as _generate_library_by_parameter_ranges
 
 # for folded structure generation
 from goose.backend.folded_region_generation import gen_helix as _gen_helix
@@ -588,4 +591,127 @@ def beta_sheet(length):
         raise goose_exceptions.GooseFail('Sorry! Goose was unable to make that beta sheet. Try again or try a different length.')
     return final_seq
 
+
+
+'''
+/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
+/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
+        LIBRARY GENERATION
+/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
+/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
+'''
+
+
+def seq_property_library(length,
+    FCR=None, NCPR=None, hydropathy=None, kappa=None, 
+    cutoff=parameters.DISORDER_THRESHOLD, silent_failed_seqs=False, beta_mode=False):
+    '''
+    Function that returns a list of dictioanries where each
+    dictionary has the values specified for a library of sequences.
+    Bit of a long function because all of the paramter values are checked
+    before adding the sequence to the library. This way the user can specify 
+    ranges of, for example, hydropathy, that are not possible with certain charge
+    values but are possible with other charge values. 
+
+
+    parameters
+    ----------
+    length : Int 
+        The length of the sequence
+
+    FCR : list of float(s) or float
+        The fraction of charged residues as a decimal, between 0 and 1.
+        Input as a range where the first value is the lower bounds wanted
+        for the library and the second value is the upper bounds wanted for
+        the library. If a single number is given, then that value will be constant
+        across the library.
+        A third value can be specified, which will determine the
+        interval between the lowest value and the highest value. 
+        If this interval is not perfect, then GOOSE will take the 
+        closest value to the desired maximum. 
+
+    NCPR : list of float(s) or float
+        The net charge of the sequence as a decimal, between -1 and 1
+        Absolute value cannot be greater than FCR.
+        Input as a range where the first value is the lower bounds wanted
+        for the library and the second value is the upper bounds wanted for
+        the library. If a single number is given, then that value will be constant
+        across the library.
+        A third value can be specified, which will determine the
+        interval between the lowest value and the highest value. 
+        If this interval is not perfect, then GOOSE will take the 
+        closest value to the desired maximum. 
+
+    hydropathy : list of float(s) or float
+        The mean hydropathy of the sequence. Lower numbers are less
+        hydrophobic. Between 0.6 and 6.1
+        Input as a range where the first value is the lower bounds wanted
+        for the library and the second value is the upper bounds wanted for
+        the library. If a single number is given, then that value will be constant
+        across the library.
+        A third value can be specified, which will determine the
+        interval between the lowest value and the highest value. 
+        If this interval is not perfect, then GOOSE will take the 
+        closest value to the desired maximum.         
+
+    kappa : list of float(s) or float
+        The charge asymmetry metric. Describes how oppositely charged
+        residues are patterned across the sequeence. Between 0 and 1 
+        where a higher value is a more asymmetrically distributed 
+        positioning of oppositely charged residues.
+        Input as a range where the first value is the lower bounds wanted
+        for the library and the second value is the upper bounds wanted for
+        the library. If a single number is given, then that value will be constant
+        across the library.        
+        A third value can be specified, which will determine the
+        interval between the lowest value and the highest value. 
+        If this interval is not perfect, then GOOSE will take the 
+        closest value to the desired maximum. 
+
+        Input as a range where the first value is the lower bounds wanted
+        for the library and the second value is the upper bounds wanted for
+        the library. If a single number is given, then that value will be constant
+        across the library.
+
+    cutoff : float
+        The cutoff value for disorder as a float. Higher values
+        lead to a more 'strict' cutoff for what is considered to be disordered.
+
+    silent_failed_seqs : bool
+        Whether to silence any printed warnings of sequences that
+        are not possible to generate due to incompatible charge/hydorpatyh values
+
+    beta_mode : bool
+        For testing. Set to True to get some printouts as seqs are being generated.
+
+    returns
+    -------
+    sequence_list : list of dictionaries
+        Returns a list of dicts where each dictionary in the list 
+        can be input into the sequence generators downstream. 
+        The dict holds the parameter specifications for each sequence in the library.
+    '''
+    # make the list of sequences to generate
+    sequence_list = _generate_library_by_parameter_ranges(length=length,
+    FCR=FCR, NCPR=NCPR, hydropathy=hydropathy, kappa=kappa, silent_failed_seqs=silent_failed_seqs)
+    # dict to return
+    seq_dict={}
+    # make a dict to hold the library
+    for seq_specified in sequence_list:
+        if beta_mode==True:
+            print(f'{seq_specified}')
+        # make the sequence
+        seq = sequence(length, **seq_specified)
+        # make a sequence name
+        seq_name='sequence'
+        name_values = ['FCR', 'NCPR', 'kappa', 'hydropathy']
+        for vals in range(0,len(name_values)):
+            param_val = name_values[vals]
+            curval = seq_specified[param_val]
+            if curval != None:
+                seq_name+=f'_{param_val}_{curval}'
+        # add to the dict
+        seq_dict[seq_name]=seq
+    # return the dict
+    return seq_dict
 
