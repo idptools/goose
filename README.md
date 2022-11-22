@@ -690,6 +690,18 @@ If you just want a summary of... well basically everything we've covered so far 
 
 The analyze.everything() function will return a dictionary holding all of the information from sequence properties to predicted phosphosites, cellular localization, and transcriptional activation domains all from one simple function!
 
+### Predict differences between sequences
+
+If you generate a sequence variant and want to see if you've broken or introduced any sequence features including TADs, cellular localization signalgs, and phosphosites, you can use the ``analyze.prediction_diffs()`` function. The function takes in two sequences as the input and then returns the predicted differences between those sequences. 
+
+**Example**
+
+    test1 = 'PNNLNEKLRNQLNSDTNSYSNSISNSNSNSTGNLNSSYFNSLNIDSMLDDYVSSDLLLNDDDDDTNLSR'
+    test2 = 'PTTITEKIKTTITTDTTTFTTTITTTTTTSTGNLNSSYFNSLNIDSMLDDYVSSDLLLNDDDDDTNLSR'
+    analyze.prediction_diffs(test1, test2)
+    {'S phosphorylation': 'No differences.', 'T phosphorylation': 'sequence 1: [31, 65], sequence 2: [65]', 'Y phosphorylation': 'sequence 1: [19, 38, 51], sequence 2: [38, 51]', 'NLS': 'No differences.', 'NES': 'No differences.', 'mitochondrial': 'No differences.', 'predicted transcriptional activation': ['Sequence 1 predicted TAD - TGNLNSSYFNSLNIDSML : [31, 49] not in sequence 2', 'Sequence 2 predicted TAD - GNLNSSYF : [32, 40] not in sequence 1']}
+
+
 ## Generating sequence libraries in GOOSE
 
 ### Generating sequnce libraries by properties

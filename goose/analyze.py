@@ -152,13 +152,15 @@ def phosphosites(sequence, raw_vals=False, mode='old'):
             phosphosite_dict = {}
             if potential_S != []:
                 phosphosite_dict['S'] = potential_S
+            else:
+                phosphosite_dict['S'] = 'No S phosphorylation predicted'
             if potential_Y != []:
                 phosphosite_dict['Y'] = potential_Y
+            else:
+                phosphosite_dict['Y'] = 'No Y phosphorylation predicted'
             if potential_T != []:
                 phosphosite_dict['T'] = potential_T
-            if phosphosite_dict == {}:
-                phosphosite_dict['S'] = 'No S phosphorylation predicted'
-                phosphosite_dict['Y'] = 'No Y phosphorylation predicted'
+            else:
                 phosphosite_dict['T'] = 'No T phosphorylation predicted'
 
         return phosphosite_dict
@@ -344,18 +346,27 @@ def transcriptional_activation(sequence, mode='old'):
             end_seq = start_seq + len(seq)
             all_locs[seq] = [start_seq, end_seq]
     else:
-        all_locs = {'None': 'No predicted locations found for TAD.'}
+        all_locs = {'No TAD sequences': 'No predicted locations found for TAD.'}
 
     return all_locs
 
 
-def everything(sequence, mode='old'):
+def everything(sequence, mode='old', split_predictions = False, just_predictions=False):
     '''
     for when you want all the info in one sweet go.
+
     parameters
     ---------
     sequence : string
             amino acid sequence as a string
+
+    split_predictions : bool
+        whether to split the predictions further. Instead of phosphorylation
+        as a single key in the dict, S phosphorylation will be independent
+        as will others.
+
+    just_predictions : bool
+        whether to return just the predictions
 
     returns 
     -------
@@ -367,13 +378,92 @@ def everything(sequence, mode='old'):
     if mode not in ['old','new']:
         raise Exception("predictor must use either 'old' or 'new' as mode")
 
-    all_info = properties(sequence)
+    if just_predictions == False:
+        all_info = properties(sequence)
+    else:
+        all_info={}
 
     # now get the rest
-    all_info['predicted phosphosites'] = phosphosites(sequence, mode=mode)
-    all_info['predicted cellular localization'] = cellular_localization(sequence, mode=mode)
-    all_info['predicted transcriptional activation'] = transcriptional_activation(sequence, mode=mode)
-    all_info['fractions'] = Protein(sequence).fractions
-    all_info['sequence'] = sequence
+    if split_predictions == False:
+        all_info['predicted phosphosites'] = phosphosites(sequence, mode=mode)
+        all_info['predicted cellular localization'] = cellular_localization(sequence, mode=mode)
+        all_info['predicted transcriptional activation'] = transcriptional_activation(sequence, mode=mode)
+    else:
+        all_phosphosites = phosphosites(sequence, mode=mode)
+        all_info['S phosphorylation'] = all_phosphosites['S']
+        all_info['T phosphorylation'] = all_phosphosites['T']
+        all_info['Y phosphorylation'] = all_phosphosites['Y']
+        all_localization = cellular_localization(sequence, mode=mode)
+        all_info['NLS'] = all_localization['NLS']
+        all_info['NES'] = all_localization['NES']
+        all_info['mitochondrial'] = all_localization['mitochondria']
+        all_TADs = transcriptional_activation(sequence, mode=mode)
+        if all_TADs.keys() != 'No TAD sequences':
+            list_TADs=[]
+            start_num=1
+            for TAD in all_TADs.keys():
+                cur_seq = TAD
+                cur_loc = all_TADs[TAD]
+                list_TADs.append(f'{cur_seq} : {cur_loc}')
+                start_num+=1
+            all_info['predicted transcriptional activation'] = list_TADs
+        else:
+            all_info['predicted transcriptional activation'] = 'No predicted TADs.'
+
+    if just_predictions==False:
+        all_info['fractions'] = Protein(sequence).fractions
+        all_info['sequence'] = sequence
 
     return all_info
+
+
+def prediction_diffs(sequence_1, sequence_2):
+    '''
+    Use to show differences in predicted features
+    including phosphosites, localization, and TADs.
+
+    parameters
+    ----------
+    sequence_1 : string
+        The amino acid sequence as a string for the first sequence
+
+    sequence_2 : string
+        The amino acid sequence as a string for the second sequence
+
+    returns
+    -------
+    dict_diffs : dict
+        returns a dict of differences between sequence 1 and sequnce 2.
+    '''
+    # get all predictions
+    all_predictions_seq1 = everything(sequence_1, split_predictions=True, just_predictions=True)
+    all_predictions_seq2 = everything(sequence_2, split_predictions=True, just_predictions=True)
+
+    # make a dict to hold differences
+    dict_diffs = {}
+
+    # iterate through predictions
+    for prediction in list(all_predictions_seq1.keys()):
+        cur_prediction_1 = all_predictions_seq1[prediction]
+        cur_prediction_2 = all_predictions_seq2[prediction]
+        if prediction == 'predicted transcriptional activation':
+            TAD_diffs = []
+            for preds in cur_prediction_1:
+                if preds not in cur_prediction_2:
+                    TAD_diffs.append(f'Sequence 1 predicted TAD - {preds} not in sequence 2')
+            for preds in cur_prediction_2:
+                if preds not in cur_prediction_1:
+                    TAD_diffs.append(f'Sequence 2 predicted TAD - {preds} not in sequence 1')
+            if TAD_diffs == []:
+                dict_diffs[prediction] = 'No differences.'     
+            else:
+                dict_diffs[prediction] = TAD_diffs     
+        else:
+            if cur_prediction_1 != cur_prediction_2:
+                dict_diffs[prediction] = f'sequence 1: {cur_prediction_1}, sequence 2: {cur_prediction_2}'
+            else:
+                dict_diffs[prediction] = f'No differences.'
+    return dict_diffs
+
+
+
