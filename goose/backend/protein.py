@@ -151,7 +151,7 @@ class Protein:
 
         return properties_dict
 
-    def auto_name():
+    def auto_name(self):
         # generates an autoname based on the sequence properties
         random_name = '>'
         amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
