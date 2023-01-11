@@ -711,14 +711,21 @@ To generate sequence libraries by specifying properties, use the ``create.seq_pr
  
 For this function, you can specify the property as a single value, a list of two values, or a list with three values where GOOSE will make all possible values from the first number of the list to the second number of the list at an interval equal to the third value of the list.
 
-**Examples**
+**Example**
 
     create.seq_property_library(40, FCR=0.1, NCPR=[0, 0.1], hydropathy=[2, 4, 0.5])
 
-    {'sequence_FCR_0.1_NCPR_0_hydropathy_2.0': 'DQDPHQQMNGPNSQSHNQPPQTNNGPRHNGKQNQSNQPPG', 'sequence_FCR_0.1_NCPR_0_hydropathy_2.5': 'PHGSSQDSPRHPQAAHNNDAQQNPRHNHTSGSGPQQSSSP', 'sequence_FCR_0.1_NCPR_0_hydropathy_3.0': 'MSTHDPQANPTQTSKANGGPSHDGPPAPGPTQQSKPNNLS', 'sequence_FCR_0.1_NCPR_0_hydropathy_3.5': 'PSQNGPKAGSAGASPGNKAGTSPAQTESEVQQSPGSALNG', 'sequence_FCR_0.1_NCPR_0_hydropathy_4': 'PRSNLAAGAAGPTNLGACPDTQAGRTNAATSGGCSANPEH', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_2.0': 'HPNNSGNQRGQGNNNTQPHKGQTTRPQRGQHQHGQPNHSH', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_2.5': 'QMRTHPPPPQQNGHSTNSRNHNRPSGPPTSAPPRQTPPPQ', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_3.0': 'PSHHSPHSRSPGKHPQPPALAPTPPSTPPTPAPPPANKKQ', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_3.5': 'RRGSSPAPSSGWAPPSAMTGGTRGKAPGPGQNHHGGTTAS', 'sequence_FCR_0.1_NCPR_0.1_hydropathy_4': 'AAPRSSSMPIPGLPASVKPSGPPHSAQTGKGSLATHSTGR'}
+    {'>FCR_0.1_NCPR_0_hydropathy_2.0': 'QKPSQNKNHTPTGQGNSHPQDHPEQQQQQPPQQQSTQNTP', '>FCR_0.1_NCPR_0_hydropathy_2.5': 'NSNSTSENNKQNNGPHSPGTSQPPNFQPSAPQENSGNGKH', '>FCR_0.1_NCPR_0_hydropathy_3.0': 'SAPTQDPQSHYTQGGNEQTGGSPTGPPGWSHAKRSPSGQG', '>FCR_0.1_NCPR_0_hydropathy_3.5': 'NRSSGSCAPLNSAGGTTPGNKEVADPPPPGSTGSWGHQTH', '>FCR_0.1_NCPR_0_hydropathy_4': 'PSTHSSAGPSDTSASSSARSVPSSDSAVKSSCGSGASTTS', '>FCR_0.1_NCPR_0.1_hydropathy_2.0': 'QPPSPHQPLSHHSQQHNGNTKKQKSHQPNKNNSHPNNHNQ', '>FCR_0.1_NCPR_0.1_hydropathy_2.5': 'SGHSQGQNTHTKQGRQRGHGHVSPNQQHSSTPQHMQSPKT', '>FCR_0.1_NCPR_0.1_hydropathy_3.0': 'TSPSNHPQKPGPTPAGMQTGGTPGKTKHPHHPGSKLQQYT', '>FCR_0.1_NCPR_0.1_hydropathy_3.5': 'SAMLNASAGNPSGGQQRNSANLGPSRTTQKTSAQARSPTG', '>FCR_0.1_NCPR_0.1_hydropathy_4': 'PAPKPGAKVVSTSALQRVAKSSPPACSPGTHPGSSPTTSS'}
 
 In the example above, the first value in the function is the length. This value must be a singlue integer value and is **required**. The second value, ``FCR`` is specified as a single value, so all sequences generated will have that value. The third value ``NCPR`` is specified as a list, so GOOSE made a set of sequences where NCPR was equal to the first value in the list and then a set where NCPR was equal to the second value in the list. Finally, ``hydropathy`` was set equal to a list with 3 values. This means GOOSE was told to generate sequences with a range of the first value of the list ``2``, to the second value in the list, ``4``, at an interval equal to the third value of the list ``0.5``. This resulted in the creation of sequences with values 2.0, 2.5, 3.0, 3.5, and 4.0.
 **If the third value, which is the interval value, is cannot be equally used between the range of sequences, GOOSE will just use the maximum value as the last value.** For example, hydropathy = [2, 4, 1.1] would result in hydropathy values of 2, 3.1, and 4. In this example ``kappa`` was not specified, so GOOSE had no constraints on kappa values.
+In addition, you can add a random name to the end of each sequence name by setting ``random_name=True``, which allows you to avoid problems that Jeff has.
+
+**Example**
+
+    create.seq_property_library(40, FCR=0.1, NCPR=[0, 0.1], hydropathy=[2, 4, 0.5], random_name=True)
+
+    {'>FCR_0.1_NCPR_0_hydropathy_2.0_F0K7D2N5N6': 'TPNHTQPHKNHDNNNPSHNHTGNNPTNPQEHKGSQTNQPT', '>FCR_0.1_NCPR_0_hydropathy_2.5_G5R2A2L8F8': 'THQNPEDTHTTHPSMSRSNNPQLQNNGQRPAPPSSPHGHN', '>FCR_0.1_NCPR_0_hydropathy_3.0_E8V4W5C2N2': 'GPGSEHPHAPGDSSTGNNTSGPTKPSTGGALSQNRQPQYP', '>FCR_0.1_NCPR_0_hydropathy_3.5_C2C3D1F5P4': 'PPTQQPNGQSMSGGARHTTAAAAEGSARMAELSQNHSNGG', '>FCR_0.1_NCPR_0_hydropathy_4_I3S8I0G9W4': 'APTKGVAPETRSTSPAASSGAGGGGSSPASSMSPSSGDGS', '>FCR_0.1_NCPR_0.1_hydropathy_2.0_N8E1Y2R5D0': 'PPPSTGHQKQNYSQNHHNNPPQHQRWHRNGPPRPNSHQSG', '>FCR_0.1_NCPR_0.1_hydropathy_2.5_H3H7I2S0W7': 'NSGGSKRSSSPGPTPNQPQNGRNMPMPQNRQNHTNFQNTP', '>FCR_0.1_NCPR_0.1_hydropathy_3.0_I2K0M6E2T0': 'TRSHQQPQMHGMPSTSPNGCQTLNSPSSMRKGPPPQSGKN', '>FCR_0.1_NCPR_0.1_hydropathy_3.5_H3Q4E1L7W8': 'QTSSPQTMGRSQTTTGSASMQSSGMASTSRPPRFSSRSTG', '>FCR_0.1_NCPR_0.1_hydropathy_4_A4D7R8W6V7': 'RTSPTSVKPPTSACKTAAGSTPMTRSPSSSTLAVNGPPAP'}
 
 ## How to cite GOOSE
 

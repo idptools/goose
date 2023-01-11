@@ -18,6 +18,7 @@ from goose.backend.goose_tools import check_props_parameters as _check_props_par
 from goose.backend.goose_tools import check_and_correct_fracs_kwargs as _check_and_correct_fracs_kwargs
 from goose.backend.goose_tools import check_fracs_parameters as _check_fracs_parameters
 from goose.backend.goose_tools import length_check as _length_check
+from goose.backend.goose_tools import gen_random_name as _gen_random_name
 
 # variant generation stuff
 from goose.backend.variant_generation import gen_kappa_variant as _gen_kappa_variant
@@ -604,7 +605,7 @@ def beta_sheet(length):
 
 def seq_property_library(length,
     FCR=None, NCPR=None, hydropathy=None, kappa=None, 
-    cutoff=parameters.DISORDER_THRESHOLD, silent_failed_seqs=False, beta_mode=False):
+    cutoff=parameters.DISORDER_THRESHOLD, silent_failed_seqs=False, beta_mode=False, random_name=False):
     '''
     Function that returns a list of dictioanries where each
     dictionary has the values specified for a library of sequences.
@@ -684,6 +685,9 @@ def seq_property_library(length,
     beta_mode : bool
         For testing. Set to True to get some printouts as seqs are being generated.
 
+    random_name : bool
+        whether to use a randomly generated string as the protein name 
+
     returns
     -------
     sequence_list : list of dictionaries
@@ -703,15 +707,29 @@ def seq_property_library(length,
         # make the sequence
         seq = sequence(length, **seq_specified)
         # make a sequence name
-        seq_name='sequence'
+        seq_name='>'
         name_values = ['FCR', 'NCPR', 'kappa', 'hydropathy']
         for vals in range(0,len(name_values)):
             param_val = name_values[vals]
             curval = seq_specified[param_val]
             if curval != None:
-                seq_name+=f'_{param_val}_{curval}'
+                if seq_name=='>':
+                    seq_name+=f'{param_val}_{round(curval, 4)}'
+                else:
+                    seq_name+=f'_{param_val}_{round(curval, 4)}'
+        # if user wants a randodm name, make it happen.
+        if random_name==True:
+            seq_name+=f'_{_gen_random_name()[1:]}'
+
         # add to the dict
         seq_dict[seq_name]=seq
     # return the dict
     return seq_dict
+
+
+
+
+
+
+
 
