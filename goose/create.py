@@ -250,6 +250,8 @@ def constant_class_var(sequence,
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
 
+    
+
     # check length
     _length_check(sequence)
 

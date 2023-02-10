@@ -374,6 +374,106 @@ def residue_optimize_hydropathy_within_class(sequence, objective_hydropathy, tar
     return build_sequence  
 
 
+
+def residue_optimize_hydropathy_within_class(sequence, objective_hydropathy, target_residue_index):
+    '''
+    function to get hydropathy value closer to objective hydropathy
+    while keeping the residues within the sequence within the same
+    class
+
+    This function only changes one residue at a time, which corresponds to 'target_residue_index'!
+
+    parameters
+    ----------
+    sequence : string 
+        amino acid sequence as a string
+
+    objective_hydropathy : Float
+        objective hydropathy as a float value. Between 0 and 9.
+
+    target_residue_index : int
+        the index number of the target residue
+
+    returns
+    -------
+    build_sequence : string
+        returns the optimized sequence as a string
+
+    '''
+
+    # define which residues in each class
+    aromatics = ['F', 'W', 'Y']
+    polar = ['Q', 'N', 'S', 'T']
+    hydrophobics = ['I', 'V', 'L', 'A', 'M']
+    positive = ['K', 'R']
+
+    # make an aa class dict
+    aa_class_dict = {'aromatic' : ['F', 'W', 'Y'], 'polar' : ['Q', 'N', 'S', 'T'], 'positive' : ['K', 'R'], 'negative' : ['D', 'E'], 'hydrophobic' : ['I', 'V', 'L', 'A', 'M']}
+
+    #residues that can't be changed or are useless to change
+    dont_change = ['D', 'E', 'G', 'P', 'H', 'C']
+
+    # empty string to hold built sequence
+    build_sequence = ''
+
+    # get starting hydropathy
+    starting_hydro = Protein(sequence).hydropathy
+
+    # decide whether to increase or decrease hydropathy
+    if starting_hydro > objective_hydropathy:
+        change_hydro = 'decrease_hydropathy'
+    else:
+        change_hydro = 'increase_hydropathy'
+
+    # figure out the ideal difference between the residues to change.
+    total_hydro = starting_hydro * len(sequence)
+    total_objective_hydro = objective_hydropathy * len(sequence)
+    ideal_residue_difference = abs(total_hydro - total_objective_hydro)
+    
+    # iterate through sequence
+    for cur_aa_num in range(0, len(sequence)):
+        cur_aa = sequence[cur_aa_num]
+        potential_res=[]
+        if cur_aa_num != target_residue_index:
+            best_residue = cur_aa
+            potential_res.append(best_residue)
+        else:
+            if cur_aa in dont_change:
+                best_residue = cur_aa
+                potential_res.append(best_residue)
+            else:
+                amino_acid_class = AminoAcid.return_AA_class(cur_aa)
+                cur_AA_hydro = AminoAcid.hydro(cur_aa)
+                if change_hydro == 'decrease_hydropathy':
+
+                    amino_acid_class = AminoAcid.return_AA_class(cur_aa)
+                    best_hydropathy = cur_AA_hydro
+                    best_residue = cur_aa
+                    best_difference = abs(ideal_residue_difference - cur_AA_hydro)
+
+                    for possible_residues in aa_class_dict[amino_acid_class]:
+                        cur_poss_hydro = AminoAcid.hydro(possible_residues)
+                        if cur_poss_hydro < cur_AA_hydro:
+                            potential_res.append(possible_residues)
+                else:
+                    amino_acid_class = AminoAcid.return_AA_class(cur_aa)
+                    best_hydropathy = cur_AA_hydro
+                    best_residue = cur_aa
+                    best_difference = abs(ideal_residue_difference - cur_AA_hydro)
+                    for possible_residues in aa_class_dict[amino_acid_class]:
+                        cur_poss_hydro = AminoAcid.hydro(possible_residues)
+                        if cur_poss_hydro > cur_AA_hydro:
+                            potential_res.append(possible_residues)
+        if potential_res == []:
+            potential_res.append(cur_aa)
+        if len(potential_res) > 1:
+            build_sequence += potential_res[random.randint(0, len(potential_res)-1)]
+        else:
+            build_sequence += potential_res[0]
+    # return the sequence
+    return build_sequence  
+
+
 def optimize_hydropathy_within_class(sequence, objective_hydropathy, allowed_hydro_error = parameters.HYDRO_ERROR):
     '''
     This function will optimie the hydropathy of a sequence such that it is
@@ -542,12 +642,25 @@ def create_constant_class_variant(sequence):
     build_sequence = ''
     for amino_acid in sequence:
         cur_class = AminoAcid.return_AA_class(amino_acid)
-        potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=[], return_all = True)
+        if len(build_sequence)>1:
+            if build_sequence.count('I')/len(build_sequence) > 0.1:
+                potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=['I'], return_all = True)
+                exclude_I=True
+            else:
+                potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=[], return_all = True)
+                exclude_I=False
+        else:
+            potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=[], return_all = True)
+            exclude_I=False
         if len(potential_residues) == 1:
             build_sequence += potential_residues[0]
         else:
             if amino_acid in potential_residues:
-                potential_residues.remove(amino_acid)
+                if amino_acid == 'I':
+                    if exclude_I == False:
+                        potential_residues.remove(amino_acid)
+                else:
+                    potential_residues.remove(amino_acid)
             if len(potential_residues) == 1:
                 build_sequence += potential_residues[0]
             else:

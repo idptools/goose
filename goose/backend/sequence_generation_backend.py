@@ -191,19 +191,23 @@ def get_optimal_residue(four_amino_acids, exclude_residues = [], cutoff_disorder
         while candidate_amino_acids == []:
             # figure out what index value corresponds to the highest current value
             current_index_value = potential_residue_numbers[amino_acid_index]
-            
             # figure out where the residue is in the original unsorted list
             current_residue_position = potential_AA_vals.index(current_index_value)
             
             # get the corresponding amino acid. Amino acids always in order
             # for list ordered_amino_acids, so just call index as is
-            corresponding_amino_acid = ordered_amino_acids[current_residue_position]            
+            corresponding_amino_acid = ordered_amino_acids[current_residue_position]        
             # if that amino acid is not to be excluded...
             if corresponding_amino_acid not in exclude_residues:
                 # add it to the candidate list
                 candidate_amino_acids.append(corresponding_amino_acid)
             # go to next amino acid index
             amino_acid_index += 1
+            if amino_acid_index==20:
+                for amino_acid in ordered_amino_acids:
+                    if amino_acid not in exclude_residues:
+                        candidate_amino_acids.append(amino_acid)
+
 
     # choose a random amino acid from the list to return
     if return_all == False:
