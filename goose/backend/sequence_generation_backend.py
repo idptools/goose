@@ -2152,6 +2152,10 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
 
 
 def test_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None):
+    """
+    TO DO - add docstring
+
+    """
     final_sequence = create_seq_by_props(length, FCR=FCR, NCPR=NCPR, hydropathy=hydropathy)
 
     tmp = Protein(final_sequence)
@@ -2170,7 +2174,7 @@ def test_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None):
 #/-/-/-/-/-/-/-/-/-/-/- Amino acid Fractions /-/-/-/-/-/-/-/-/-/-/-/-/-
 #/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-
 
-def create_seq_by_fracs(length, **kwargs):
+def create_seq_by_fracs(length, max_aa_fractions={}, **kwargs):
     """
     This will return a sequence with the specified fraction of
     amino acids. To use simply specify the amino acid followed by
@@ -2178,18 +2182,27 @@ def create_seq_by_fracs(length, **kwargs):
     
     Parameters
     ------------
-    length : Int
+    length : int
         length of desired disordered sequence
 
-    **kargs : Variable, float
-        The desired amino acid as a variable (no need for quotations).     
-        The fraction of amino acids as a float followed immediately by
-        
+    max_aa_fractions : dict 
+        Dictionary which, if provided, allows the user to over-ride the 
+        fraction of a sequence which can be made up of any given amino
+        acid. The passed dictionary should contain key/value pairs, where
+        keys are one of the twenty standard amino acids and values is a
+        float between 0 and 1. If amino acids are missing then the default
+        thresholds set by GOOSE are used.
+
+    <each of the 20 amino acids> : float
+        Specify the fraction of the sequence that should be made up of one or more
+        of the 20 natural amino acids (e.g. A=0.2, Y=0.05) etc.
+
 
     Returns
     -----------
-    String
+    string
        A string of the amino acid sequence
+
     """
 
     # dict holding the max fractions that each amino acid can be individually specified as
@@ -2215,6 +2228,11 @@ def create_seq_by_fracs(length, **kwargs):
     "Y": parameters.MAX_FRACTION_Y,
     "V": parameters.MAX_FRACTION_V
     }
+
+    # if we passed an over-ride dictionary for the max amino acid fraction...
+    for aa in max_aa_fractions:
+        max_fraction[aa] = max_aa_fractions[aa]
+            
 
     # before we do any actual design we can extract the unchanging sequence composition
     # features. The sequence_list we build here is essentially the compositional

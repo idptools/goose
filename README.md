@@ -107,65 +107,58 @@ Once *create* has been imported, you can start making seqeunces and sequence var
 
 ## Generating sequences with specified sequence properties
 
-The ``create.sequence()`` function lets you create sequences predicted to be disordered with various specified properties. With this function you must specify length (first arguement) and can also specify: 1. hydropathy, 2. fraction of charged residues (FCR), 3. net charge per residue (NCPR), and 4. kappa (charge asymmetry paramter where higher values mean greater charge asymmetry). You can also specify sigma, but if you specify sigma **you cannot specify other properties**.
+The ``create.sequence()`` function lets you create sequences predicted to be disordered with various specified properties. 
 
-Here is some more info on the various arguemnts - 
+The only required argument is the length, which must be between 10 and 10,000. In addition, you can also specify several design parameters.
 
-``FCR`` - The fraction of charged residues in the sequence.
-    You can also input ``fcr`` or ``fraction`` when specifying this argument
-        Values must be between 0 and 1.
+1. `hydropathy`: Hydropathy, which must be between 0 and 6.1.
 
-``NCPR`` - The net charge per residue of the sequence.
-    You can also input ``ncpr`` or ``net_charge`` when specifying this argument
-        Values must be between -1 and 1
+2. `FCR`: The fraction of charged residues, which must be between 0 and 1
 
-``hydropathy`` - The mean hydropathy of the sequence.
-    You can also input ``mean_hydro``, ``Hydro``, or ``hydro`` when specifying this argument. Values must be between 0.0 and 6.1.
+3. `NCPR`: The net charge per residue (`NCPR`), which must be between -1 and +1
 
-``kappa`` - The kappa value of the sequence. 1 is maximum charge asymmetry, 0 is minimal asymmetry. The value must be between 0 and 1. The function can have a hard time hitting specific values if there are few charged residues in your sequence, so you might have to adjust this slightly when making a sequence.
+4. `kappA`: The kappa value, a charge asymmetry parameter where higher values mean greater charge asymmetry. This must be between 0 and 1.
 
-``sigma`` - is another charge asymmetry paramter based on the FCR and NCPR of the sequence. If sigma is specified, no other properties can be simultaneously specified. ``sigma`` values must be between 0 and 1. 
+5. `sigma`: An alternative charge asymmetry parameter, although if you specify sigma **you cannot specify other properties**, between 0 and 1.
 
-``cutoff`` - the cutoff value for disorder. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you are having difficulty making your sequence, you might want to try lowering the cutoff value. 
+In addition to these parameters, you can specify a few additional parameters:
 
+1. `cutoff`:  The disorder cutoff used defines a threshold GOOSE uses to selected/reject sequences. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you have difficulty making your sequence, you might want to try lowering the cutoff value.
 
-Finally, I added in a 'spell check' function, so if you accidentally spell something wrong like *hydropath* instead of *hydropathy*, it'll still work for ya! 
+2. `attempts`: The number of attempts defines how many times GOOSE will try to generate a desired sequence. This is relevant because certain parameter combinations of values are more challenging than others, and GOOSE implements a stochastic design algorithm such that different sequences are generated every time. For harder sequence compositions you may need to increase this from the default value of 100. 
 
-**Importantly, you do not need to specify all of these sequence properties simultaneously.** For example, if you specify FCR and hydropathy, GOOSE will return sequences that have varying NCPR values while making sure that the specified hydropathy and FCR values are what you input. In this way, you can generate many sequences that have the fixed properties that you want to stay fixed while other properties can vary. Alternatively, if you need to specify values for all properties, you can do that too!
+**Importantly, you do not need to specify all of these sequence properties simultaneously.** For example, if you specify FCR and hydropathy, GOOSE will return sequences that have varying NCPR values while making sure that the specified hydropathy and FCR values are what you input. In this way, you can generate many sequences that have the fixed properties that you want to stay fixed, while other properties can vary. Alternatively, if you need to specify values for all properties, you can do that too!
 
-**Examples**
+#### Examples
 
-Just specifying sequence length -
+Just specifying sequence length:
 
     create.sequence(40)
     'GDHNKAGQPPRKCSDQGGAGAPNPDCDPDTAPMDGDRMTN'
 
-**Note** the length must between 10 and 10,000!
 
-**Specifying additional properties -**
-
-**Hydropathy**
+Specifying length and hydropathy:
 
     create.sequence(100, hydro = 3)
     'MTSYGRDGSPETGEGSTGTNSSSSRSMMGSTHNWQQYNGGTTSGTSSTGDSHRTHGDHSAGETTSGGDSEGTDETSTTTNGRGSSSGHDGSTGQDTNTRR'
 
 Hydropathy values can be between 0.0 and 6.1. **Note**: the higher the hydropathy *over 5*, the longer it will take GOOSE to generate the sequence. Sequences that are very hydrophobic and disordered can be tricky to make. **Note**: whenever specifying hydropathy values, GOOSE will return a sequence within 0.05 of the specified value! This amount of error helps keep GOOSE fast (and a difference of 0.05 is typically negligible).
 
-**fraction of charged residues (FCR)**
+**Specifying length and fraction of charged residues (FCR):**
 
     create.sequence(40, FCR = 0.3)
     'GDRPSEHGQGPRKEDGMDQDDVSTEGHEWSNNPCNQSNNP'
 
 FCR values can be between 0 and 1
 
-**net charge per residue (NCPR)**
+**Specifying length and the net charge per residue (NCPR):**
 
     create.sequence(40, NCPR = -0.2)
     'MQKNDRAPDHKDREKDGPIKERPEECPDDEQSDDEECPSH'
 
 NCPR values can be between -1 and 1.
 
-**Sigma**
+**Specifying length and sigma:**
 
     create.sequence(40, sigma = 0.3)
     'EKDKMEETHDDEGMQQDNNTETDEQPDNYESNDDEHATEG'
@@ -177,7 +170,7 @@ sigma values can be between 0 and 1.
 
 GOOSE lets you combine different properties simultaneously. Importantly, any value you do not specify will just be random.
 
-**Note**: Simultaneously specifying high hyrdropathy values and a high FCR is challenging to make and may be slow! In addition, simply because the hydropathy value of charged resides are very low (K=0.6, R = 0, D and E = 1), it is impossible to make sequences with too high of a FCR and too high of a hydropathy value. 
+**Note**: Simultaneously specifying high hydropathy values and a high FCR is challenging and may be slow! In addition, because the hydropathy values of charged residues are very low (K=0.6, R = 0, D and E = 1), it is impossible to make sequences with too high of an FCR and too high of a hydropathy value. 
 
 **Examples**
 
@@ -188,14 +181,14 @@ GOOSE lets you combine different properties simultaneously. Importantly, any val
 
 You cannot have values for NCPR where the absolute value of NCPR is greater than the specified FCR value. For example, NCPR = 0.4, FCR = 0.2 will not work (you can't get a net charge of 0.4 with only 0.2 fraction of charged residues!)
 
-**Important note on combining FCR and NCPR!** Whenever NCPR and FCR are combined, if the combinations of the length, NCPR, and FCR is not mathematically possible, GOOSE will get as close as it can. In addition, GOOSE will prioritize NCPR over FCR and may have to slightly change the FCR to keep the NCPR accurate. This was necessary in that one of the 2 had to be prioritized, and it made the most sense to prioritize net charge.
+**Important note on combining FCR and NCPR!** Whenever NCPR and FCR are combined, if the combinations of the length, NCPR, and FCR are not mathematically possible, GOOSE will get as close as it can. In addition, GOOSE  prioritizes NCPR over FCR, and the resulting sequence may deviate in terms of FCR as a result.
 
 **FCR & Hydropathy**
 
     create.sequence(100, FCR = 0.3, hydro = 3.2)
     'KVDSGTTSCSGERESDSGDLKSSKEGSSGSGSSSKSSKSKEATGSSTDTTAAAGGKGGGGGGDGGKGDGRGKGGGGGGEGRDGGGGGGEGGRGGGGRKRD'
 
-When specifying hydropathy with FCR or NCPR, the max possible hydropathy value is 5.8. In addition, after extensive testing I found that sequences with high hydropathy values and high FCR values will never be predicted to be disordered by metapredict. Therefore, I restricted the ability to input these property combinations (no sense being stuck waiting for a sequence to be generated that will never actually end up generated). In general, the maximum possible FCR value will equal (hydro x -0.2289)+1.2756.
+When specifying hydropathy with FCR or NCPR, the max possible hydropathy value is 5.8. In addition, after extensive testing, I found that sequences with high hydropathy values and high FCR values will never be predicted to be disordered by metapredict. Therefore, I restricted the ability to input these property combinations (no sense being stuck waiting for a sequence to be generated that will never actually end up generated). In general, the maximum possible FCR value will equal (hydro x -0.2289)+1.2756.
 
 **NCPR & Hydropathy**
 
@@ -221,56 +214,71 @@ This function has the same limitations as FCR & hydropathy or NCPR & hydropathy.
 
 ### Generating sequences by specifying fractions of amino acids in Python
 
-The ``create.seq_fractions()`` function lets you create sequences predicted to be disordered with specified fractions of various amino acids. With this function, you can specify multiple amino acids simultaneously, and each fraction should be specified using a decimal value (for example, if you want one tenth of the amino acids to be alanine use A=0.1).
+The ``create.seq_fractions()`` function lets you create sequences predicted to be disordered with specified fractions of various amino acids. With this function, you can specify multiple amino acids simultaneously, and each fraction should be specified using a decimal value (for example, if you want one-tenth of the amino acids to be alanine use `A=0.1`).
 
-For each amino acid, possible maximum values are as follows - 
+For each amino acid, the default maximum values are as follows - 
 
-"A" - 0 : 0.9, 
-"R" - 0 : 1.0, 
-"N" - 0 : 1.0, 
-"D" - 0 : 1.0, 
-"C" - 0 : 0.16, 
-"Q" - 0 : 0.72, 
-"E" - 0 : 1.0, 
-"G" - 0 : 1.0, 
-"H" - 0 : 1.0, 
-"I" - 0 : 0.2, 
-"L" - 0 : 0.26, 
-"K" - 0 : 1.0, 
-"M" - 0 : 0.26, 
-"F" - 0 : 0.18, 
-"P" - 0 : 0.94, 
-"S" - 0 : 0.88, 
-"T" - 0 : 0.76, 
-"W" - 0 : 0.22, 
-"Y" - 0 : 0.22, 
-"V" - 0 : 0.3
+	"A" - 0 : 0.9, 
+	"R" - 0 : 1.0, 
+	"N" - 0 : 1.0, 
+	"D" - 0 : 1.0, 
+	"C" - 0 : 0.16, 
+	"Q" - 0 : 0.72, 
+	"E" - 0 : 1.0, 
+	"G" - 0 : 1.0, 
+	"H" - 0 : 1.0, 
+	"I" - 0 : 0.2, 
+	"L" - 0 : 0.26, 
+	"K" - 0 : 1.0, 
+	"M" - 0 : 0.26, 
+	"F" - 0 : 0.18, 
+	"P" - 0 : 0.94, 
+	"S" - 0 : 0.88, 
+	"T" - 0 : 0.76, 
+	"W" - 0 : 0.22, 
+	"Y" - 0 : 0.22, 
+	"V" - 0 : 0.3
 
-``cutoff`` - In addition, like with the creating sequences with properties functionality, you can also specify the disorder cutoff threshold by specifying ``cutoff``. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you are having difficulty making your sequence, you might want to try lowering the cutoff value. 
+Note that if you pass in requested fractions those fractions must add up to equal or less than 1.
 
-**Examples**
+In addition to specifying the specific amino acid fractions, other parameters can be passed to the `create.seq_fractions()` function:
 
-**Just specifying a single amino acid fraction -**
+1. `cutoff`:  The disorder cutoff used defines a threshold GOOSE uses to selected/reject sequences. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.6. If you have difficulty making your sequence, you might want to try lowering the cutoff value.
+
+2. `attempts`: The number of attempts defines how many times GOOSE will try to generate a desired sequence. This is relevant because certain parameter combinations of values are more challenging than others, and GOOSE implements a stochastic design algorithm such that different sequences are generated every time. For harder sequence compositions, you may need to increase this from the default value of 100. 
+
+3. `max_aa_fractions`: If you wish to generate sequences with extreme compositions it may be necessary to over-ride the default max fractional values. This can be achieved by passing a max_aa_fractions dictionary, which should specify key-value pairs for amino acid-max fraction information. 
+
+
+#### Examples
+
+**Just specifying a single amino acid fraction:**
 
     create.seq_fractions(100, Q=0.3)
     'QEQNGVDQQETTPRQDYPGNQQPNQQAEGQQMQSTKMHDQHDSVNEDQEQNQNPWGHQPHMKGESNSSAREAQSEDQQNQAQNQQQNHDSTQQQDGQMDQ'
 
 **Note**: Some fractions of amino acids are simply not possible. For example, GOOSE cannot make a sequence with W (tryptophan) greater than 0.2!
 
-**Specifying multiple amino acids -**
+**Specifying multiple amino acids:**
 
     create.seq_fractions(100, Q=0.3, S=0.3, E=0.1)
     'QEQQSQKASQSQVESQDSSESSAPGSSQMHQQQSQSQEGMEQHQSSVGNSSSYPQSEQSEQQRQQSSQDQQQQSSSQTSEENSQSRQHDMSDTEMSGSQR'
 
 **Note** - 
-Some combinations of amino acids are simply not possible to make that are predicted to be disorded. For example, while you can have up to 0.2 for W, if you have 0.18 for W and 0.16 for Y (both below their maximums), the total number of aromatic residues makes it unlikely that the sequence will be predicted to be disordered.
+Some combinations of amino acids are simply not possible to make that are predicted to be disordered using the default settings. For example, while you can have up to 0.2 for W, if you have 0.18 for W and 0.16 for Y (both below their maximums), the total number of aromatic residues makes it unlikely that the sequence will be predicted to be disordered.
 
 
-**Specifying none of a specific amino acids -**
+**Specifying none of a specific amino acids:**
 If you want to exclude an amino acid, you can set it equal to 0.
 
     create.seq_fractions(50, A=0)
     'NKERPTGSWDEPPFDEGSSGMTNEDMGNKPYPTTDMQPEKWPQNDQQGST'
+    
+**Overriding default max fractions:**  
+
+	create.seq_fractions(100, Y=0.5, max_aa_fractions={'Y':1}) 
+	'SSYYYYYSYSSYYSYSSGHYYSYSSYYYSSSYYSSYGGTYGYYSYSYGYYSSYYYSYSSNYYYYYYYYSSYGNSGYGGYYSYYSSSQHHYSSYYYSYYSY'
+ 
 
  
 

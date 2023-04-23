@@ -185,12 +185,16 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
 
     Parameters
     ----------
-    length : Int
+    length : int
         The length of the wanted protein sequence as an integer value
 
-    attempts : Int
+    <each of the 20 amino acids> : float
+        Specify the fraction of the sequence that should be made up of one or more
+        of the 20 natural amino acids (e.g. A=0.2, Y=0.05) etc.
+
+    attempts : int
         The number of times to attempt to build a sequence before throwing
-        in the towel
+        in the towel. 
 
     disorder_threshold : Float
         The value for a residue to be considered disordered.
@@ -202,10 +206,13 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
         the disorder theshold provided it is minimal. See check_disorder for more
         details.
 
-    **kwargs : Variable, float
-        The desired amino acid as a variable (no need for quotations).     
-        The fraction of amino acids as a float followed immediately by
-
+    max_aa_fractions : dict 
+        Dictionary which, if provided, allows the user to over-ride the 
+        fraction of a sequence which can be made up of any given amino
+        acid. The passed dictionary should contain key/value pairs, where
+        keys are one of the twenty standard amino acids and values is a
+        float between 0 and 1. If amino acids are missing then the default
+        thresholds set by GOOSE are used.
 
     Returns
     -------
@@ -214,9 +221,15 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
 
 
     '''
+
+    ## NOTE FOR FUTURE CODE CLEANUP
+    ## These should have already been defined in the create.seq_fractions
+    ## functions, so suggest we remove these initializations as they're
+    ## redundant. Leaving for now. (~ash 2023-04-23)
+    
     # check for necessary kwargs
     if 'attempts' not in list(kwargs.keys()):
-        attempts = 20
+        attempts = parameters.DEFAULT_ATTEMPTS
     else:
         attempts = kwargs['attempts']
 
@@ -246,7 +259,7 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
 
         # try to build the sequence
         try:
-            attempted_seq = create_seq_by_fracs(length, **input_kwargs)
+            attempted_seq = create_seq_by_fracs(length, max_aa_fractions=kwargs['max_aa_fractions'], **input_kwargs)
 
         # if attempt to build the sequence failed, continue back at the 
         # beginning of the loop

@@ -18,6 +18,45 @@ from goose.backend import parameters
 from goose.backend.sequence_generation_backend import calculate_max_charge
 
 
+def check_valid_kwargs(kwargs_dict, valid_keywords):
+    """
+    Function which takes a kwargs dict and a list of allowed keywords and
+    ensures no non-allowed keywords have been passed. This should be run as
+    the first function whereever kwargs** is invoked to ensure no silent errors
+    are introduced (where invalid keywords are passed but then ignored).
+    
+    Parameters
+    ------------------
+    kwargs_dict : dict
+        Dictionary of keyword arguments which maps keywords (keys) to passed
+        values (values).
+
+    valid_keywords : list
+        A list of keywords this function is allowed to accept. This does not
+        throw an error if a keyword is missing, but does throw an error if 
+        an unexpected keyword is passed.
+
+    Returns
+    -----------------
+    None
+        This function does not return anything nor alter the state of any
+        variables.
+    
+
+    Raises
+    -----------------
+    GooseInputError
+        If an invalid keyword is identified, this function raises a 
+        GooseInputError exception.
+
+    """
+
+    
+    for kw in kwargs_dict:
+        if kw not in valid_keywords:
+            raise GooseInputError(f'Error: Invalid keyword [{kw}] was passed')
+    
+
 def length_check(input_val):
     '''
     function to make sure length parameters don't go out of bounds
@@ -186,10 +225,11 @@ def check_props_parameters(**kwargs):
             error_message = f'The sigma value {curval} is less than the allowed value of {parameters.MINIMUM_SIGMA}'
             raise GooseInputError(error_message)
 
-    # make sure if sigma is specified, only sigma is specified
-    if kwargs['sigma'] != None:
-        # make list of other kwargs that can't be addiitonally specified.
+        ## Also, make sure if sigma is specified, only sigma is specified
+
+        # make list of other kwargs that can't be additionally specified.
         forbidden_sigma_kwargs = ['hydropathy', 'FCR', 'NCPR']
+        
         # iterate through forbiddine kwargs
         for forbidden_kwarg in forbidden_sigma_kwargs:
             if kwargs[forbidden_kwarg] != None:
@@ -207,10 +247,7 @@ def check_props_parameters(**kwargs):
     # check kappa
     if kwargs['kappa'] != None:
         val_kappa = kwargs['kappa']
-        if kwargs['kappa'] > 1:
-            error_message = f'The kappa value of {val_kappa} is not possible. Values are between 0 and 1'
-            raise GooseInputError(error_message)
-        if kwargs['kappa'] < 0:
+        if kwargs['kappa'] > 1 or kwargs['kappa'] < 0:
             error_message = f'The kappa value of {val_kappa} is not possible. Values are between 0 and 1'
             raise GooseInputError(error_message)        
 
@@ -270,6 +307,16 @@ def check_and_correct_props_kwargs(**kwargs):
     # from the kwargs dict.
     kwargs = remove_None(**kwargs)
 
+
+    ##
+    ## Note to self/Ryan - I think everything commented out below is redundant and can be removed, because I STRONGLY
+    ## suggest we make it required that ONE single keyword is allowed rather than allowing the user to pass ambigious
+    ## keywords that mean the same thing. Sanity checking to make sure no invalid keywords are passed is now by the
+    ## check valid keywords function, so we no longer need to do this spell-check-like functionality because we
+    ## ensure the user must pass a single defined keyword.
+    ## 
+
+    """
     # list of possible FCR inputs
     possible_FCR = ['FCR', 'fcr', 'fCR', 'FcR', 'FCr', 'fcR', 'Fcr', 'fCr', 'fraction', 'fractoin', 'Fraction', 'Fractoin']
 
@@ -310,7 +357,7 @@ def check_and_correct_props_kwargs(**kwargs):
     # make list of various essential kwargs
     essential_kwargs = ['FCR', 'NCPR', 'hydropathy', 'sigma', 'cutoff', 'kappa']
 
-    # make a dict of essential kwarg values
+    # make a dict of essential kwarg values with default values
     essential_kwarg_vals = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'sigma': None, 'kappa': None}
 
     # make sure essential_kwargs are in the final return kwarg
@@ -318,10 +365,21 @@ def check_and_correct_props_kwargs(**kwargs):
         if individual_kwarg not in return_kwarg.keys():
             return_kwarg[individual_kwarg] = essential_kwarg_vals[individual_kwarg]
 
+    ##
+    ## <> <><> <><> <><> <><> <><> <><> <><> <><> <>
+    ##
+
+    """
+    
+    # make sure the six essential keywords have been initialized to their default values if they were not provided
+    essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'sigma': None, 'kappa': None, 'attempts':parameters.DEFAULT_ATTEMPTS}
+    
+    for kw in essential_kwargs:
+        if kw not in kwargs:
+            kwargs[kw] = essential_kwargs[kw]
+    
     # return the corrected dict
-    return return_kwarg
-
-
+    return kwargs
 
 
 def check_and_correct_fracs_kwargs(**kwargs):
@@ -344,6 +402,7 @@ def check_and_correct_fracs_kwargs(**kwargs):
     # from the kwargs dict.
     kwargs = remove_None(**kwargs)
 
+    """
     # amino acid values
     amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
     lower_amino_acids = ['a', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'v', 'w', 'y']
@@ -362,25 +421,27 @@ def check_and_correct_fracs_kwargs(**kwargs):
                     correct_kwarg_key = individual_kwarg.upper()
                     return_kwarg[correct_kwarg_key] = kwargs[individual_kwarg]
 
-    additional_kwargs=['attempts', 'strict_disorder', 'cutoff']
+    
+
+    essential_kwargs=['attempts', 'strict_disorder', 'cutoff']
 
     for add_kw in additional_kwargs:
         if add_kw in kwargs.keys():
             return_kwarg[add_kw]=kwargs[add_kw]
 
-    # list of essential kwargs, can add more here if needed
-    essential_kwargs = ['cutoff', 'strict_disorder', 'attempts']
+    """
+    
 
-    # make a dict of essential kwarg values
-    essential_kwarg_vals = {'cutoff': parameters.DISORDER_THRESHOLD, 'strict_disorder': False, 'attempts': 100}
+    # make sure the six essential keywords have been initialized to their default values if they were not provided
+    essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD, 'strict_disorder': False, 'attempts': parameters.DEFAULT_ATTEMPTS, 'max_aa_fractions': {}}
 
-    # make sure essential_kwargs are in the final return kwarg
-    for individual_kwarg in essential_kwargs:
-        if individual_kwarg not in return_kwarg.keys():
-            return_kwarg[individual_kwarg] = essential_kwarg_vals[individual_kwarg]
+    for kw in essential_kwargs:
+        if kw not in kwargs:
+            kwargs[kw] = essential_kwargs[kw]
 
     # return the corrected dict
-    return return_kwarg
+    return kwargs
+
 
 
 def check_fracs_parameters(**kwargs):
@@ -388,10 +449,25 @@ def check_fracs_parameters(**kwargs):
     function that makes sure the values for a given seq are not 
     outside possible bounds. Only for generating
     sequences by specifying fractions of amino acids.
+
+    Parameters
+    -------------------
+    TBD
+
+    Returns
+    -------------------
+    None
+        No return variable
+
+    Raises 
+    --------------------
+    GooseInputError  
+        Returns a Goose input error in a passed fracion is invalid.
+
     '''
 
-    # check disorder disorder cutoff value bounds
-    if 'cutoff' in list(kwargs.keys()):
+    # check disorder disorder cutoff value bounds (max and min are 1 and 0)
+    if 'cutoff' in kwargs:
         curval = kwargs['cutoff']
         if curval != None:
             if curval > parameters.MAXIMUM_DISORDER:
@@ -404,17 +480,48 @@ def check_fracs_parameters(**kwargs):
 
     amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
 
-    # make sure amino acids are within possible values
-    for individual_kwargs in kwargs.keys():
-        if individual_kwargs.upper() in amino_acids:
+    # cycle over each keyword (kw) in the kwargs dictionary
+    for kw in kwargs:
+
+        # if the keyword is an amino acid...
+        if kw in amino_acids:
+            
             # get current fraction value
-            current_value = kwargs[individual_kwargs]
-            # get max fraction value
-            max_value = parameters.MAX_FRACTION_DICT[individual_kwargs.upper()]
+            current_value = kwargs[kw]
+
+            # if a an override max value was provided
+            if kw in kwargs['max_aa_fractions']:
+                max_value = kwargs['max_aa_fractions'][kw]
+
+            # otherwise use the default
+            else:                
+                max_value = parameters.MAX_FRACTION_DICT[kw]
             # make sure that current value not greater than max value
+            
             if current_value > max_value:
-                error_message = f'Current value of {current_value} is greater than max possible fraction value for amino acid {individual_kwargs.upper()}. Max value is {max_value}.'
+                error_message = f'Current value of {current_value} is greater than max possible fraction value for amino acid {kw}. Max value is {max_value}.'
                 raise GooseInputError(error_message)
+
+    # make sure these bounds make sense...
+    for aa in kwargs['max_aa_fractions']:
+        if kwargs['max_aa_fractions'][aa] < 0 or kwargs['max_aa_fractions'][aa] > 1:
+            raise GooseInputError(f"Max aa fraction requested for {aa} is invalid ({kwargs['max_aa_fractions'][aa]}). Must be between 0 and 1")
+            
+
+            
+    # finally - check the requested fractions don't sum to more than 1 and all values are valid
+    summed_fraction = 0
+    for aa in amino_acids:
+        
+        if aa in kwargs:
+            if kwargs[aa] < 0 or kwargs[aa] > 1:
+                raise GooseInputError(f'Fractional content requested for {aa} is invalid ({kwargs[aa]}). Must be between 0 and 1')
+            
+            summed_fraction = summed_fraction + kwargs[aa]
+
+    if summed_fraction > 1:
+        raise GooseInputError(f'Requested a sequence where the sum of the fractional components is greater than 1. This will not work!')
+        
 
 
 

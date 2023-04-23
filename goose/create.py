@@ -19,6 +19,7 @@ from goose.backend.goose_tools import check_and_correct_fracs_kwargs as _check_a
 from goose.backend.goose_tools import check_fracs_parameters as _check_fracs_parameters
 from goose.backend.goose_tools import length_check as _length_check
 from goose.backend.goose_tools import gen_random_name as _gen_random_name
+from goose.backend.goose_tools import check_valid_kwargs as _check_valid_kwargs
 
 # variant generation stuff
 from goose.backend.variant_generation import gen_kappa_variant as _gen_kappa_variant
@@ -63,27 +64,41 @@ def sequence(length, **kwargs):
     Stand alone function that takes care of creating sequences with specified
     properties. Takes in various sequence parameters as arguments. 
 
+    NB:
+
+    1. You can specify NCPR and FCR simultaneously
+    2. You can specify NCPR, FCR, and hydropathy simultaneously
+    3. If you specify sigma you cannot specify NCPR, FCR, or hydropathy
+
     Parameters
     ------------
-    length : Int
-        length of desired disordered sequence
-    **kwargs : parameter and parameter value
-        Takes in possible parameters for GOOSE. Possible parameters/parameter combinations are:
-            FCR : Float
-                specify the fraction of charged residues (between 0 and 1)
-            NCPR : Float 
-                specify the net charge per residue of generated sequences (between -1 and 1)
-            sigma : Float
-                specify the sigma value of generated sequences(between 0 and 1)
-            hydro : float 
-                specify the mean hydropathy of generated sequences
-            kappa : float
-                specify the kappa value of generated seqeunces
-            cutoff : Float
-                the disorder cutoff threshold
-            **Note** can specify NCPR and FCR simultaneously
-                     can specify NCPR and FCR and hydro simultaneously
+    length : int
+        Defines the length of desired disordered sequence
 
+    FCR : float
+        Defines the requested fraction of charged residues (between 0 and 1)
+
+    NCPR : float 
+        Defines the net charge per residue of generated sequences (between -1 and 1)
+
+    sigma : float
+        Defines the sigma value of generated sequences(between 0 and 1). Sigma reports
+        on the charge asymmetry (between 0 and 1).
+
+    hydropathy : float 
+        Defines the mean hydropathy of generated sequence (between 0 and 6.1).
+
+    kappa : float
+        specify the kappa value of generated sequence. Kappa reports on the charge
+        patterning (between 0 and 1 if there are both positive and negative residues).
+
+    cutoff : float
+        The disorder cutoff threshold. This ensures a sequence has a mean disorder above
+        this cutoff
+
+    attempts : int
+        Number of attempts to try
+            
 
     Returns
     -----------
@@ -91,8 +106,15 @@ def sequence(length, **kwargs):
         Returns a string that is the amino acid sequence
 
     """
-    # check length
+    # check length. Note this checks min/max length as well as
+    # casts a string length to an int
     _length_check(length)
+
+    # check we passed in acceptable keyword arguments. At this stage, if a keyword
+    # was passed that is not found in the list passed to _check_valid_kwargs then
+    # an exception is raised. 
+    _check_valid_kwargs(kwargs, ['FCR','NCPR','sigma', 'hydropathy', 'kappa', 'cutoff', 'attempts'])
+    
 
     # First correct kwargs. Do this first because
     # the next function that looks over kwargs values
@@ -102,18 +124,10 @@ def sequence(length, **kwargs):
     # now make sure that the input vals are within appropriate bounds
     _check_props_parameters(**kwargs)
 
-    # make sure length is within bounds
-    if length > parameters.MAXIMUM_LENGTH:
-        error_message = f'length of {length} is greater than maximum allowed value of {parameters.MAXIMUM_LENGTH}'
-        raise goose_exceptions.GooseInputError(error_message)
-    if length < parameters.MINIMUM_LENGTH:
-        error_message = f'length of {length} is less than maximum allowed value of {parameters.MINIMUM_LENGTH}'
-        raise goose_exceptions.GooseInputError(error_message)
-
     # make the sequence
     try:
         generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
-            sigma = kwargs['sigma'], attempts = 20, allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = kwargs['cutoff'])
+            sigma = kwargs['sigma'], attempts = kwargs['attempts'], allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = kwargs['cutoff'])
     except:
         raise goose_exceptions.GooseFail('Unable to generate sequence. Please try again with different parameters or a lower cutoff value.')
 
@@ -140,25 +154,52 @@ def sequence(length, **kwargs):
 
 def seq_fractions(length, **kwargs):
     """
-    Stand alone function that takes care of creating sequences with specified
+    Stand-alone function that takes care of creating sequences with specified
     fractions of amino acids. 
 
     Parameters
     ------------
-    length : Int
-        length of desired disordered sequence
-    **kwargs : parameter and parameter value
-        Takes in amino acids followed by the fraction value as a decimal.
+    length : int
+        length of the desired disordered sequence
 
+    <each of the 20 amino acids> : float
+        Specify the fraction of the sequence that should be made up of one or more
+        of the 20 natural amino acids (e.g. A=0.2, Y=0.05) etc.
 
+    max_aa_fractions : dict 
+        Dictionary which, if provided, allows the user to over-ride the 
+        fraction of a sequence which can be made up of any given amino
+        acid. The passed dictionary should contain key/value pairs, where
+        keys are one of the twenty standard amino acids and values is a
+        float between 0 and 1. If amino acids are missing then the default
+        thresholds set by GOOSE are used.
+
+    cutoff : float
+        The disorder cutoff threshold. Default used is 0.6
+    
+    attempts : int
+        Number of attempts that will be made to generate a given sequence. Default
+        is 100.
+    
+    strict_disorder : bool
+        if set to true, will not count a sequence as disordered even if a single amino
+        acid falls below the cutoff value. Default = False.
+             
     Returns
     -----------
-    generated_seq : String
+    generated_seq : string
         Returns a string that is the amino acid sequence
 
     """
-    # check length
+
+    # check length. Note this checks min/max length as well as
+    # casts a string length to an int
     _length_check(length)
+
+    # check we passed in acceptable keyword arguments. At this stage, if a keyword
+    # was passed that is not found in the list passed to _check_valid_kwargs then
+    # an exception is raised. 
+    _check_valid_kwargs(kwargs, ['cutoff', 'attempts',  'strict_disorder',  'max_aa_fractions', 'A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y'])
 
     # First correct kwargs. Do this first because
     # the next function that looks over kwargs values
@@ -167,15 +208,6 @@ def seq_fractions(length, **kwargs):
 
     # now make sure that the input vals are within appropriate bounds
     _check_fracs_parameters(**kwargs)
-
-    # make sure length is within bounds
-    # length is the only thing not checked by my check / check and correct functions.
-    if length > parameters.MAXIMUM_LENGTH:
-        error_message = f'length of {length} is greater than maximum allowed value of {parameters.MAXIMUM_LENGTH}'
-        raise goose_exceptions.GooseInputError(error_message)
-    if length < parameters.MINIMUM_LENGTH:
-        error_message = f'length of {length} is less than maximum allowed value of {parameters.MINIMUM_LENGTH}'
-        raise goose_exceptions.GooseInputError(error_message)
 
     generated_seq = _generate_disordered_seq_by_fractions(length, **kwargs)
 

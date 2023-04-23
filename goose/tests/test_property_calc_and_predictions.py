@@ -8,7 +8,7 @@ import os
 
 from sparrow import Protein as pr
 
-from goose.backend.protein import Protein 
+from goose.backend.protein import Protein
 #from goose.tests.local_data import test_prop_dicts
 from ..tests.local_data import test_prop_dicts
 from goose.backend.predictors.predict_mito import predict_mitochondrial_targeting
@@ -24,6 +24,8 @@ from goose.analyze import transcriptional_activation
 from goose.analyze import everything
 
 # test the calculation of basic sequence properties
+
+
 def test_goose_property_calculations():
     # iterate through precalculated sequence properties
     for seq_and_props in test_prop_dicts:
@@ -35,12 +37,12 @@ def test_goose_property_calculations():
         # test NCPR
         assert current_sequence.NCPR == seq_and_props['NCPR']
         # test mean hydropathy
-        assert current_sequence.hydropathy == seq_and_props['hydro']        
+        assert current_sequence.hydropathy == seq_and_props['hydro']
         # test kappa
         assert current_sequence.kappa == seq_and_props['kappa']
 
 
-def within_spec(list_vals1, list_vals2, acceptable_diff = 0.000001):
+def within_spec(list_vals1, list_vals2, acceptable_diff=0.000001):
     '''
     function to make sure that the difference between
     the values in 2 lists is less than a specified
@@ -67,6 +69,8 @@ def within_spec(list_vals1, list_vals2, acceptable_diff = 0.000001):
     return True
 
 # test the predictors as far as the raw values returned for each
+
+
 def test_goose_raw_predictions():
     # iterate through precalculated sequence properties
     for seq_and_props in test_prop_dicts:
@@ -75,19 +79,21 @@ def test_goose_raw_predictions():
         # test raw mitochondrial targeting scores
         assert predict_mitochondrial_targeting(current_sequence) == seq_and_props['mitochondrial_targeting_raw']
         # test raw NES scores
-        assert within_spec(predict_nes_seq(current_sequence), seq_and_props['NES_raw'])==True
+        assert within_spec(predict_nes_seq(current_sequence), seq_and_props['NES_raw']) == True
         # test raw NLS scores
-        assert within_spec(predict_nls_seq(current_sequence), seq_and_props['NLS_raw'])==True
+        assert within_spec(predict_nls_seq(current_sequence), seq_and_props['NLS_raw']) == True
         # test raw S phoshphorylation scores
-        assert within_spec(predict_phospho_S(current_sequence), seq_and_props['phosphorylation_S_raw'])==True
+        assert within_spec(predict_phospho_S(current_sequence), seq_and_props['phosphorylation_S_raw']) == True
         # test raw T phosphorylation scores
-        assert within_spec(predict_phospho_T(current_sequence), seq_and_props['phosphorylation_T_raw'])==True
+        assert within_spec(predict_phospho_T(current_sequence), seq_and_props['phosphorylation_T_raw']) == True
         # test raw Y phosphorylation scores
-        assert within_spec(predict_phospho_Y(current_sequence), seq_and_props['phosphorylation_Y_raw'])==True
+        assert within_spec(predict_phospho_Y(current_sequence), seq_and_props['phosphorylation_Y_raw']) == True
         # test raw TAD scores
-        assert within_spec(predict_tad_seq(current_sequence), seq_and_props['TAD_raw'])==True
+        assert within_spec(predict_tad_seq(current_sequence), seq_and_props['TAD_raw']) == True
 
 # test the analyze module everything() function
+
+
 def test_goose_analyze_predictions():
     # iterate through precalculated sequence properties
     for seq_and_props in test_prop_dicts:
@@ -104,10 +110,3 @@ def test_goose_analyze_predictions():
         for factor in testing_factors:
             if factor in round_me:
                 assert round(current_predictions[factor], 6) == round(known_predictions[factor], 6)
-
-
-
-
-
-
-
