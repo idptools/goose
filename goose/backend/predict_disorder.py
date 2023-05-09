@@ -244,4 +244,3 @@ def calculate_disorder_for_AA(sequence, amino_acid_list = [], seq_range=[]):
    # return results dict
    return results_dict
       
-

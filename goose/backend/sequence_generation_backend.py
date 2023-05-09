@@ -2174,7 +2174,7 @@ def test_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None):
 #/-/-/-/-/-/-/-/-/-/-/- Amino acid Fractions /-/-/-/-/-/-/-/-/-/-/-/-/-
 #/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-
 
-def create_seq_by_fracs(length, max_aa_fractions={}, **kwargs):
+def create_seq_by_fracs(length, max_aa_fractions={}, choose_optimized_residue=True, **kwargs):
     """
     This will return a sequence with the specified fraction of
     amino acids. To use simply specify the amino acid followed by
@@ -2192,6 +2192,14 @@ def create_seq_by_fracs(length, max_aa_fractions={}, **kwargs):
         keys are one of the twenty standard amino acids and values is a
         float between 0 and 1. If amino acids are missing then the default
         thresholds set by GOOSE are used.
+
+    choose_optimized_residue : bool
+        Whether to use the weighted probabiltiy dictionary to select residues
+        that have the highest likelihood of being disordered in the sequence. This
+        does generally work and improve sequence generation speed but comes at the
+        drawback of reducing possible sequence space. For some sequence compositions
+        this can make it difficult to generate a disordered sequence, so this can be
+        set to False in an attempt to generate those sequecnces
 
     <each of the 20 amino acids> : float
         Specify the fraction of the sequence that should be made up of one or more
@@ -2253,7 +2261,8 @@ def create_seq_by_fracs(length, max_aa_fractions={}, **kwargs):
 
     #  Start attempts to build the sequence
     #=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#=-=#
-
+    # all amino acids
+    amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
     # make empty final sequence
     final_sequence = ""
 
@@ -2269,6 +2278,9 @@ def create_seq_by_fracs(length, max_aa_fractions={}, **kwargs):
 
         # keep track of residues can't use down the line.
         used_AAs.append(cur_AA)
+        # remove the amino acids from the list for 
+        # sequence generation of fraction != 1.
+        amino_acids.remove(cur_AA)
 
         # res_count is the actual number of cur_AA expected in a sequence
         # of $length residues with $cur_frac fraction
@@ -2300,6 +2312,7 @@ def create_seq_by_fracs(length, max_aa_fractions={}, **kwargs):
 
     # ELSE we still need some extra residues
     else:
+
         # how many residues are we missing?            
         number_of_additional_res = length - len(sequence_list)
 
@@ -2327,26 +2340,30 @@ def create_seq_by_fracs(length, max_aa_fractions={}, **kwargs):
 
             # if found a position where we need a new amino acid...
             if local_sequence_list[i] == '0':
+                if choose_optimized_residue==True:
+                    # if at N-terminus of sequence use the starter_seq to provide 'disordered' context
+                    if len(sequence) < 4:
+                        # figure out where in the sequence we are
+                        start_seq_number = len(starter_seq)-4
+                        # use that info to make a slice of the sequence to be used as the input for get_optimal_residue()
+                        next_residue_key = starter_seq[start_seq_number:]
+                        # choose next residue
+                        chosen_residue = get_optimal_residue(next_residue_key, exclude_residues=used_AAs)
+                        starter_seq += chosen_residue
 
-                # if at N-terminus of sequence use the starter_seq to provide 'disordered' context
-                if len(sequence) < 4:
-                    # figure out where in the sequence we are
-                    start_seq_number = len(starter_seq)-4
-                    # use that info to make a slice of the sequence to be used as the input for get_optimal_residue()
-                    next_residue_key = starter_seq[start_seq_number:]
-                    # choose next residue
-                    chosen_residue = get_optimal_residue(next_residue_key, exclude_residues=used_AAs)
-                    starter_seq += chosen_residue
 
-
-                # else use the actual sequence and select the optimimum residue
+                    # else use the actual sequence and select the optimimum residue
+                    else:
+                        # figure out where in the sequence we are
+                        start_seq_number = len(sequence)-4
+                        # use that info to make a slice of the sequence to be used as the input for get_optimal_residue()
+                        next_residue_key = sequence[start_seq_number:]
+                        # choose next residue
+                        chosen_residue = get_optimal_residue(next_residue_key, exclude_residues=used_AAs)
                 else:
-                    # figure out where in the sequence we are
-                    start_seq_number = len(sequence)-4
-                    # use that info to make a slice of the sequence to be used as the input for get_optimal_residue()
-                    next_residue_key = sequence[start_seq_number:]
-                    # choose next residue
-                    chosen_residue = get_optimal_residue(next_residue_key, exclude_residues=used_AAs)
+                    # otherwise choose a random amino acid from the list that contains all 
+                    # amino acids except for those that have been specified.
+                    chosen_residue = amino_acids[random.randint(0, len(amino_acids)-1)]
 
             # ... else just use the amino acid from the shuffled local_sequence_list
             else:
@@ -2356,6 +2373,7 @@ def create_seq_by_fracs(length, max_aa_fractions={}, **kwargs):
             sequence = sequence + chosen_residue
         # return the sequence
         return sequence
+
 
 
 

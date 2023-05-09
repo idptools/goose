@@ -169,7 +169,7 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
             return attempted_seq
 
     # if no disordered sequence in number of attempts, raise GooseFail
-    raise GooseFail('Unable to generate sequence!')
+    raise GooseFail('Unable to generate sequence! Try increasing attempts!')
 
 
 
@@ -271,5 +271,24 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
             if check_disorder(attempted_seq, disorder_threshold=cutoff, strict=strict_disorder):
                 return attempted_seq
 
+    # new fallback that should expand the sequence space. 
+    # only use if we have already failed using the optimized approach
+    for attempt_num in range(0, attempts):
+        # set attempted seq to empty string
+        attempted_seq=''
+        # try to build the sequence *Without choosing optimized sequences**
+        try:
+            attempted_seq = create_seq_by_fracs(length, max_aa_fractions=kwargs['max_aa_fractions'],choose_optimized_residue=False, **input_kwargs)
+
+        # if attempt to build the sequence failed, continue back at the 
+        # beginning of the loop
+        except:
+            continue
+
+        # if the sequence is disordered, return it
+        if attempted_seq != '':
+            if check_disorder(attempted_seq, disorder_threshold=cutoff, strict=strict_disorder):
+                return attempted_seq
+
     # if no disordered sequence in number of attempts, raise GooseFail
-    raise GooseFail('Unable to generate sequence!')
+    raise GooseFail('Unable to generate sequence! Try increasing attempts!')

@@ -7,6 +7,7 @@ __all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_
 
 import os
 import sys
+import random
 
 #for sequence generation
 from goose.backend.sequence_generation import generate_disordered_seq_by_fractions as _generate_disordered_seq_by_fractions
@@ -37,6 +38,7 @@ from goose.backend.gen_minimal_variant_backend import gen_minimal_sequence_varia
 
 # library creation
 from goose.backend.library_generation_backend import generate_library_by_parameter_ranges as _generate_library_by_parameter_ranges
+from goose.backend.library_generation_backend import generate_library_by_fraction_ranges as _generate_library_by_fraction_ranges
 
 # for folded structure generation
 from goose.backend.folded_region_generation import gen_helix as _gen_helix
@@ -760,8 +762,111 @@ def seq_property_library(length,
     # return the dict
     return seq_dict
 
+def seq_fractions_library(length, random_name=False, warn_user=True, robust_warning=False, **kwargs):
+    '''
+    User facing function for generating a library of sequences that have varying specified fractions
+    of aminon acids. This function will only make fractions that are possible (ie. less than 1.0 specified
+    and all values less than the respective value for each seq as far as the maximum possible). By default will
+    alert the user to any 'failed' generate sequences...
 
 
+    Parameters
+    ------------
+    length : int
+        the length of the sequence to generate
+
+    random_name : bool
+        whether to make a random name for each sequence.
+
+    warn_user : bool
+        whether to warn the user if the fractions of a sequence do not match 
+        what the user input. This is typically due to length problems (bascially,
+        you can specify F=0.95 but will never get 0.95 for F if your sequence is 10
+        amino acids long because you can't have 1/2 a F)
+
+    robust_warning : bool
+        Whether to print out a robust message for each incorrect sequence highlighting what was wrong
+
+    <each of the 20 amino acids> : float
+        Specify the fraction of the sequence that should be made up of one or more
+        of the 20 natural amino acids (e.g. A=0.2, Y=0.05) etc.
+
+    max_aa_fractions : dict 
+        Dictionary which, if provided, allows the user to over-ride the 
+        fraction of a sequence which can be made up of any given amino
+        acid. The passed dictionary should contain key/value pairs, where
+        keys are one of the twenty standard amino acids and values is a
+        float between 0 and 1. If amino acids are missing then the default
+        thresholds set by GOOSE are used.
+
+    Returns 
+    --------
+    seq_dict : dict
+        returns a dictionary of the sequences.   
+    '''
+
+    # make the list of sequences to generate
+    sequence_list = _generate_library_by_fraction_ranges(length=length, **kwargs)
+    # need dict for naming...
+    possible_vals_name=['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+    name_vals = []
+    for specified_arg in kwargs.keys():
+        if specified_arg in possible_vals_name:
+            name_vals.append(specified_arg)
+    # keep track of sequences with erros
+    sequence_warnings=0
+    # dict to return
+    seq_dict={}
+    # list of additional kwargs
+    additional_kwargs=['cutoff', 'attempts',  'strict_disorder',  'max_aa_fractions']
+    for seq_specified in sequence_list[1]:
+        # add in any additional kwargs to input into seq_fractions function
+        for cur_kwarg in additional_kwargs:
+            if cur_kwarg in kwargs.keys():
+                seq_specified[cur_kwarg]=kwargs[cur_kwarg]
+        sequence = seq_fractions(length, **seq_specified)
+        # make a sequence name
+        seq_name='>'
+        sequence_correct=True
+        error_warning=f'For:\n{sequence}\n'
+        if name_vals != []:
+            for vals in name_vals:
+                actual_val = sequence.count(vals)/len(sequence)
+                param_val = seq_specified[vals]
+                # see if actual val equals param val
+                if round(float(actual_val), 8) != round(float(param_val), 8):
+                    sequence_correct=False
+                    error_warning += f'Objective fraction for {vals}: {round(float(param_val), 8)}, Actual value: {round(float(actual_val), 8)}\n'
+                if random_name==False:                
+                    if seq_name=='>':
+                        seq_name+=f'{vals}_{round(actual_val, 4)}'
+                    else:
+                        seq_name+=f'_{vals}_{round(actual_val, 4)}'
+                # if user wants a randodm name, make it happen.
+                else:
+                    seq_name+=f'_{_gen_random_name()[1:]}'
+            if sequence_correct==False:
+                sequence_warnings+=1
+                if robust_warning==True:
+                    print(error_warning)
+                    print()
+
+        # make sure seq_name not already in dict
+        if seq_name not in seq_dict.keys():
+            # add to seq dict
+            seq_dict[seq_name]=sequence
+        else:
+            # this shouldn't ever be a problem, but just to be safe add in a random 4 digit ID.
+            add_id = '_ID_'
+            for i in range(0, 8):
+                add_id += f'{random.randint(0, 9)}'
+            seq_name+=add_id
+            seq_dict[seq_name]=sequence
+    # warn user if needed and if wanted by user
+    if warn_user == True:
+        if sequence_warnings > 0:
+            print(f'\nWARNING!\n GOOSE detected {sequence_warnings} sequences out of {len(seq_dict)} sequences where the generated sequence does not have the exact value as the input.\n This is often due to a mismatch in the specified length and possible fractions.\n')
+    return seq_dict
 
 
 
