@@ -2278,13 +2278,16 @@ def create_seq_by_fracs(length, max_aa_fractions={}, choose_optimized_residue=Tr
 
         # keep track of residues can't use down the line.
         used_AAs.append(cur_AA)
+
         # remove the amino acids from the list for 
         # sequence generation of fraction != 1.
         amino_acids.remove(cur_AA)
 
         # res_count is the actual number of cur_AA expected in a sequence
-        # of $length residues with $cur_frac fraction
-        res_count = int(kwargs[cur_AA]*length)
+        # of $length residues with $cur_frac fraction. Rounds until it can't. 
+        res_count = round(kwargs[cur_AA]*length)
+        if len(sequence_list) + res_count > length:
+            res_count=int(kwargs[cur_AA]*length)
 
         # generate a list of the right number copies of the current
         # amino acid
@@ -2304,6 +2307,34 @@ def create_seq_by_fracs(length, max_aa_fractions={}, choose_optimized_residue=Tr
     # correct proportions once the sequence is actually $length residues long
     # if all the residues are accounted for...
     if total_fraction == 1:
+        # make sure length is reached. This can be an issue if the user doesn't
+        # carefully choose compatible lengths and fractional values.
+        # only need to do if len sequence lenght != length && total fraction == 1
+        if len(sequence_list)<length:
+            # need to decide which residue(s) to add to finish sequence.
+            # basically figure out which residues are off by the most as far as 
+            # what their inteded value was and their actual residue count.
+            off_by_dict={}
+            for res in used_AAs:
+                off_by_dict[res]=abs((kwargs[res]*length)-sequence_list.count(res))
+            # now make a sorted list of off by vals...
+            add_in_order=[]
+            for off_by_val in set(sorted(off_by_dict.values(), reverse=True)):
+                for res in off_by_dict:
+                    if off_by_dict[res]==off_by_val:
+                        add_in_order.append(res)
+            # add residues in order of off_by list until seq length met. 
+            res_order_added=0
+            off_by=length-len(sequence_list)
+            for val in range(0, off_by):
+                sequence_list.append(add_in_order[res_order_added])
+                res_order_added+=1
+                # if past max list index, reset.
+                if res_order_added >= len(sequence_list):
+                    res_order_added=0
+        else:
+            raise GooseError('Error in sequence_generation_backend.py causing create_seq_by_fracs() function to make sequences too long. Please contact the developers or post an issue on Github!')
+
         # create a string from the sequence_list
         all_fraction_sequence = "".join(sequence_list)
         # shuffle the seq before returning    
@@ -2312,7 +2343,6 @@ def create_seq_by_fracs(length, max_aa_fractions={}, choose_optimized_residue=Tr
 
     # ELSE we still need some extra residues
     else:
-
         # how many residues are we missing?            
         number_of_additional_res = length - len(sequence_list)
 

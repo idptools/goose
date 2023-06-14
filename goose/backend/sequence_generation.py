@@ -142,8 +142,6 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
     -------
     final_seq : String
         Returns the final sequence that was specified as a string.
-
-
     '''
     # try the number of specified attempts to build the seq
     for attempt_num in range(0, attempts):

@@ -300,76 +300,13 @@ def check_and_correct_props_kwargs(**kwargs):
     Returns
     -------
     Dict
-        A dictionary holding all necessary (and corrected) 
+        A dictionary holding all necessary
         values for sequence generation.
     '''
     # first remove any 'None' arguments passed from the command line
     # from the kwargs dict.
     kwargs = remove_None(**kwargs)
 
-
-    ##
-    ## Note to self/Ryan - I think everything commented out below is redundant and can be removed, because I STRONGLY
-    ## suggest we make it required that ONE single keyword is allowed rather than allowing the user to pass ambigious
-    ## keywords that mean the same thing. Sanity checking to make sure no invalid keywords are passed is now by the
-    ## check valid keywords function, so we no longer need to do this spell-check-like functionality because we
-    ## ensure the user must pass a single defined keyword.
-    ## 
-
-    """
-    # list of possible FCR inputs
-    possible_FCR = ['FCR', 'fcr', 'fCR', 'FcR', 'FCr', 'fcR', 'Fcr', 'fCr', 'fraction', 'fractoin', 'Fraction', 'Fractoin']
-
-    # list of possible NCPR inputs
-    possible_NCPR = ['NCPR', 'net_charge', 'net', 'Net_charge', 'net_Charge', 'Net', 'ncpr', 'nCPR', 'NcPR', 'NCpR', 'NCPr', 'ncPR', 'NcpR', 'NCpr', 'nCPr']
-
-    # list of possible hydropathy inputs
-    possible_hydro = ['hydropathy', 'mean_hydro', 'hydro', 'hydropath', 'mean_hydropathy', 'Mean_hydro', 'mean_Hydro', 'Mean_Hydro', 'Hydropathy', 'Hydro']
-
-    # list of possible cutoff value inputs
-    possible_cutoff = ['cutoff', 'cut', 'cut_off', 'cutoff_val', 'cutoff_value', 'Cutoff', 'Cut', 'Cut_Off', 'Cutoff_Val', 'Cutoff_val', 'cutoff_Value']
-
-    # possible sigma values
-    possible_sigma = ['sigma', 'Sigma', 'sigma_value', 'Sigma_value', 'Sigma_Value']
-
-    # possible kappa values
-    possible_kappa=['kappa', 'Kappa']
-
-    # amino acid values
-    amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
-    lower_amino_acids = ['a', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'v', 'w', 'y']
-
-    # make a list of all possible kwargs
-    all_possible_kwargs = [possible_FCR, possible_NCPR, possible_hydro, possible_cutoff, possible_sigma, possible_kappa]
-
-    # make an empty return kwarg dict
-    return_kwarg = {}
-
-
-    # iterate through all possible kwargs
-    for individual_kwarg in kwargs.keys():
-        for possible_kwarg in all_possible_kwargs:
-            for possible_value in possible_kwarg:
-                if individual_kwarg == possible_value:
-                    correct_kwarg_key = possible_kwarg[0]
-                    return_kwarg[correct_kwarg_key] = kwargs[individual_kwarg]
-
-    # make list of various essential kwargs
-    essential_kwargs = ['FCR', 'NCPR', 'hydropathy', 'sigma', 'cutoff', 'kappa']
-
-    # make a dict of essential kwarg values with default values
-    essential_kwarg_vals = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'sigma': None, 'kappa': None}
-
-    # make sure essential_kwargs are in the final return kwarg
-    for individual_kwarg in essential_kwargs:
-        if individual_kwarg not in return_kwarg.keys():
-            return_kwarg[individual_kwarg] = essential_kwarg_vals[individual_kwarg]
-
-    ##
-    ## <> <><> <><> <><> <><> <><> <><> <><> <><> <>
-    ##
-
-    """
     
     # make sure the six essential keywords have been initialized to their default values if they were not provided
     essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'sigma': None, 'kappa': None, 'attempts':parameters.DEFAULT_ATTEMPTS}
@@ -401,35 +338,6 @@ def check_and_correct_fracs_kwargs(**kwargs):
     # first remove any 'None' arguments passed from the command line
     # from the kwargs dict.
     kwargs = remove_None(**kwargs)
-
-    """
-    # amino acid values
-    amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
-    lower_amino_acids = ['a', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'k', 'l', 'm', 'n', 'p', 'q', 'r', 's', 't', 'v', 'w', 'y']
-
-    # list of all possible kwargs
-    all_possible_kwargs = [amino_acids, lower_amino_acids]
-
-    # make an empty return kwarg dict
-    return_kwarg = {}
-
-    # iterate through all possible kwargs, makes everything uppercase
-    for individual_kwarg in kwargs.keys():
-        for possible_kwarg in all_possible_kwargs:
-            for possible_value in possible_kwarg:
-                if individual_kwarg == possible_value:
-                    correct_kwarg_key = individual_kwarg.upper()
-                    return_kwarg[correct_kwarg_key] = kwargs[individual_kwarg]
-
-    
-
-    essential_kwargs=['attempts', 'strict_disorder', 'cutoff']
-
-    for add_kw in additional_kwargs:
-        if add_kw in kwargs.keys():
-            return_kwarg[add_kw]=kwargs[add_kw]
-
-    """
     
 
     # make sure the six essential keywords have been initialized to their default values if they were not provided
