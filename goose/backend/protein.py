@@ -8,12 +8,12 @@ import math
 
 from goose.backend.amino_acids import AminoAcid
 from sparrow import Protein as SP
-from sparrow.patterning import kappa
+
 
 class Protein:
     """
     Class that holds the properties of an amino acid sequence. This class makes
-    use of functionalityb encoded in sparrow
+    use of functionality encoded in sparrow
     """
     def __init__(self, seq):
         """
@@ -84,17 +84,14 @@ class Protein:
     #
     @property
     def sigma(self):
-        return kappa.calculate_sigma(self.seq, ['E','D'],['R','K'])
+        # can't be calculated in SPARROW any more.
+        if self.FCR ==  0:
+            return 0
+        else:
+            return round(((self.NCPR**2) / self.FCR), 6)
 
+        
 
-    # ......................................................................
-    #    
-    @property
-    def delta(self):
-        b5 = kappa.calculate_delta(self.seq, ['E','D'],['R','K'], 5)
-        b6 = kappa.calculate_delta(self.seq, ['E','D'],['R','K'], 6)
-
-        return round( (b5+b6)/2, 7)
 
 
     # ......................................................................
@@ -136,8 +133,8 @@ class Protein:
         properties_dict['NCPR']       = self.NCPR
         properties_dict['hydropathy'] = self.hydropathy
         properties_dict['sigma']      = self.sigma
-        properties_dict['delta']      = self.delta
         properties_dict['SCD']        = self.SCD
+        properties_dict['kappa']      = self.kappa
         
         return properties_dict
 
@@ -159,5 +156,7 @@ class Protein:
             random_name += amino_acids[random.randint(0, len(amino_acids)-1)]
             random_name += str(random.randint(0, 9))
         return random_name
+
+
 
             

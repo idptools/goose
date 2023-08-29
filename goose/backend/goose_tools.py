@@ -416,7 +416,6 @@ def check_fracs_parameters(**kwargs):
             raise GooseInputError(f"Max aa fraction requested for {aa} is invalid ({kwargs['max_aa_fractions'][aa]}). Must be between 0 and 1")
             
 
-            
     # finally - check the requested fractions don't sum to more than 1 and all values are valid
     summed_fraction = 0
     for aa in amino_acids:

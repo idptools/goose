@@ -34,6 +34,10 @@ from goose.backend.variant_generation import gen_asymmetry_variant as _gen_asymm
 from goose.backend.variant_generation import gen_fcr_class_variant as _gen_fcr_class_variant
 from goose.backend.variant_generation import gen_ncpr_class_variant as _gen_ncpr_class_variant
 from goose.backend.variant_generation import gen_all_props_class_variant as _gen_all_props_class_variant
+from goose.backend.variant_generation import gen_targeted_shuffle_variant as _gen_targeted_shuffle_variant
+from goose.backend.variant_generation import gen_excluded_shuffle_variant as _gen_excluded_shuffle_variant
+
+# for minimal variant, need to... get rid of this old code.
 from goose.backend.gen_minimal_variant_backend import gen_minimal_sequence_variant as _gen_minimal_sequence_variant
 
 # library creation
@@ -568,6 +572,116 @@ def all_props_class_var(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=No
     return final_sequence   
 
 
+def targeted_shuffle_variant(sequence, target_aas,
+    cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    user facing funcitonality to generate variants where
+    you can specify residues or classes of residues to shuffle.
+
+    parameters
+    ----------
+    sequence : str
+        the amino acid sequence as a string
+
+    target_aas : str or list
+        a list of amino acids to shuffle
+        or a class of amino acids to shuffle
+        Possible target classes:
+            charged : DEKR
+            polar : QNST
+            aromatic : FYW
+            aliphatic : IVLAM
+            negative: DE
+            positive : KR
+
+    cutoff : float
+        the cutoff value for disorder between 0 and 1. 
+        Higher values have a higher likelihood of being disordered. 
+
+    strict : bool
+        whether to enforce a strict disorder cutoff value. For variants,
+        Lower than cutoff values are allowed for areas of the input sequence
+        that have below cutoff values. Nothing in the returned sequence
+        will have a higher diosrder value ata ny residue location than the value at that
+        position for the input sequence. 
+    
+    Returns
+    -------
+    returns the amino acid sequence as a string. 
+    '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+    if len(sequence) < 6:
+        raise GooseInputError('Cannot have sequence with a length less than 6')
+
+    # make sequence.
+    try:
+        final_sequence = _gen_targeted_shuffle_variant(sequence, target_aas, disorder_threshold=cutoff, strict_disorder=strict)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
+    return final_sequence
+
+def excluded_shuffle_variant(sequence, exclude_aas,
+    cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    user facing funcitonality to generate variants where
+    you can specify residues or classes of residues to NOT shuffle
+
+    parameters
+    ----------
+    sequence : str
+        the amino acid sequence as a string
+
+    exclude_aas : str or list
+        a list of amino acids to not shuffle
+        or a class of amino acids to NOT shuffle
+        Possible target classes:
+            charged : DEKR
+            polar : QNST
+            aromatic : FYW
+            aliphatic : IVLAM
+            negative: DE
+            positive : KR
+
+    cutoff : float
+        the cutoff value for disorder between 0 and 1. 
+        Higher values have a higher likelihood of being disordered. 
+
+    strict : bool
+        whether to enforce a strict disorder cutoff value. For variants,
+        Lower than cutoff values are allowed for areas of the input sequence
+        that have below cutoff values. Nothing in the returned sequence
+        will have a higher diosrder value ata ny residue location than the value at that
+        position for the input sequence. 
+    
+    Returns
+    -------
+    returns the amino acid sequence as a string. 
+
+    '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+    if len(sequence) < 6:
+        raise GooseInputError('Cannot have sequence with a length less than 6')
+
+    # make sequence.
+    try:
+        final_sequence = _gen_excluded_shuffle_variant(sequence, exclude_aas, disorder_threshold=cutoff, strict_disorder=strict)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
+    return final_sequence
 
 
 '''
