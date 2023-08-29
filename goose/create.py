@@ -1,6 +1,11 @@
-'''
-user-facing functionality
-'''
+##
+## create.py
+## 
+## create.py contains all the user-facing function associated with metapredict. If a new function is added it should be included
+## here and added to the __all__ list
+## 
+
+##Handles the primary functions
 
 # if any new functions are added to create.py, you need to add them here.
 __all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'new_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library']
@@ -8,6 +13,8 @@ __all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_
 import os
 import sys
 import random
+
+# note - we import packages below with a leading _ which means they are ignored in the import
 
 #for sequence generation
 from goose.backend.sequence_generation import generate_disordered_seq_by_fractions as _generate_disordered_seq_by_fractions
@@ -97,6 +104,11 @@ def sequence(length, **kwargs):
     kappa : float
         specify the kappa value of generated sequence. Kappa reports on the charge
         patterning (between 0 and 1 if there are both positive and negative residues).
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 20. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence. 
 
     cutoff : float
         The disorder cutoff threshold. This ensures a sequence has a mean disorder above
@@ -237,7 +249,39 @@ def minimal_var(input_sequence, hydropathy = '', fcr = '',
     User facing function for generating the minimal sequence variant. This variant
     tries to make a sequence as similar to the input sequence as possible all while
     minimizing the number of amino acids changed. 
+    
+    Parameters
+    ------------
+    input_sequence : str
+        the sequence to make a variant of
+
+    hydropathy : float
+        the mean hydropathy of the sequence. If not specified does not change.
+
+    fcr : float
+        the fraction of charged residues in the sequence. If not specified does not change.
+
+    ncpr : float
+        the net charge per residue of the sequence. If not specified does not change.
+
+    scd : float
+        the charge asymmetry of the sequence. If not specified does not change.
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        Must be betwee 0 and 1. 
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. 
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant
     '''
+
     # make sure that the input sequence is all caps
     input_sequence = input_sequence.upper()
 
@@ -255,12 +299,34 @@ def minimal_var(input_sequence, hydropathy = '', fcr = '',
 
 
 
-def new_seq_constant_class_var(sequence,
+def new_seq_constant_class_var(sequence, attempts=5,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     A function to generate a variant where the sequence composition is new but
     the numbers of each residue from each class is the same. The overall properties
     of the generated sequence will also be constant.
+
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 5. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.         
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant
+
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -271,24 +337,43 @@ def new_seq_constant_class_var(sequence,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')
     try:
-        final_sequence = _gen_new_var_constant_class(sequence, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_new_var_constant_class(sequence, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value.')
     return final_sequence
 
 
 
-def constant_class_var(sequence,
+def constant_class_var(sequence, attempts=5,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     function to generate a variant with the same properties as the 
     input variant as well as the same order of amino acids as
     far as class and the same number in each class
+    
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 5. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.    
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant    
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
-
-    
 
     # check length
     _length_check(sequence)
@@ -296,18 +381,39 @@ def constant_class_var(sequence,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     try:
-        final_sequence = _gen_constant_class_variant(sequence, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_constant_class_variant(sequence, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value.')
     return final_sequence
 
 
-def new_var(sequence,
+def new_var(sequence, attempts=5,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     function to generate a variant that is completely different
     in sequence to the input but has all the same overall parameters.
     Does not account for specific classes of residues.
+    
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 5. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.            
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant    
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -318,18 +424,47 @@ def new_var(sequence,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     try:
-        final_sequence = _gen_new_variant(sequence, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_new_variant(sequence, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value.')
     return final_sequence
 
 
 def hydro_class_var(sequence, hydropathy, hydro_error = parameters.HYDRO_ERROR,
-    cutoff = parameters.DISORDER_THRESHOLD, strict=False):
+    attempts=5, cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     function to take in a sequence and make a variant that adjusts the
     hydropathy while keeping the position and number of amino acids the
     same by class of amino acid
+
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+    
+    hydropathy : float
+        the mean hydropathy of the sequence variant. 
+
+    hydro_erorr : float
+        the allowed error between the specified hydropathy and the
+        hydropathy of the returned sequence
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 5. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.        
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant    
+
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -340,7 +475,7 @@ def hydro_class_var(sequence, hydropathy, hydro_error = parameters.HYDRO_ERROR,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     try:
-        final_sequence = _gen_hydropathy_class_variant(sequence, hydropathy=hydropathy, allowed_hydro_error = hydro_error, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_hydropathy_class_variant(sequence, hydropathy=hydropathy, allowed_hydro_error = hydro_error, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value.')
     return final_sequence
@@ -348,13 +483,38 @@ def hydro_class_var(sequence, hydropathy, hydro_error = parameters.HYDRO_ERROR,
 
 
 
-def constant_residue_var(sequence, constant=[], 
+def constant_residue_var(sequence, constant=[], attempts=5, 
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     function that will generate a new sequence variant
     where specific residues are held constant. The 
     variant will have the same aggregate properties
     as the original sequence.
+
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    constant : list
+        A list of residues in the sequence to hold constant
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 5. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.   
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant 
+
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -365,18 +525,42 @@ def constant_residue_var(sequence, constant=[],
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')
     try:
-        final_sequence = _gen_constant_residue_variant(sequence, constant_residues=constant, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_constant_residue_variant(sequence, constant_residues=constant, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value or with different constant residues.')
     return final_sequence
 
 
 
-def shuffle_var(sequence, shuffle=[], 
+def shuffle_var(sequence, shuffle=[], attempts=5,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     Function that will shuffle specific regions of an IDR.
     Multiple regions can be specified simultaneously.
+
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    shuffle : list
+        A list of regions to shuffle
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 5. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.  
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant 
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -413,7 +597,7 @@ def shuffle_var(sequence, shuffle=[],
                         curvals.append(i)
 
     try:
-        final_sequence = _gen_shuffle_variant(sequence, shuffle_regions=shuffle, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_shuffle_variant(sequence, shuffle_regions=shuffle, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value or with different constant residues.')
     return final_sequence
@@ -421,13 +605,42 @@ def shuffle_var(sequence, shuffle=[],
 
 
 def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR, 
-    cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     Function to generate a sequence with a user-defined
     kappa value. Requires kappa calculation using 
     SPARROW. Kappa is a function of charge asymmetry, larger
     kappa values have more asymmetrically distributed
     charged residues.
+
+
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    kappa : float
+        The desired kappa value
+
+    kappa_error : float
+        The allowed error between the desired kappa value and the kappa value of the
+        returned sequence
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.  
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant 
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -443,18 +656,60 @@ def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR,
         raise GooseInputError('Kappa values must be between 0 and 1')
 
     try:
-        final_sequence = _gen_kappa_variant(sequence, kappa=kappa, allowed_kappa_error = kappa_error, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_kappa_variant(sequence, kappa=kappa, allowed_kappa_error = kappa_error, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value or with different kappa value')
     return final_sequence
 
 
-def asymmetry_var(sequence, increase_decrease, aa_class, changes=None,
-    cutoff = parameters.DISORDER_THRESHOLD, strict=False):
+def asymmetry_var(sequence, increase_decrease, aa_class, number_changes=None,
+    attempts=10, cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing function for generating a variant that has 
     altered asymmetry of some class of residues or user specificed
     list of residues.
+
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    increase_decrease : str
+        whether to increase or decrease the asymmetry of a specific 
+        residue or residue class. Set to 'increase' or 'decrease'.
+
+    aa_class : str or list
+        the class of amino acids to alter asymmetry of. Can specify a custom
+        class by passing in a list of residues to target or you can just type in
+        the name of a canonical class as a string. Possible classes include:
+            'negative' - negative residues
+            'positive' - positive residues    
+            'proline' - prolines
+            'aromatic' - W Y F
+            'aliphatic' - I V L A M
+            'polar' - Q N S T        
+
+    number_changes : bool
+        the number of amino acids to change in the sequence to change asymmetry. 
+        By default, will attempt to change asymmetry a number of times equal to
+        1/5th the sequence length. Higher numbers increase the amount that the sequence
+        becomes more or less symmetrical for the specified residue.
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.          
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant     
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -468,17 +723,41 @@ def asymmetry_var(sequence, increase_decrease, aa_class, changes=None,
         raise GooseInputError('Cannot have sequence with a length less than 6')
 
     try:
-        final_sequence = _gen_asymmetry_variant(sequence, increase_decrease, aa_class, num_change=changes, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_asymmetry_variant(sequence, increase_decrease, aa_class, num_change=number_changes, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value or with different specified amino acids')
     return final_sequence    
 
 
-def fcr_class_var(sequence, fcr, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+def fcr_class_var(sequence, fcr, attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
     the fcr is changed and the changes to classes of amino
     acids is minimized
+    
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    fcr : float
+        The desired fcr value
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.  
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant     
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -495,18 +774,42 @@ def fcr_class_var(sequence, fcr, cutoff=parameters.DISORDER_THRESHOLD, strict=Fa
         raise goose_exceptions.GooseInputError('fcr values must be between 0 and 1.')
 
     try:
-        final_sequence = _gen_fcr_class_variant(sequence, fcr=fcr, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_fcr_class_variant(sequence, fcr=fcr, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different fcr value or a different cutoff value.')
     return final_sequence       
     
 
 
-def ncpr_class_var(sequence, ncpr, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+def ncpr_class_var(sequence, ncpr, attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
     the ncpr is changed and the changes to classes of amino
     acids is minimized
+
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    ncpr : float
+        The desired ncpr value
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.          
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant      
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -523,18 +826,51 @@ def ncpr_class_var(sequence, ncpr, cutoff=parameters.DISORDER_THRESHOLD, strict=
         raise goose_exceptions.GooseInputError('fcr values must be between -1 and 1.')
 
     try:
-        final_sequence = _gen_ncpr_class_variant(sequence, ncpr=ncpr, disorder_threshold=cutoff, strict_disorder=strict, constant_fcr=False)
+        final_sequence = _gen_ncpr_class_variant(sequence, ncpr=ncpr, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict, constant_fcr=False)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different ncpr value or a different cutoff value.')
     return final_sequence   
 
 
 def all_props_class_var(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=None,
-    cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
     the ncpr, fcr, and/or hydropathy is/are changed and 
     the changes to classes of amino acids is minimized
+    
+    Parameters
+    ------------
+    sequence : str
+        the sequence to make a variant of
+
+    hydropathy : float
+        The desired hydropathy value
+
+    fcr : float
+        The desired fcr value
+
+    ncpr : float
+        The desired ncpr value
+
+    kappa : float
+        The desired kappa value
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.  
+
+    cutoff : float
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+
+    strict : bool
+        whether to use a strict disorder calculation. By default, variants are allowed
+
+    Returns
+    -----------
+    final_sequence : str
+        the final sequence variant       
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -566,13 +902,13 @@ def all_props_class_var(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=No
 
     try:
         final_sequence = _gen_all_props_class_variant(sequence, hydropathy=hydropathy, fcr=fcr,
-        ncpr=ncpr, kappa=kappa, disorder_threshold=cutoff, strict_disorder=strict)
+        ncpr=ncpr, kappa=kappa, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence   
 
 
-def targeted_shuffle_variant(sequence, target_aas,
+def targeted_shuffle_variant(sequence, target_aas, attempts=10,
     cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
@@ -594,6 +930,11 @@ def targeted_shuffle_variant(sequence, target_aas,
             negative: DE
             positive : KR
 
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.  
+
     cutoff : float
         the cutoff value for disorder between 0 and 1. 
         Higher values have a higher likelihood of being disordered. 
@@ -622,12 +963,12 @@ def targeted_shuffle_variant(sequence, target_aas,
 
     # make sequence.
     try:
-        final_sequence = _gen_targeted_shuffle_variant(sequence, target_aas, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_targeted_shuffle_variant(sequence, target_aas, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence
 
-def excluded_shuffle_variant(sequence, exclude_aas,
+def excluded_shuffle_variant(sequence, exclude_aas, attempts=10,
     cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
@@ -649,6 +990,11 @@ def excluded_shuffle_variant(sequence, exclude_aas,
             negative: DE
             positive : KR
 
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.  
+
     cutoff : float
         the cutoff value for disorder between 0 and 1. 
         Higher values have a higher likelihood of being disordered. 
@@ -678,7 +1024,7 @@ def excluded_shuffle_variant(sequence, exclude_aas,
 
     # make sequence.
     try:
-        final_sequence = _gen_excluded_shuffle_variant(sequence, exclude_aas, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_excluded_shuffle_variant(sequence, exclude_aas, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence
@@ -692,10 +1038,25 @@ def excluded_shuffle_variant(sequence, exclude_aas,
 /-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
 '''
 
-def alpha_helix(length):
+def alpha_helix(length, attempts=500):
     '''
     user facing function for generating a sequence predicted to be an alpha
     helix based on DSSP scores.
+
+    Parameters
+    ----------
+    length : int
+        the length of the desired alpha helix
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 500. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.  
+
+    returns
+    -------
+    final_seq : str
+
     '''
     if length > 150:
         raise goose_exceptions.GooseInputError('Unable to make alpha helix with length greater than 150.')    
@@ -703,16 +1064,30 @@ def alpha_helix(length):
         raise goose_exceptions.GooseInputError('Unable to make alpha helix with length less than 8.')    
     else:
         try:
-            final_seq = _gen_helix(length)
+            final_seq = _gen_helix(length, max_iters=attempts)
         except:
             raise goose_exceptions.GooseFail('Sorry! Goose was unable to make that helix. Try again or try a different length.')
         return final_seq
 
 
-def beta_strand(length):
+def beta_strand(length, attempts=5000):
     '''
     user facing function for generating a sequence predicted to be 
     a beta strand based on DSSP scores.
+
+    Parameters
+    ----------
+    length : int
+        the length of the desired beta strand
+    
+    attempts : int
+        Specify the number of times to make the sequence. Default is 5000. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence.  
+    
+    returns
+    -------
+    final_seq : str    
     '''
     if length > 34:
         raise goose_exceptions.GooseInputError('Unable to make beta strands with length greater than 34.')
@@ -720,7 +1095,7 @@ def beta_strand(length):
         raise goose_exceptions.GooseInputError('Unable to make beta strands with length less than 5.')
     else:
         try:
-            final_seq = _gen_beta_strand(length)
+            final_seq = _gen_beta_strand(length, max_iters=attempts)
         except:
             raise goose_exceptions.GooseFail('Sorry! Goose was unable to make that strand. Try again or try a different length.')
         return final_seq
@@ -731,6 +1106,15 @@ def beta_sheet(length):
     '''
     user facing function for generating a sequence predicted to be 
     a beta sheet based on DSSP scores. uses coils to connect strands.
+
+    Parameters
+    ----------
+    length : int
+        the length of the desired beta_sheet helix
+
+    returns
+    -------
+    final_seq : str    
     '''
     if length < 18:
         raise goose_exceptions.GooseInputError('cannot generate beta sheet less than 18 amino acids.')

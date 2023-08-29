@@ -2061,7 +2061,7 @@ def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_close
     # get starting hydropathy, kappa, fcr
     original_protein = Protein(sequence)
     original_hydropathy = original_protein.hydropathy
-    original_kappa = original_protein.hydropathy
+    original_kappa = original_protein.kappa
     original_FCR = original_protein.FCR
 
     # figure out max possible FCR that can maintain disorder
