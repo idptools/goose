@@ -71,10 +71,6 @@ def build_rg_seq(seq_length, rg, allowed_error=0.2, num_attempts=50):
     raise GooseError('Could not generate sequence with specified radius of gyration. Try increasing number of attempts')
 
 
-newseq=build_rg_seq(seq_length=50,rg=17.5)
-print(f'Generated Sequence: {newseq}')
-print(f'Predicted Rg: {predict_scaled_rg(newseq)}')
-
 
 
 
