@@ -8,7 +8,7 @@
 ##Handles the primary functions
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'new_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library']
+__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library']
 
 import os
 import sys
@@ -243,8 +243,8 @@ def seq_fractions(length, **kwargs):
 
 
 
-def minimal_var(input_sequence, hydropathy = '', fcr = '', 
-    ncpr = '', scd='', cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+def minimal_var(input_sequence, hydropathy = '', FCR = '', 
+    NCPR = '', SCD='', cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     User facing function for generating the minimal sequence variant. This variant
     tries to make a sequence as similar to the input sequence as possible all while
@@ -258,13 +258,13 @@ def minimal_var(input_sequence, hydropathy = '', fcr = '',
     hydropathy : float
         the mean hydropathy of the sequence. If not specified does not change.
 
-    fcr : float
+    FCR : float
         the fraction of charged residues in the sequence. If not specified does not change.
 
-    ncpr : float
+    NCPR : float
         the net charge per residue of the sequence. If not specified does not change.
 
-    scd : float
+    SCD : float
         the charge asymmetry of the sequence. If not specified does not change.
 
     cutoff : float
@@ -291,8 +291,8 @@ def minimal_var(input_sequence, hydropathy = '', fcr = '',
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     try:
-        final_sequence = _gen_minimal_sequence_variant(input_sequence, mean_hydro = hydropathy, fraction = fcr, 
-        net_charge = ncpr, charge_asymmetry=scd, cutoff=cutoff, strict=strict)
+        final_sequence = _gen_minimal_sequence_variant(input_sequence, mean_hydro = hydropathy, fraction = FCR, 
+        net_charge = NCPR, charge_asymmetry=SCD, cutoff=cutoff, strict=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with different parameters or a lower cutoff value.')
     return final_sequence
@@ -387,7 +387,7 @@ def constant_class_var(sequence, attempts=5,
     return final_sequence
 
 
-def new_var(sequence, attempts=5,
+def constant_properties_var(sequence, attempts=5,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     function to generate a variant that is completely different
@@ -729,7 +729,7 @@ def asymmetry_var(sequence, increase_decrease, aa_class, number_changes=None,
     return final_sequence    
 
 
-def fcr_class_var(sequence, fcr, attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+def fcr_class_var(sequence, FCR, attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
     the fcr is changed and the changes to classes of amino
@@ -740,7 +740,7 @@ def fcr_class_var(sequence, fcr, attempts=10, cutoff=parameters.DISORDER_THRESHO
     sequence : str
         the sequence to make a variant of
 
-    fcr : float
+    FCR : float
         The desired fcr value
 
     attempts : int
@@ -774,14 +774,14 @@ def fcr_class_var(sequence, fcr, attempts=10, cutoff=parameters.DISORDER_THRESHO
         raise goose_exceptions.GooseInputError('fcr values must be between 0 and 1.')
 
     try:
-        final_sequence = _gen_fcr_class_variant(sequence, fcr=fcr, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_fcr_class_variant(sequence, fcr=FCR, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different fcr value or a different cutoff value.')
     return final_sequence       
     
 
 
-def ncpr_class_var(sequence, ncpr, attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+def ncpr_class_var(sequence, NCPR, attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
     the ncpr is changed and the changes to classes of amino
@@ -792,7 +792,7 @@ def ncpr_class_var(sequence, ncpr, attempts=10, cutoff=parameters.DISORDER_THRES
     sequence : str
         the sequence to make a variant of
 
-    ncpr : float
+    NCPR : float
         The desired ncpr value
 
     attempts : int
@@ -823,16 +823,16 @@ def ncpr_class_var(sequence, ncpr, attempts=10, cutoff=parameters.DISORDER_THRES
         raise GooseInputError('Cannot have sequence with a length less than 6')
 
     if ncpr > 1 or ncpr < -1:
-        raise goose_exceptions.GooseInputError('fcr values must be between -1 and 1.')
+        raise goose_exceptions.GooseInputError('NCPR values must be between -1 and 1.')
 
     try:
-        final_sequence = _gen_ncpr_class_variant(sequence, ncpr=ncpr, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict, constant_fcr=False)
+        final_sequence = _gen_ncpr_class_variant(sequence, ncpr=NCPR, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict, constant_fcr=False)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different ncpr value or a different cutoff value.')
     return final_sequence   
 
 
-def all_props_class_var(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=None,
+def all_props_class_var(sequence, hydropathy=None, FCR=None, NCPR=None, kappa=None,
     attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
@@ -847,11 +847,11 @@ def all_props_class_var(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=No
     hydropathy : float
         The desired hydropathy value
 
-    fcr : float
-        The desired fcr value
+    FCR : float
+        The desired FCR value
 
-    ncpr : float
-        The desired ncpr value
+    NCPR : float
+        The desired NCPR value
 
     kappa : float
         The desired kappa value
@@ -883,17 +883,17 @@ def all_props_class_var(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=No
     if len(sequence) < 6:
         raise GooseInputError('Cannot have sequence with a length less than 6')
 
-    if ncpr != None:
-        if ncpr > 1 or ncpr < -1:
-            raise goose_exceptions.GooseInputError('fcr values must be between -1 and 1.')
+    if NCPR != None:
+        if NCPR > 1 or NCPR < -1:
+            raise goose_exceptions.GooseInputError('NCPR values must be between -1 and 1.')
 
     if hydropathy != None:
         if hydropathy < 0 or hydropathy > 6.4:
             raise goose_exceptions.GooseInputError('hydropathy values must be between 0 and 6.4')
 
-    if fcr != None:
-        if fcr > 1 or fcr < 0:
-            raise goose_exceptions.GooseInputError('fcr values must be between 0 and 1.')
+    if FCR != None:
+        if FCR > 1 or FCR < 0:
+            raise goose_exceptions.GooseInputError('FCR values must be between 0 and 1.')
 
     if kappa != None:
         if kappa > 1 or kappa < 0:
@@ -901,8 +901,8 @@ def all_props_class_var(sequence, hydropathy=None, fcr=None, ncpr=None, kappa=No
 
 
     try:
-        final_sequence = _gen_all_props_class_variant(sequence, hydropathy=hydropathy, fcr=fcr,
-        ncpr=ncpr, kappa=kappa, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_all_props_class_variant(sequence, hydropathy=hydropathy, fcr=FCR,
+        ncpr=NCPR, kappa=kappa, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence   
