@@ -770,7 +770,7 @@ def fcr_class_var(sequence, FCR, attempts=10, cutoff=parameters.DISORDER_THRESHO
     if len(sequence) < 6:
         raise GooseInputError('Cannot have sequence with a length less than 6')
 
-    if fcr > 1 or fcr < 0:
+    if FCR > 1 or FCR < 0:
         raise goose_exceptions.GooseInputError('fcr values must be between 0 and 1.')
 
     try:
@@ -822,7 +822,7 @@ def ncpr_class_var(sequence, NCPR, attempts=10, cutoff=parameters.DISORDER_THRES
     if len(sequence) < 6:
         raise GooseInputError('Cannot have sequence with a length less than 6')
 
-    if ncpr > 1 or ncpr < -1:
+    if NCPR > 1 or NCPR < -1:
         raise goose_exceptions.GooseInputError('NCPR values must be between -1 and 1.')
 
     try:
