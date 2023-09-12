@@ -6,7 +6,6 @@ from random import randint
 import numpy as np
 
 
-from sparrow import Protein as pr
 from goose.goose_exceptions import GooseInputError, GooseInstallError, GooseBackendBug
 from goose.backend.protein import Protein
 from goose.backend.sequence_generation_backend import identify_residue_positions, get_optimal_residue, optimal_residue_key, random_amino_acid, create_seq_by_props, fast_predict_disorder, calculate_max_charge, fraction_net_charge
@@ -1207,9 +1206,8 @@ def increase_charge_asymmetry_once(sequence, exclude = []):
 
 
 
-def decrease_charge_asymmetry_once(sequence):
+def decrease_charge_asymmetry_once(sequence, bloblen=5):
     """
-    
     Function to decrease charge asymmetry of an input sequence.
     Uses some randomness during generation in case the generated 
     does not reach the cutoff value (then can retry a different
@@ -1227,6 +1225,9 @@ def decrease_charge_asymmetry_once(sequence):
     sequence : String
         Returns an amino acid sequence with an increased charge asymmetry
 
+    bloblen : int
+        the window size when calculating linear net charge per residue
+
     """
 
 
@@ -1234,7 +1235,6 @@ def decrease_charge_asymmetry_once(sequence):
     lowest_NCPR = 100
     highest_NCPR = -100
     N=0
-    bloblen=5
 
     # make lists to hold possible coords to select from randomly
     possible_lowest_NCPR_coords = []
@@ -1317,79 +1317,81 @@ def decrease_charge_asymmetry_once(sequence):
     return final_sequence
 
 
-def decrease_kappa_once(sequence):
+def reduce_kappa(sequence, num_iter=100):
     '''
-    function to try to decrease kappa
-    when the function decrease_charge_asymmetry 
-    fails. This can happen with sequences that
-    have low numbers of charged residues
+    function to try to minimze the kappa of a sequence.
+    '''
+    best_sequence = sequence
+    best_kappa = pr(sequence).kappa
+
+    for blob in [7,6,5,4,3,2]:
+        for i in range(0, num_iter):
+            current_sequence = decrease_charge_asymmetry_once(best_sequence, bloblen=blob)
+            # Calculate kappa for the current sequence
+            current_kappa = pr(''.join(current_sequence)).kappa
+            
+            # Update the best sequence if current sequence has a lower kappa
+            if current_kappa < best_kappa:
+                best_sequence = current_sequence
+                best_kappa = current_kappa
+
+    return best_sequence
+
+
+def reduce_consecutive_paired(sequence, num_iter=1500):
+    best_sequence = sequence
+    best_kappa = pr(sequence).kappa
     
-    parameters
-    ----------
-    sequence : string
-        the amino acid sequence as a string
+    for _ in range(num_iter):
+        # Create a copy of the sequence to work with
+        current_sequence = list(best_sequence)
 
-    returns
-    -------
-    new_sequence : string
-        returns the new sequence as as string
+        # Randomly shuffle the charged residues
+        charged_residues = [residue for residue in current_sequence if residue in ["R", "K", "E", "D"]]
+        random.shuffle(charged_residues)
+        
+        # Reconstruct the sequence with shuffled charged residues
+        current_sequence = [residue if residue not in ["R", "K", "E", "D"] else charged_residues.pop() for residue in current_sequence]
+        
+        # Calculate kappa for the current sequence
+        current_kappa = pr(''.join(current_sequence)).kappa
+        
+        # Update the best sequence if current sequence has a lower kappa
+        if current_kappa < best_kappa:
+            best_sequence = current_sequence
+            best_kappa = current_kappa
+    
+    return ''.join(best_sequence)
 
-    '''
-    charged = ['K', 'R', 'D', 'E']
-    neg_charged = []
-    pos_charged = []
 
-    # first remove the charged residues.
-    neutral_seq = ''
-    for aa in sequence:
-        if aa not in charged:
-            neutral_seq += aa
-        else:
-            if aa == 'D' or aa == 'E':
-                neg_charged.append(aa)
-            else:
-                pos_charged.append(aa)
+def minimize_kappa(sequence, min_kappa, iters=10000):
+    best_sequence = sequence
+    best_kappa = pr(sequence).kappa
+    for _ in range(iters):
+        # reduce kappa
+        current_sequence = reduce_kappa(sequence, num_iter=2)
+        # Calculate kappa for the current sequence
+        current_kappa = pr(''.join(current_sequence)).kappa
+        # Update the best sequence if current sequence has a lower kappa
+        if current_kappa < best_kappa:
+            best_sequence = current_sequence
+            best_kappa = current_kappa
+        if abs(current_kappa-min_kappa) < parameters.MAXIMUM_KAPPA_ERROR:
+            return best_sequence
 
-    # get total number of charged residues
-    num_charged = len(neg_charged) + len(pos_charged)
+        # reduce pairs
+        current_sequence = reduce_consecutive_paired(best_sequence, num_iter=10)
+        # Calculate kappa for the current sequence
+        current_kappa = pr(''.join(current_sequence)).kappa
+        # Update the best sequence if current sequence has a lower kappa
+        if current_kappa < best_kappa:
+            best_sequence = current_sequence
+            best_kappa = current_kappa
+        if abs(current_kappa-min_kappa) < parameters.MAXIMUM_KAPPA_ERROR:
+            return best_sequence
 
-    # get interval at which to put down a charged residue
-    charge_interval = int(len(sequence)/num_charged)
-    if charge_interval > 2:
-        charge_interval = 2
+    return best_sequence
 
-    # populate list with charge intervals
-    charge_locs = []
-    for i in range(1, num_charged+1):
-        cur_loc = i*charge_interval
-        if cur_loc < len(sequence):
-            charge_locs.append(cur_loc)
-        else:
-            cur_loc = i*charge_interval-(int(charge_interval/2))
-            charge_locs.append(cur_loc)
-
-    # make final list of charged residues
-    charge_residue_order = []
-
-    for i in range(0, num_charged):
-        if pos_charged != []:
-            charge_residue_order.append(pos_charged.pop())
-        if neg_charged != []:
-            charge_residue_order.append(neg_charged.pop())
-
-    # make final seq
-    final_seq = ''
-    # keep track of loc for the neutral_seq
-    neutral_seq_loc = 0
-    for i in range(0, len(sequence)):
-        if i in charge_locs:
-            final_seq += charge_residue_order.pop()
-        else:
-            final_seq += neutral_seq[neutral_seq_loc]
-            neutral_seq_loc += 1
-
-    #return final seq
-    return final_seq
 
 
 def decrease_kappa_below_value(sequence, max_kappa, attempts=None):
@@ -1414,29 +1416,42 @@ def decrease_kappa_below_value(sequence, max_kappa, attempts=None):
     if original_kappa < max_kappa:
         return sequence
 
-    # first line of defense, quickly reduces kappa
-    quick_reduce = decrease_kappa_once(sequence)
-    curkappa = pr(quick_reduce).kappa
-    if curkappa < max_kappa:
-        return quick_reduce
+    # if user doesn't set number of attempts, set number
+    if attempts == None:
+        # set attempts to 10 * length of the seqeunece
+        attempts = 10*len(sequence)
 
-    else:
-        # if user doesn't set number of attempts, set number
-        if attempts == None:
-            # set attempts to 20 * length of the seqeunece
-            attempts = 20*len(sequence)
-        new_sequence = decrease_charge_asymmetry_once(sequence)
-        curkappa = pr(new_sequence).kappa
-        # reduce kappa number ot times there are 
-        # residues in the sequence
-        for i in range(0, attempts):
+    # fastest way to do this.
+    best_kappa=original_kappa
+    best_sequence = sequence
 
-            if curkappa < max_kappa:
-                return new_sequence
-            else:
-                new_sequence = decrease_charge_asymmetry_once(new_sequence)
-                curkappa = pr(new_sequence).kappa
+    current_sequence = reduce_consecutive_paired(best_sequence)
+    current_kappa = pr(current_sequence).kappa
+    if current_kappa < max_kappa:
+        return current_sequence
+    
+    if current_kappa < best_kappa:
+        best_kappa=current_kappa
+        best_sequence=current_sequence
 
+    # second fastest way to do this.
+    for i in range(0, attempts):
+        current_sequence = decrease_charge_asymmetry_once(best_sequence)
+        current_kappa = pr(current_sequence).kappa
+        if current_kappa < max_kappa:
+            return current_sequence
+        else:
+            if current_kappa < best_kappa:
+                best_kappa=current_kappa
+                best_sequence=current_sequence
+
+    # slowest way to do this.
+    final_attept = minimize_kappa(best_sequence, max_kappa)
+    curkappa = pr(final_attept).kappa
+    if curkappa < max_kappa+parameters.MAXIMUM_KAPPA_ERROR:
+        return final_attept
+    
+    # if we make it alllllll the way down....
     raise GooseBackendBug('Unable to generate sequence with desired below kappa value using decrease_kappa_below_value in variant_generation_backend.py')
 
 
@@ -1504,7 +1519,7 @@ def create_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIM
 def radiate_out(starting_value):
     # radiates outward from starting value to get value as close to original as possible
     closest_vals = []
-    for i in np.arange(0, 1, 0.005):
+    for i in np.arange(0.02, 1, 0.005):
         i = float(i)
         val_1 = round(starting_value - i, 5)
         val_2 = round(starting_value + i, 5)
@@ -1524,11 +1539,12 @@ def create_closest_kappa_variant(sequence, ideal_value):
         # makes the closest kappa variant possible
         all_values = radiate_out(ideal_value)
         for i in all_values:
-            seq = create_kappa_variant(sequence, kappa=i, attempts=2000)
-            if seq != 'Unable to make kappa sequence in variant_generation_backend.py':
+            try:
+                seq = create_kappa_variant(sequence, kappa=i, attempts=2000)
                 return seq
-            
-
+            except:
+                continue
+    raise GooseBackendBug('Unable to use create_closest_kappa_variant in variant_generation_backend.py')
 
 
 def possible_fcr_vals(sequence):
@@ -1563,7 +1579,7 @@ def count_charged(sequence):
     return{'negative':num_neg, 'positive':num_pos}
 
 
-def create_fcr_class_variant(sequence, fraction, constant_ncpr=True, use_closest = True):
+def create_fcr_class_variant(sequence, fraction, constant_ncpr=True, use_closest = True, ignore_kappa=False):
     '''
     function that will alter the FCR of a sequence
     and keep everything else the same while also 
@@ -1587,6 +1603,8 @@ def create_fcr_class_variant(sequence, fraction, constant_ncpr=True, use_closest
     use_closest : Bool
         whether to just use the closest FCR val to the input value.
 
+    ignore_kappa : bool
+        whether to ignore getting the kappa value correct.
 
     '''
     # get starting hydropathy
@@ -1619,6 +1637,7 @@ def create_fcr_class_variant(sequence, fraction, constant_ncpr=True, use_closest
         new_closest_fraction = get_closest_fcr(sequence, fraction)
     else:
         new_closest_fraction=0
+
 
     # if FCR won't change just return it
     if new_closest_fraction == original_fcr:
@@ -1694,10 +1713,13 @@ def create_fcr_class_variant(sequence, fraction, constant_ncpr=True, use_closest
                     add_a_negative=True
 
     # now fix kappa, don't try to fix if val is -1!
-    if pr(starter_seq).kappa != -1:
-        fixed_kappa_seq = create_closest_kappa_variant(starter_seq, original_kappa)
+    if ignore_kappa==False:
+        if pr(starter_seq).kappa != -1:
+            fixed_kappa_seq = create_kappa_variant(starter_seq, original_kappa)
+        else:
+            fixed_kappa_seq = starter_seq
     else:
-        fixed_kappa_seq = starter_seq
+        fixed_kappa_seq=starter_seq
 
     # now fix hyropathy
     fixed_hydro_seq = optimize_hydropathy_within_class(fixed_kappa_seq, original_hydropathy)
@@ -2032,7 +2054,7 @@ def needed_charged_residues(length, fraction, net_charge):
 
 
 
-def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_closest = True):
+def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_closest = True, ignore_kappa=False):
     '''
     function that will alter the FCR of a sequence
     and keep everything else the same while also 
@@ -2056,6 +2078,8 @@ def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_close
     use_closest : Bool
         whether to just use the closest FCR val to the input value.
 
+    ignore_kappa : bool
+        whether to ignore kappa values
 
     '''
     # get starting hydropathy, kappa, fcr
@@ -2079,7 +2103,7 @@ def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_close
     else:
         if abs(net_charge) > original_FCR:
             new_FCR = abs(net_charge)
-            sequence = create_fcr_class_variant(sequence, new_FCR)
+            sequence = create_fcr_class_variant(sequence, new_FCR, ignore_kappa=ignore_kappa)
             final_objective = fraction_net_charge(len(sequence), new_FCR, net_charge)
         else:
             final_objective = fraction_net_charge(len(sequence), original_FCR, net_charge)
@@ -2132,8 +2156,11 @@ def create_ncpr_class_variant(sequence, net_charge, constant_fcr=True, use_close
             built_sequence += sequence[i]
 
     # now fix kappa
-    if pr(built_sequence).kappa != -1:
-        fixed_kappa_seq = create_closest_kappa_variant(built_sequence, original_kappa)
+    if ignore_kappa==False:
+        if pr(built_sequence).kappa != -1:
+            fixed_kappa_seq = create_kappa_variant(built_sequence, original_kappa)
+        else:
+            fixed_kappa_seq = built_sequence
     else:
         fixed_kappa_seq = built_sequence
     
@@ -2153,22 +2180,23 @@ def create_all_props_class_variant(sequence, hydropathy=None, fraction=None, net
     function simply attempts to minimize those changes.
     '''
     original_kappa = pr(sequence).kappa
+
     if fraction != None:
         if net_charge!= None:
-            sequence = create_fcr_class_variant(sequence, fraction, constant_ncpr=False, use_closest = True)
+            sequence = create_fcr_class_variant(sequence, fraction, constant_ncpr=False, use_closest = True, ignore_kappa=True)
         else:
-            sequence = create_fcr_class_variant(sequence, fraction, constant_ncpr=False, use_closest = True)
+            sequence = create_fcr_class_variant(sequence, fraction, constant_ncpr=False, use_closest = True, ignore_kappa=True)
     if net_charge != None:
         if fraction == None:
-            sequence = create_ncpr_class_variant(sequence, net_charge, constant_fcr=False)
+            sequence = create_ncpr_class_variant(sequence, net_charge, constant_fcr=False, ignore_kappa=True)
         else:
-            sequence = create_ncpr_class_variant(sequence, net_charge, constant_fcr=False)
+            sequence = create_ncpr_class_variant(sequence, net_charge, constant_fcr=False, ignore_kappa=True)
     if hydropathy != None:
         sequence = create_hydropathy_class_variant(sequence, hydro=hydropathy)
     if kappa == None:
-        sequence = create_closest_kappa_variant(sequence, original_kappa)
+        sequence = create_kappa_variant(sequence, original_kappa)
     else:
-        sequence = create_closest_kappa_variant(sequence, kappa)
+        sequence = create_kappa_variant(sequence, kappa)
     return sequence
 
 

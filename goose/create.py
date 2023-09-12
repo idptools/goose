@@ -8,7 +8,7 @@
 ##Handles the primary functions
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library']
+__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var']
 
 import os
 import sys
@@ -908,7 +908,7 @@ def all_props_class_var(sequence, hydropathy=None, FCR=None, NCPR=None, kappa=No
     return final_sequence   
 
 
-def targeted_shuffle_variant(sequence, target_aas, attempts=10,
+def targeted_shuffle_var(sequence, target_aas, attempts=10,
     cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where
@@ -968,7 +968,7 @@ def targeted_shuffle_variant(sequence, target_aas, attempts=10,
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence
 
-def excluded_shuffle_variant(sequence, exclude_aas, attempts=10,
+def excluded_shuffle_var(sequence, exclude_aas, attempts=10,
     cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     user facing funcitonality to generate variants where

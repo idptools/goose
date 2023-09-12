@@ -172,4 +172,4 @@ def test_sequence_by_fraction_generation_with_bad_values():
 
     # this should fail
     with pytest.raises(GooseInputError):
-        seq_len = create.seq_fractions(100, Q=0.9)
+        seq_len = create.seq_fractions(100, W=0.9)

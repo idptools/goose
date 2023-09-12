@@ -128,7 +128,7 @@ class Protein:
     def properties(self):
         properties_dict = {}
         
-        properties_dict['length']     = len(self.sequence)
+        properties_dict['length']     = self.length
         properties_dict['FCR']        = self.FCR
         properties_dict['NCPR']       = self.NCPR
         properties_dict['hydropathy'] = self.hydropathy
@@ -141,7 +141,7 @@ class Protein:
     def calc_basic_properties(self):
         properties_dict = {}
 
-        properties_dict['length']     = len(self.sequence)
+        properties_dict['length']     = self.length
         properties_dict['FCR']        = self.FCR
         properties_dict['NCPR']       = self.NCPR
         properties_dict['hydropathy'] = self.hydropathy

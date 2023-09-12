@@ -2270,9 +2270,6 @@ def create_seq_by_fracs(length, max_aa_fractions={}, choose_optimized_residue=Tr
 
     used_AAs = []
 
-    # some things won't be possible based on the FCR specified and the resultant hydropathy.
-    checked_hydro_is_possible = False
-
     # for each amino acid for which we passed fractional information...
     for cur_AA in kwargs.keys():
 
@@ -2332,14 +2329,15 @@ def create_seq_by_fracs(length, max_aa_fractions={}, choose_optimized_residue=Tr
                 # if past max list index, reset.
                 if res_order_added >= len(sequence_list):
                     res_order_added=0
-        else:
+        elif len(sequence_list)>length:
             raise GooseError('Error in sequence_generation_backend.py causing create_seq_by_fracs() function to make sequences too long. Please contact the developers or post an issue on Github!')
 
-        # create a string from the sequence_list
-        all_fraction_sequence = "".join(sequence_list)
-        # shuffle the seq before returning    
-        sequence = shuffle_seq(all_fraction_sequence)
-        return sequence
+        else:
+            # create a string from the sequence_list
+            all_fraction_sequence = "".join(sequence_list)
+            # shuffle the seq before returning    
+            sequence = shuffle_seq(all_fraction_sequence)
+            return sequence
 
     # ELSE we still need some extra residues
     else:

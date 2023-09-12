@@ -290,3 +290,4 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
 
     # if no disordered sequence in number of attempts, raise GooseFail
     raise GooseFail('Unable to generate sequence! Try increasing attempts!')
+
