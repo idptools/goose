@@ -11,7 +11,11 @@ Welcome to goose's documentation!
    :caption: Contents:
 
    getting_started
+   using_goose
+   how_to_cite_goose
+   acknowledgements
    api
+   changes
 
 
 
