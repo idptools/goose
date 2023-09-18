@@ -23,5 +23,6 @@ build:
   jobs: 
     pre_install:
       - pip install cython 
+      - pip install numpy 
 
 
