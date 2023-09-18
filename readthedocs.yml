@@ -22,6 +22,6 @@ build:
     python: "3.9"
   jobs: 
     pre_install:
-      pip install cython 
+      - pip install cython 
 
 
