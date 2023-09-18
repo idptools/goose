@@ -5,7 +5,7 @@ Limited for now, planning on expanding on in the future
 '''
 
 from goose.backend.protein import Protein
-from goose.backend.predict_features import predict_mitochondrial_localization, predict_NES, predict_NLS, predict_phosphosites, predict_TAD
+from goose.backend.predict_features import predict_mitochondrial_localization, predict_NES, predict_NLS, predict_phosphosites, predict_TAD, predict_polymer_props
 
 def properties(sequence, fractions=True):
     '''
@@ -37,6 +37,12 @@ def properties(sequence, fractions=True):
     # return the dict
     return props_dict
 
+def polymer_properties(sequence): 
+    '''
+    returns the polymer properties of the sequence
+    specifically predicted Rg and Re
+    '''
+    return predict_polymer_props(sequence)
 
 def phosphosites(sequence, raw_vals=False):
     '''
@@ -160,12 +166,16 @@ def everything(sequence, split_predictions = False, just_predictions=False):
         all_info['predicted phosphosites'] = phosphosites(sequence)
         all_info['predicted cellular localization'] = cellular_localization(sequence)
         all_info['predicted transcriptional activation'] = transcriptional_activation(sequence)
+        all_info['predicted polymer properties'] = predict_polymer_props(sequence)
     else:
         all_phosphosites = phosphosites(sequence)
         all_info['S phosphorylation'] = all_phosphosites['S']
         all_info['T phosphorylation'] = all_phosphosites['T']
         all_info['Y phosphorylation'] = all_phosphosites['Y']
         all_localization = cellular_localization(sequence)
+        pol_props=predict_polymer_props(sequence)
+        all_info['Re']=pol_props['Re']
+        all_info['Rg']=pol_props['Rg']
         all_info['NLS'] = all_localization['NLS']
         all_info['NES'] = all_localization['NES']
         all_info['mitochondrial'] = all_localization['mitochondria']

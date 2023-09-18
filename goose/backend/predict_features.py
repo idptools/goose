@@ -3,10 +3,29 @@ Integrating the sparrow predictors into GOOSE.
 This is for running predictions and then formatting them. 
 This will allow easier updating of networks as they become better over time.
 '''
+
+
 from sparrow import Protein as pr
 
 
 def predict_mitochondrial_localization(sequence, return_raw=False):
+    '''
+    function for predicting mitochondrial localization sequences.
+
+    Parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    return_raw : bool
+        whether to return raws scores
+        default is false.
+
+    Returns
+    -------
+    mito_loc : dict
+        dictionary of mitochondrial localization sequences and their locations
+    '''
     seq=pr(sequence)
     mitochondrial_targeting = seq.predictor.mitochondrial_targeting_sequence()
     if return_raw==True:
@@ -38,6 +57,20 @@ def predict_mitochondrial_localization(sequence, return_raw=False):
 def predict_NES(sequence, return_raw=False):
     '''
     function for predicting NES
+
+    Parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    return_raw : bool
+        whether to return raws scores
+        default is false.
+
+    Returns
+    -------
+    nes_loc : dict
+        dictionary of NES and their locations in the sequence
     '''
     seq=pr(sequence)
     nes_loc={}
@@ -66,7 +99,21 @@ def predict_NES(sequence, return_raw=False):
 
 def predict_NLS(sequence, return_raw=False):
     '''
-    function for predicting NLS.
+    function for predicting NLS
+
+    Parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    return_raw : bool
+        whether to return raws scores
+        default is false.
+
+    Returns
+    -------
+    nes_loc : dict
+        dictionary of NLS and their locations in the sequence
     '''
     seq=pr(sequence)    
     num_consec = 0
@@ -95,7 +142,21 @@ def predict_NLS(sequence, return_raw=False):
 
 def predict_phosphosites(sequence, return_sites=True):
     '''
-    function to predict phopshorylation
+    function for predicting phosphosites
+
+    Parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    return_sites : bool
+        whether to return the sites or return raw scores
+        default is to return sites
+
+    Returns
+    -------
+    dict
+        dictionary of S, T, and Y phosphosites and their locations in the sequence
     '''
     seq=pr(sequence)
     final_returned_values={}
@@ -106,7 +167,21 @@ def predict_phosphosites(sequence, return_sites=True):
 
 def predict_TAD(sequence, return_raw=False):
     '''
-    function to predict TADs
+    function for predicting TADs
+
+    Parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    return_raw : bool
+        whether to return raws scores
+        default is false.
+    Returns
+    -------
+    tad_locs : dict
+        dictionary of TADs and their locations in the sequence
+        
     '''
     seq=pr(sequence)
     num_consec = 0
@@ -134,4 +209,22 @@ def predict_TAD(sequence, return_raw=False):
             tad_locs[tad] = [start_seq, end_seq]
     return tad_locs
 
+def predict_polymer_props(sequence):
+    '''
+    function for predicting polymer properties
+
+    Parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+
+    Returns
+    -------
+    dict
+        dictionary of polymer properties, specifically the Rg and Re
+    '''
+    seq=pr(sequence)
+    Rg=seq.predictor.radius_of_gyration()
+    Re=seq.predictor.end_to_end_distance()
+    return {'Rg':Rg,'Re':Re}
 
