@@ -25,5 +25,6 @@ build:
       - pip install cython 
       - pip install numpy 
       - pip install git+https://git@github.com/idptools/sparrow.git
+      - pip install sphix-rtd-theme
 
 

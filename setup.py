@@ -48,7 +48,7 @@ setup(
     # Additional entries you may want simply uncomment the lines you want and fill in the data
     # url='http://www.my_package.com',  # Website
     install_requires=[
-                'cython',
+                'cython', ##'sparrow @ pip install git+https://git@github.com/idptools/sparrow.git' 
                 'numpy',
                 'metapredict',
                 'PredictDSSP',
