@@ -45,17 +45,15 @@ Or to clone the GitHub repository and install locally run -
 
 **Important note**
 
-*AFTER you install GOOSE*, you will also need to install SPARROW (another package we are working on that is not yet on PyPi). I promise we will make this easier in the near future, but for now you will also need to run the following:
+GOOSE also requires the package ``sparrow``. Sparrow should be downloaded automatically just by pip installing GOOSE, but if you have issues, try installing it by running:
 
 	$ pip install git+https://github.com/holehouse-lab/sparrow.git
-
 
 This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have numpy or cython installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. If you still have problems, try running from terminal:
 
 	$ pip install cython
 	$ pip install numpy
 
-Sorry this is a pain, we promise we will make it more streamlined shortly!
 
 # Time to leave the nest - how to use GOOSE from Python
 
