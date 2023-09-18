@@ -1,0 +1,20 @@
+#
+####### requirements.txt #######
+#
+###### Requirements without Version Specifiers ######
+numpy
+torch
+argparse
+matplotlib
+protfasta
+metapredict
+cython
+PredictDSSP
+
+#
+###### Requirements with Version Specifiers ######
+#   See https://www.python.org/dev/peps/pep-0440/#version-specifiers
+# ex. 
+# my_package == 1.0
+
+   
