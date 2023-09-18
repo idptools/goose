@@ -79,49 +79,41 @@ def sequence(length, **kwargs):
 
     NB:
 
-    1. You can specify NCPR and FCR simultaneously
-    2. You can specify NCPR, FCR, and hydropathy simultaneously
-    3. If you specify sigma you cannot specify NCPR, FCR, or hydropathy
+    1. You can specify NCPR, FCR, kappa, and hydropathy simultaneously.
+    2. You don't need to specify anything other than length. 
 
     Parameters
     ------------
     length : int
-        Defines the length of desired disordered sequence
+        Defines the length of desired disordered sequence. (Required)
 
     FCR : float
-        Defines the requested fraction of charged residues (between 0 and 1)
+        Defines the requested fraction of charged residues (between 0 and 1). (Optional)
 
     NCPR : float 
-        Defines the net charge per residue of generated sequences (between -1 and 1)
-
-    sigma : float
-        Defines the sigma value of generated sequences(between 0 and 1). Sigma reports
-        on the charge asymmetry (between 0 and 1).
+        Defines the net charge per residue of generated sequences (between -1 and 1). (Optional)
 
     hydropathy : float 
-        Defines the mean hydropathy of generated sequence (between 0 and 6.1).
+        Defines the mean hydropathy of generated sequence (between 0 and 6.1). (Optional)
 
     kappa : float
         specify the kappa value of generated sequence. Kappa reports on the charge
-        patterning (between 0 and 1 if there are both positive and negative residues).
+        patterning (between 0 and 1 if there are both positive and negative residues). (Optional)
 
     attempts : int
         Specify the number of times to make the sequence. Default is 20. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence. 
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
         The disorder cutoff threshold. This ensures a sequence has a mean disorder above
-        this cutoff
-
-    attempts : int
-        Number of attempts to try
+        this cutoff. (Optional)
             
 
     Returns
     -----------
-    generated_seq : String
-        Returns a string that is the amino acid sequence
+    generated_seq : string
+        Returns a string that is the amino acid sequence.
 
     """
     # check length. Note this checks min/max length as well as
@@ -178,7 +170,7 @@ def seq_fractions(length, **kwargs):
     Parameters
     ------------
     length : int
-        length of the desired disordered sequence
+        Length of the desired disordered sequence.
 
     <each of the 20 amino acids> : float
         Specify the fraction of the sequence that should be made up of one or more
@@ -190,18 +182,18 @@ def seq_fractions(length, **kwargs):
         acid. The passed dictionary should contain key/value pairs, where
         keys are one of the twenty standard amino acids and values is a
         float between 0 and 1. If amino acids are missing then the default
-        thresholds set by GOOSE are used.
+        thresholds set by GOOSE are used.  (Optional)
 
     cutoff : float
-        The disorder cutoff threshold. Default used is 0.6
+        The disorder cutoff threshold. Default used is 0.6.  (Optional)
     
     attempts : int
         Number of attempts that will be made to generate a given sequence. Default
-        is 100.
+        is 100.  (Optional)
     
     strict_disorder : bool
-        if set to true, will not count a sequence as disordered even if a single amino
-        acid falls below the cutoff value. Default = False.
+        If set to true, will not count a sequence as disordered even if a single amino
+        acid falls below the cutoff value. Default = False.  (Optional)
              
     Returns
     -----------
@@ -253,33 +245,33 @@ def minimal_var(input_sequence, hydropathy = '', FCR = '',
     Parameters
     ------------
     input_sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     hydropathy : float
-        the mean hydropathy of the sequence. If not specified does not change.
+        The mean hydropathy of the sequence. If not specified does not change. (Optional)
 
     FCR : float
-        the fraction of charged residues in the sequence. If not specified does not change.
+        The fraction of charged residues in the sequence. If not specified does not change. (Optional)
 
     NCPR : float
-        the net charge per residue of the sequence. If not specified does not change.
+        The net charge per residue of the sequence. If not specified does not change. (Optional)
 
     SCD : float
-        the charge asymmetry of the sequence. If not specified does not change.
+        The charge asymmetry of the sequence. If not specified does not change. (Optional)
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
-        Must be betwee 0 and 1. 
+        The disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        Must be betwee 0 and 1. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
         to have regions below the disorder threshold *for regions where the input sequence
-        is also below the threshold*. 
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant
+        The final sequence variant.
     '''
 
     # make sure that the input sequence is all caps
@@ -309,23 +301,25 @@ def new_seq_constant_class_var(sequence, attempts=5,
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     attempts : int
         Specify the number of times to make the sequence. Default is 5. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.         
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant
+        The final sequence variant
 
     '''
     # make sure that the input sequence is all caps
@@ -347,30 +341,32 @@ def new_seq_constant_class_var(sequence, attempts=5,
 def constant_class_var(sequence, attempts=5,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    function to generate a variant with the same properties as the 
+    Function to generate a variant with the same properties as the 
     input variant as well as the same order of amino acids as
-    far as class and the same number in each class
+    far as class and the same number in each class.
     
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of
 
     attempts : int
         Specify the number of times to make the sequence. Default is 5. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.    
+        the duration of attempting to make the sequence. (Optional)  
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        The disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant    
+        The final sequence variant.
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -390,30 +386,32 @@ def constant_class_var(sequence, attempts=5,
 def constant_properties_var(sequence, attempts=5,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    function to generate a variant that is completely different
+    Function to generate a variant that is completely different
     in sequence to the input but has all the same overall parameters.
     Does not account for specific classes of residues.
     
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     attempts : int
         Specify the number of times to make the sequence. Default is 5. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.            
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        The disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant    
+        The final sequence Variant.
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -433,37 +431,39 @@ def constant_properties_var(sequence, attempts=5,
 def hydro_class_var(sequence, hydropathy, hydro_error = parameters.HYDRO_ERROR,
     attempts=5, cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    function to take in a sequence and make a variant that adjusts the
+    Function to take in a sequence and make a variant that adjusts the
     hydropathy while keeping the position and number of amino acids the
-    same by class of amino acid
+    same by class of amino acid.
 
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
     
     hydropathy : float
-        the mean hydropathy of the sequence variant. 
+        The mean hydropathy of the sequence variant. 
 
     hydro_erorr : float
-        the allowed error between the specified hydropathy and the
-        hydropathy of the returned sequence
+        The allowed error between the specified hydropathy and the
+        hydropathy of the returned sequence. (Optional)
 
     attempts : int
         Specify the number of times to make the sequence. Default is 5. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.        
+        the duration of attempting to make the sequence. (Optional)   
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        The disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant    
+        The final sequence variant.
 
     '''
     # make sure that the input sequence is all caps
@@ -494,21 +494,23 @@ def constant_residue_var(sequence, constant=[], attempts=5,
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     constant : list
-        A list of residues in the sequence to hold constant
+        A list of residues in the sequence to hold constant.
 
     attempts : int
         Specify the number of times to make the sequence. Default is 5. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.   
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
@@ -541,27 +543,30 @@ def shuffle_var(sequence, shuffle=[], attempts=5,
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     shuffle : list
-        A list of regions to shuffle
+        A list of regions to shuffle.
 
     attempts : int
         Specify the number of times to make the sequence. Default is 5. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.  
+        the duration of attempting to make the sequence. (Optional) 
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        The disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant 
+        The final sequence variant.
     '''
+
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
 
@@ -613,34 +618,35 @@ def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR,
     kappa values have more asymmetrically distributed
     charged residues.
 
-
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     kappa : float
-        The desired kappa value
+        The desired kappa value. 
 
     kappa_error : float
         The allowed error between the desired kappa value and the kappa value of the
-        returned sequence
+        returned sequence. (Optional)
 
     attempts : int
         Specify the number of times to make the sequence. Default is 10. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.  
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant 
+        The final sequence variant.
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -665,32 +671,32 @@ def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR,
 def asymmetry_var(sequence, increase_decrease, aa_class, number_changes=None,
     attempts=10, cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    user facing function for generating a variant that has 
+    User facing function for generating a variant that has 
     altered asymmetry of some class of residues or user specificed
     list of residues.
 
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     increase_decrease : str
-        whether to increase or decrease the asymmetry of a specific 
+        Whether to increase or decrease the asymmetry of a specific 
         residue or residue class. Set to 'increase' or 'decrease'.
 
     aa_class : str or list
         the class of amino acids to alter asymmetry of. Can specify a custom
         class by passing in a list of residues to target or you can just type in
         the name of a canonical class as a string. Possible classes include:
-            'negative' - negative residues
-            'positive' - positive residues    
-            'proline' - prolines
-            'aromatic' - W Y F
-            'aliphatic' - I V L A M
-            'polar' - Q N S T        
+        'negative' - negative residues
+        'positive' - positive residues    
+        'proline' - prolines
+        'aromatic' - W Y F
+        'aliphatic' - I V L A M
+        'polar' - Q N S T        
 
     number_changes : bool
-        the number of amino acids to change in the sequence to change asymmetry. 
+        The number of amino acids to change in the sequence to change asymmetry. 
         By default, will attempt to change asymmetry a number of times equal to
         1/5th the sequence length. Higher numbers increase the amount that the sequence
         becomes more or less symmetrical for the specified residue.
@@ -701,10 +707,12 @@ def asymmetry_var(sequence, increase_decrease, aa_class, number_changes=None,
         the duration of attempting to make the sequence.          
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        The disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
@@ -731,34 +739,37 @@ def asymmetry_var(sequence, increase_decrease, aa_class, number_changes=None,
 
 def fcr_class_var(sequence, FCR, attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    user facing funcitonality to generate variants where
+    User facing funcitonality to generate variants where
     the fcr is changed and the changes to classes of amino
-    acids is minimized
+    acids is minimized.
     
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     FCR : float
-        The desired fcr value
+        The desired fcr value.
 
     attempts : int
         Specify the number of times to make the sequence. Default is 10. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.  
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant     
+        The final sequence variant.
     '''
+
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
 
@@ -783,33 +794,35 @@ def fcr_class_var(sequence, FCR, attempts=10, cutoff=parameters.DISORDER_THRESHO
 
 def ncpr_class_var(sequence, NCPR, attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    user facing funcitonality to generate variants where
+    User facing funcitonality to generate variants where
     the ncpr is changed and the changes to classes of amino
-    acids is minimized
+    acids is minimized.
 
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     NCPR : float
-        The desired ncpr value
+        The desired ncpr value.
 
     attempts : int
         Specify the number of times to make the sequence. Default is 10. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.          
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered. (Optional)
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant      
+        The final sequence variant.
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -835,42 +848,44 @@ def ncpr_class_var(sequence, NCPR, attempts=10, cutoff=parameters.DISORDER_THRES
 def all_props_class_var(sequence, hydropathy=None, FCR=None, NCPR=None, kappa=None,
     attempts=10, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    user facing funcitonality to generate variants where
+    User facing funcitonality to generate variants where
     the ncpr, fcr, and/or hydropathy is/are changed and 
-    the changes to classes of amino acids is minimized
+    the changes to classes of amino acids is minimized.
     
     Parameters
     ------------
     sequence : str
-        the sequence to make a variant of
+        The sequence to make a variant of.
 
     hydropathy : float
-        The desired hydropathy value
+        The desired hydropathy value. (Optional)
 
     FCR : float
-        The desired FCR value
+        The desired FCR value. (Optional)
 
     NCPR : float
-        The desired NCPR value
+        The desired NCPR value. (Optional)
 
     kappa : float
-        The desired kappa value
+        The desired kappa value. (Optional)
 
     attempts : int
         Specify the number of times to make the sequence. Default is 10. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.  
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
-        the disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
+        The disorder cutoff threshold. Closer to 1 has a higher chance of being disordered.
 
     strict : bool
-        whether to use a strict disorder calculation. By default, variants are allowed
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
 
     Returns
     -----------
     final_sequence : str
-        the final sequence variant       
+        The final sequence variant.
     '''
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
@@ -911,45 +926,48 @@ def all_props_class_var(sequence, hydropathy=None, FCR=None, NCPR=None, kappa=No
 def targeted_shuffle_var(sequence, target_aas, attempts=10,
     cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    user facing funcitonality to generate variants where
+    User facing funcitonality to generate variants where
     you can specify residues or classes of residues to shuffle.
 
     parameters
     ----------
     sequence : str
-        the amino acid sequence as a string
+        The amino acid sequence as a string.
 
     target_aas : str or list
-        a list of amino acids to shuffle
+        A list of amino acids to shuffle
         or a class of amino acids to shuffle
         Possible target classes:
-            charged : DEKR
-            polar : QNST
-            aromatic : FYW
-            aliphatic : IVLAM
-            negative: DE
-            positive : KR
+        charged : DEKR
+        polar : QNST
+        aromatic : FYW
+        aliphatic : IVLAM
+        negative: DE
+        positive : KR
+
+        If a list is specified, format should be (for example): 
+        target_aas['K', 'W', 'R', 'Y']
+
 
     attempts : int
         Specify the number of times to make the sequence. Default is 10. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.  
+        the duration of attempting to make the sequence. (Optional)
 
     cutoff : float
         the cutoff value for disorder between 0 and 1. 
-        Higher values have a higher likelihood of being disordered. 
+        Higher values have a higher likelihood of being disordered. (Optional)
 
     strict : bool
-        whether to enforce a strict disorder cutoff value. For variants,
-        Lower than cutoff values are allowed for areas of the input sequence
-        that have below cutoff values. Nothing in the returned sequence
-        will have a higher diosrder value ata ny residue location than the value at that
-        position for the input sequence. 
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
     
     Returns
     -------
-    returns the amino acid sequence as a string. 
+    Returns the amino acid sequence as a string. 
     '''
+
     # make sure that the input sequence is all caps
     sequence = sequence.upper()
 
@@ -971,24 +989,27 @@ def targeted_shuffle_var(sequence, target_aas, attempts=10,
 def excluded_shuffle_var(sequence, exclude_aas, attempts=10,
     cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
-    user facing funcitonality to generate variants where
-    you can specify residues or classes of residues to NOT shuffle
+    User facing funcitonality to generate variants where
+    you can specify residues or classes of residues to NOT shuffle.
 
     parameters
     ----------
     sequence : str
-        the amino acid sequence as a string
+        The amino acid sequence as a string.
 
     exclude_aas : str or list
-        a list of amino acids to not shuffle
+        A list of amino acids to not shuffle
         or a class of amino acids to NOT shuffle
         Possible target classes:
-            charged : DEKR
-            polar : QNST
-            aromatic : FYW
-            aliphatic : IVLAM
-            negative: DE
-            positive : KR
+        charged : DEKR
+        polar : QNST
+        aromatic : FYW
+        aliphatic : IVLAM
+        negative: DE
+        positive : KR
+
+        If a list is specified, format should be (for example): 
+        target_aas['K', 'W', 'R', 'Y']
 
     attempts : int
         Specify the number of times to make the sequence. Default is 10. Greater numbers
@@ -996,19 +1017,17 @@ def excluded_shuffle_var(sequence, exclude_aas, attempts=10,
         the duration of attempting to make the sequence.  
 
     cutoff : float
-        the cutoff value for disorder between 0 and 1. 
+        The cutoff value for disorder between 0 and 1. 
         Higher values have a higher likelihood of being disordered. 
 
     strict : bool
-        whether to enforce a strict disorder cutoff value. For variants,
-        Lower than cutoff values are allowed for areas of the input sequence
-        that have below cutoff values. Nothing in the returned sequence
-        will have a higher diosrder value ata ny residue location than the value at that
-        position for the input sequence. 
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
     
     Returns
     -------
-    returns the amino acid sequence as a string. 
+    Returns the amino acid sequence as a string. 
 
     '''
     # make sure that the input sequence is all caps
@@ -1040,22 +1059,24 @@ def excluded_shuffle_var(sequence, exclude_aas, attempts=10,
 
 def alpha_helix(length, attempts=500):
     '''
-    user facing function for generating a sequence predicted to be an alpha
-    helix based on DSSP scores.
+    User facing function for generating a sequence predicted to be an alpha
+    helix based on DSSP scores. 
 
     Parameters
     ----------
     length : int
-        the length of the desired alpha helix
+        The length of the desired alpha helix.
+        Must be between 8 and 150.
 
     attempts : int
         Specify the number of times to make the sequence. Default is 500. Greater numbers
         of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.  
+        the duration of attempting to make the sequence. (Optional) 
 
-    returns
+    Returns
     -------
     final_seq : str
+        The final sequence generated.
 
     '''
     if length > 150:
@@ -1072,13 +1093,14 @@ def alpha_helix(length, attempts=500):
 
 def beta_strand(length, attempts=5000):
     '''
-    user facing function for generating a sequence predicted to be 
+    User facing function for generating a sequence predicted to be 
     a beta strand based on DSSP scores.
 
     Parameters
     ----------
     length : int
-        the length of the desired beta strand
+        The length of the desired beta strand.
+        Must be between 5 and 34.
     
     attempts : int
         Specify the number of times to make the sequence. Default is 5000. Greater numbers
@@ -1087,7 +1109,8 @@ def beta_strand(length, attempts=5000):
     
     returns
     -------
-    final_seq : str    
+    final_seq : str  
+        Final generated sequence.  
     '''
     if length > 34:
         raise goose_exceptions.GooseInputError('Unable to make beta strands with length greater than 34.')
@@ -1100,22 +1123,23 @@ def beta_strand(length, attempts=5000):
             raise goose_exceptions.GooseFail('Sorry! Goose was unable to make that strand. Try again or try a different length.')
         return final_seq
 
-
-
 def beta_sheet(length):
     '''
-    user facing function for generating a sequence predicted to be 
-    a beta sheet based on DSSP scores. uses coils to connect strands.
+    User facing function for generating a sequence predicted to be 
+    a beta sheet based on DSSP scores. Uses coils to connect strands.
 
     Parameters
     ----------
     length : int
-        the length of the desired beta_sheet helix
+        The length of the desired beta_sheet.
+        Must be between 18 and 400 residues.
 
     returns
     -------
-    final_seq : str    
+    final_seq : str  
+        Final generated sequence.  
     '''
+
     if length < 18:
         raise goose_exceptions.GooseInputError('cannot generate beta sheet less than 18 amino acids.')
     elif length > 400:
@@ -1163,7 +1187,7 @@ def seq_property_library(length,
         A third value can be specified, which will determine the
         interval between the lowest value and the highest value. 
         If this interval is not perfect, then GOOSE will take the 
-        closest value to the desired maximum. 
+        closest value to the desired maximum. (Optional)
 
     NCPR : list of float(s) or float
         The net charge of the sequence as a decimal, between -1 and 1
@@ -1175,7 +1199,7 @@ def seq_property_library(length,
         A third value can be specified, which will determine the
         interval between the lowest value and the highest value. 
         If this interval is not perfect, then GOOSE will take the 
-        closest value to the desired maximum. 
+        closest value to the desired maximum. (Optional)
 
     hydropathy : list of float(s) or float
         The mean hydropathy of the sequence. Lower numbers are less
@@ -1187,7 +1211,7 @@ def seq_property_library(length,
         A third value can be specified, which will determine the
         interval between the lowest value and the highest value. 
         If this interval is not perfect, then GOOSE will take the 
-        closest value to the desired maximum.         
+        closest value to the desired maximum. (Optional)     
 
     kappa : list of float(s) or float
         The charge asymmetry metric. Describes how oppositely charged
@@ -1201,7 +1225,7 @@ def seq_property_library(length,
         A third value can be specified, which will determine the
         interval between the lowest value and the highest value. 
         If this interval is not perfect, then GOOSE will take the 
-        closest value to the desired maximum. 
+        closest value to the desired maximum. (Optional)
 
         Input as a range where the first value is the lower bounds wanted
         for the library and the second value is the upper bounds wanted for
@@ -1210,17 +1234,18 @@ def seq_property_library(length,
 
     cutoff : float
         The cutoff value for disorder as a float. Higher values
-        lead to a more 'strict' cutoff for what is considered to be disordered.
+        lead to a more 'strict' cutoff for what is considered to be disordered. (Optional)
 
     silent_failed_seqs : bool
         Whether to silence any printed warnings of sequences that
-        are not possible to generate due to incompatible charge/hydorpatyh values
+        are not possible to generate due to incompatible charge/hydorpatyh values. (Optional)
 
     beta_mode : bool
-        For testing. Set to True to get some printouts as seqs are being generated.
+        For testing. Set to True to get some printouts as seqs are being generated. (Optional)
 
     random_name : bool
-        whether to use a randomly generated string as the protein name 
+        Whether to use a randomly generated string as the protein name. Helps avoid
+        overwriting sequences. (Optional)
 
     returns
     -------
@@ -1229,6 +1254,7 @@ def seq_property_library(length,
         can be input into the sequence generators downstream. 
         The dict holds the parameter specifications for each sequence in the library.
     '''
+
     # make the list of sequences to generate
     sequence_list = _generate_library_by_parameter_ranges(length=length,
     FCR=FCR, NCPR=NCPR, hydropathy=hydropathy, kappa=kappa, silent_failed_seqs=silent_failed_seqs)
@@ -1267,23 +1293,23 @@ def seq_fractions_library(length, random_name=False, warn_user=True, robust_warn
     and all values less than the respective value for each seq as far as the maximum possible). By default will
     alert the user to any 'failed' generate sequences...
 
-
     Parameters
     ------------
     length : int
-        the length of the sequence to generate
+        The length of the sequence to generate.
 
     random_name : bool
-        whether to make a random name for each sequence.
+        Whether to make a random name for each sequence. Helps avoid overwriting
+        sequences. (Optional)
 
     warn_user : bool
         whether to warn the user if the fractions of a sequence do not match 
         what the user input. This is typically due to length problems (bascially,
         you can specify F=0.95 but will never get 0.95 for F if your sequence is 10
-        amino acids long because you can't have 1/2 a F)
+        amino acids long because you can't have 1/2 a F). (Optional)
 
     robust_warning : bool
-        Whether to print out a robust message for each incorrect sequence highlighting what was wrong
+        Whether to print out a robust message for each incorrect sequence highlighting what was wrong. (Optional)
 
     <each of the 20 amino acids> : float
         Specify the fraction of the sequence that should be made up of one or more
@@ -1295,7 +1321,7 @@ def seq_fractions_library(length, random_name=False, warn_user=True, robust_warn
         acid. The passed dictionary should contain key/value pairs, where
         keys are one of the twenty standard amino acids and values is a
         float between 0 and 1. If amino acids are missing then the default
-        thresholds set by GOOSE are used.
+        thresholds set by GOOSE are used. (Optional.)
 
     Returns 
     --------
