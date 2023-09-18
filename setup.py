@@ -48,10 +48,10 @@ setup(
     # Additional entries you may want simply uncomment the lines you want and fill in the data
     # url='http://www.my_package.com',  # Website
     install_requires=[
+                'cython',
+                'numpy',
                 'metapredict',
                 'PredictDSSP',
-                'cython', 
-                'numpy',
                 'torch',
                 'PredictDSSP'],              # Required packages, pulls from pip if needed; do not use for Conda deployment
     # platforms=['Linux',
