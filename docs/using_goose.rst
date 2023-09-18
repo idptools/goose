@@ -1,5 +1,5 @@
-Time to leave the nest - how to use GOOSE from Python
-======================================================
+Leaving the nest - how to use GOOSE in Python
+==============================================
 To use GOOSE from in Python, first import *create from goose*
 
 .. code-block:: python
@@ -8,32 +8,32 @@ To use GOOSE from in Python, first import *create from goose*
 
 Once *create* has been imported, you can start making sequences and sequence variants!
 
-Generating sequences with specified sequence properties
-=========================================================
+Generating sequences with specified properties
+===============================================
 GOOSE can generate sequences by either specifying sequence properties or fractions of amino acids. 
 
 The ``create.sequence()`` function lets you create sequences predicted to be disordered with various specified properties. 
 
 The only required argument is the length, which must be between 10 and 10,000. In addition, you can also specify several parameters.
 
-1. ``hydropathy``: Average hydropathy, which must be between 0.1 and 6.1.
+1. ``hydropathy``: Average hydropathy, which must be between 0.1 and 6.1. It is called `hydropathy` instead of `hydrophobicity` because we are using a rescaled Kyte-Doolittle hydropathy scale.
 
-2. ``FCR``: The fraction of charged residues, which must be between 0 and 1
+2. ``FCR``: The fraction of charged residues, which must be between 0 and 1.
 
-3. ``NCPR``: The net charge per residue (`NCPR`), which must be between -1 and +1
+3. ``NCPR``: The net charge per residue (`NCPR`), which must be between -1 and +1.
 
 4. ``kappa``: The kappa value is a charge asymmetry parameter where higher values mean greater charge asymmetry. This must be between 0 and 1.
 
-**Importantly, you do not need to specify all of these sequence properties simultaneously.** For example, if you specify FCR and hydropathy, GOOSE will return sequences that have varying NCPR values while making sure that the specified hydropathy and FCR values are what you input. In this way, you can generate many sequences that have the fixed properties that you want to stay fixed, while other properties can vary.
+**Importantly, you do not need to specify all of these sequence properties simultaneously.** For example, if you specify FCR and hydropathy, GOOSE will return sequences that have varying NCPR and kappa values while making sure that the specified hydropathy and FCR values are what you input. In this way, you can generate many sequences that have the fixed properties that you want to stay fixed, while other properties vary.
 
 In addition to the above parameters, you can specify:
 
-1. ``cutoff``:  The disorder cutoff used defines a threshold GOOSE uses to selected/reject sequences. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.5. If you have difficulty making your sequence, you might want to try lowering the cutoff value.
+1. ``cutoff``:  The disorder cutoff defines the value used to accept/reject sequences. A higher cutoff means higher confidence that the sequence is disordered. The default value is 0.5. If you have difficulty making your sequence, you might want to try lowering the cutoff value. We use Metapredict V2-FF in GOOSE (see https://github.com/idptools/metapredict).
 
 2. ``attempts``: The number of attempts defines how many times GOOSE will try to generate a desired sequence. This is relevant because certain parameter combinations of values are more challenging than others, and GOOSE implements a stochastic design algorithm such that different sequences are generated every time. For harder sequence compositions you may need to increase this from the default value. 
 
-Examples of sequence generation
---------------------------------
+Examples of sequence generation by properties
+----------------------------------------------
 
 Just specifying length:
 
@@ -121,8 +121,8 @@ You cannot have values for NCPR where the absolute value of NCPR is greater than
     'GKDETATKRQKAPPVDRREAPAKHKRTTAGRRDRSPKEKETRMGQGGPEGESPSSGGDETEGIMARKASEDSTPGKMNSSRDRSDGEHGETPPVEPDPNH'
 
 
-Generating sequences by specifying fractions of amino acids in Python
-=======================================================================
+Generating Sequences specifying Fractions of Amino Acids
+=========================================================
 
 The ``create.seq_fractions()`` function lets you create sequences predicted to be disordered with specified fractions of various amino acids. With this function, you can specify multiple amino acids simultaneously. Each fraction should be specified using a decimal value (for example, if you want one-tenth of the amino acids to be alanine use ``A=0.1``).
 
@@ -151,20 +151,21 @@ For each amino acid, we had GOOSE attempt (at least 10,000 times for each value)
     "Y" - 0 : 0.99, 
     "V" - 0 : 0.71
 
-Note that if you pass in requested fractions those fractions must be equal to or less than 1.
+Note that if you pass in requested fractions, those fractions must be equal to or less than 1.
 
 In addition to specifying the specific amino acid fractions, other parameters can be passed to the `create.seq_fractions()` function:
 
-1. ``cutoff``:  The disorder cutoff used defines a threshold GOOSE uses to selected/reject sequences. 
+1. ``cutoff``:  The disorder cutoff used defines a threshold GOOSE uses to accept/reject sequences. 
 
 2. ``attempts``: The number of attempts defines how many times GOOSE will try to generate a desired sequence. 
 
 3. ``max_aa_fractions``: If you wish to generate sequences with extreme compositions it may be necessary to over-ride the default max fractional values. This can be achieved by passing a max_aa_fractions dictionary, which should specify key-value pairs for amino acid-max fraction information. 
 
 
-#### Examples
+Examples of Sequence Generation by Fractions
+---------------------------------------------
 
-**Just specifying a single amino acid fraction:**
+**Specifying a single amino acid fraction:**
 
 .. code-block:: python
 
@@ -181,7 +182,7 @@ In addition to specifying the specific amino acid fractions, other parameters ca
 **Note** - 
 Some combinations of amino acids are simply not possible to make that are predicted to be disordered using the default settings. Specifically, specifying high fractions of multiple aliphatics or aromatics may not be predicted to be disordered using the default cutoff value.
 
-**Specifying none of a specific amino acids:**
+**Excluding a specific amino acids:**
 If you want to exclude an amino acid, you can set it equal to 0.
 
 .. code-block:: python
@@ -192,6 +193,8 @@ If you want to exclude an amino acid, you can set it equal to 0.
 
 **Overriding default max fractions:**  
 
+.. code-block:: python
+
     create.seq_fractions(100, Y=0.5, max_aa_fractions={'Y':1}) 
     'SSYYYYYSYSSYYSYSSGHYYSYSSYYYSSSYYSSYGGTYGYYSYSYGYYSSYYYSYSSNYYYYYYYYSSYGNSGYGGYYSYYSSSQHHYSSYYYSYYSY'
  
@@ -199,11 +202,11 @@ If you want to exclude an amino acid, you can set it equal to 0.
 Creating Sequence Variants in Python
 =====================================
 
-Apart from simply generating sequences, GOOSE can help you make different types of sequence variants. In contrast to when you generate a sequence, the primary input into the sequence variant functions are your sequence of interest. 
+Apart from simply generating sequences, GOOSE can help you make different types of sequence variants. In contrast to when you generate a sequence, the primary input for the sequence variant functions is your sequence of interest. 
 
 *Disorder cutoffs when creating sequence variants*:
 
-When making sequence variants, by default GOOSE will use the predicted disorder values of your input sequence as the threshold disorder values for the returned sequence. However, you can change this by setting ``strict_disorder`` to *True*.
+When making sequence variants, by default GOOSE will use the predicted disorder values of your input sequence as the threshold disorder values for the returned sequence. However, you can change this by setting ``strict_disorder=True``, which will make GOOSE use the cutoff disorder value across the entire sequence.
 
 Types of sequence variants
 ---------------------------
@@ -234,18 +237,18 @@ Types of sequence variants
 
 ``all_props_class_var()`` - Function to make a sequence variant that adjusts the FCR, NCPR, hydropathy, and kappa values while minimizing changes to the position and number of amino acids by class. If you don't specify one of the values, GOOSE will keep it the same as it was in the input sequence.
 
-**A note about FCR, NCPR, and all_props_class_var variants**
+**A note about FCR_class(), NCPR_class(), and all_props_class_var() variants** - 
 For the ``fcr_class_var()``, ``ncpr_class_var()``, and ``all_props_class_var()`` variants, the changes to amino acid by class is **MINIMIZED** but not necessarily kept exactly the same. This is because if you (for example) change FCR in your sequence, it is IMPOSSIBLE to keep the order and number of all amino acids by class the same in the returned variant. Similarly, with the NCPR variant, if you change the NCPR to the extent that the FCR has to change as well, then it will change the order / number of amino acids by class.
 
-For all class variants, apart from user-specified lists of residues, classes can also be specified. The classes are categorized as followed:
+For all some variants, in addition to being able to specify residues using your own custom-defined list, you can specify amino acids by class. The classes are categorized as followed:
 
-aromatic : 'F', 'W', 'Y' 
-polar : 'Q', 'N', 'S', 'T' 
-positive : 'K', 'R' 
-negative : 'D', 'E' 
-hydrophobic' : 'I', 'V', 'L', 'A', 'M'
-Special Cases : 'C', 'P', 'G', and 'H'
-The 'Special Cases' residues are, for any function that accounts for the class of a residue, not interchangable with any other residues. 
+``aromatic`` : 'F', 'W', 'Y' 
+``polar`` : 'Q', 'N', 'S', 'T' 
+``positive`` : 'K', 'R' 
+``negative`` : 'D', 'E' 
+``hydrophobic``' : 'I', 'V', 'L', 'A', 'M'
+``Special Cases`` : 'C', 'P', 'G', and 'H'
+The ``Special Cases`` residues are, for any function that accounts for the class of a residue, not interchangable with any other residues. 
 
 The constant_class_var()
 ------------------------
@@ -477,7 +480,7 @@ Now we can take this newly generated and make the charges more moderately symmet
     create.kappa_var(previous_variant, kappa=0.15)
     QEEEDRDKEKERDRDRDKNQNQNQNQNKKRQN
 
-**note** GOOSE will allow deviation from your input kappa value by up to 0.02. This is to keep GOOSE from being extremely slow. If you need something closer to your desired value, you can try generating a few variants. You'll likely quickly get the exact value you want within a few tries.
+**Note** - GOOSE will allow deviation from your input kappa value by up to 0.03. This is to keep GOOSE from being extremely slow. If you need something closer to your desired value, you can try generating a few variants. You'll likely quickly get the exact value you want within a few tries.
 
 
 The all_props_class_var()
@@ -523,10 +526,12 @@ and then you have a full suite of sequence anlysis tools. The analyze module inc
 3. Net charge per residue (NCPR)
 4. Average hydropathy
 5. kappa - A measurement of charge asymmetry where the max value (1) is the greatest possible charge asymmetry for a given sequence and the min value (0) is the most symmetrical positions possible for oppositely charged residues.
-6. Predicted phosphosites for S, T, and Y phosphorylation sites
-7. Predicted cellular localization signals including those for nuclear localization, nuclear export and mitochondrial targeting.
-8. Predicted transcriptional activation domains
-9. The fractions of all amino acids in the sequence.
+6. The fractions of all amino acids in the sequence.
+7. Predicted phosphosites for S, T, and Y phosphorylation sites
+8. Predicted cellular localization signals including those for nuclear localization, nuclear export and mitochondrial targeting.
+9. Predicted transcriptional activation domains
+10. Predicted radius of gyration (Rg) and predicted end-to-end distance (Re)
+
 
 Using the analyze module in GOOSE
 ----------------------------------
@@ -627,7 +632,7 @@ Apart from generating individual sequences, you can also generate libraries of s
 Generating sequence libraries by properties
 --------------------------------------------
 
-To generate sequence libraries by specifying properties, use the ``create.seq_property_library()`` function. An important things to note **GOOSE automatically gets rid of sequences not possible to make**. For example, a sequence with an NCPR value where the absolute value of the NCPR value is greater than the FCR will not be included because it's not possible to generate. In addition, GOOSE will check the hydropathy value and see if it is possible based on the FCR. If it's not possible, GOOSE will not make it. However **for incompatible hydropathy / charge values**, GOOSE will print out the sequences it was not able to generate and print them unless you set ``silent_failed_seqs`` to True. In this function, you can specify the length, FCR, NCPR, hydropathy, kappa, and disorder cutoff values. **Note** GOOSE will do it's best to get the kappa value spot on, but it does allow for some error. It will also also adjust the FCR to match the NCPR if the two values are not compatible. This function will return a dictionary of sequences where each sequence is named after the property specified for generating the sequence.
+To generate sequence libraries by specifying properties, use the ``create.seq_property_library()`` function. An important things to note **GOOSE automatically gets rid of sequences not possible to make**. For example, a sequence with an NCPR value where the absolute value of the NCPR value is greater than the FCR will not be included because it's not possible to generate. In addition, GOOSE will check the hydropathy value and see if it is possible based on the FCR. If it's not possible, GOOSE will not make it. However **for incompatible hydropathy / charge values**, GOOSE will print out the sequences it was not able to generate and print them unless you set ``silent_failed_seqs`` to True. In this function, you can specify the length, FCR, NCPR, hydropathy, kappa, and disorder cutoff values. **Note** - GOOSE will do it's best to get the kappa value spot on, but it does allow for some error. It will also also adjust the FCR to match the NCPR if the two values are not compatible. This function will return a dictionary of sequences where each sequence is named after the property specified for generating the sequence.
 
  
 For this function, you can specify the property as a single value, a list of two values, or a list with three values where GOOSE will make all possible values from the first number of the list to the second number of the list at an interval equal to the third value of the list.
@@ -640,8 +645,10 @@ For this function, you can specify the property as a single value, a list of two
 
     {'>FCR_0.1_NCPR_0_hydropathy_2.0': 'QKPSQNKNHTPTGQGNSHPQDHPEQQQQQPPQQQSTQNTP', '>FCR_0.1_NCPR_0_hydropathy_2.5': 'NSNSTSENNKQNNGPHSPGTSQPPNFQPSAPQENSGNGKH', '>FCR_0.1_NCPR_0_hydropathy_3.0': 'SAPTQDPQSHYTQGGNEQTGGSPTGPPGWSHAKRSPSGQG', '>FCR_0.1_NCPR_0_hydropathy_3.5': 'NRSSGSCAPLNSAGGTTPGNKEVADPPPPGSTGSWGHQTH', '>FCR_0.1_NCPR_0_hydropathy_4': 'PSTHSSAGPSDTSASSSARSVPSSDSAVKSSCGSGASTTS', '>FCR_0.1_NCPR_0.1_hydropathy_2.0': 'QPPSPHQPLSHHSQQHNGNTKKQKSHQPNKNNSHPNNHNQ', '>FCR_0.1_NCPR_0.1_hydropathy_2.5': 'SGHSQGQNTHTKQGRQRGHGHVSPNQQHSSTPQHMQSPKT', '>FCR_0.1_NCPR_0.1_hydropathy_3.0': 'TSPSNHPQKPGPTPAGMQTGGTPGKTKHPHHPGSKLQQYT', '>FCR_0.1_NCPR_0.1_hydropathy_3.5': 'SAMLNASAGNPSGGQQRNSANLGPSRTTQKTSAQARSPTG', '>FCR_0.1_NCPR_0.1_hydropathy_4': 'PAPKPGAKVVSTSALQRVAKSSPPACSPGTHPGSSPTTSS'}
 
-In the example above, the first value in the function is the length. This value must be a single integer value and is **required**. The second value, ``FCR`` is specified as a single value, so all sequences generated will have that value. The third value ``NCPR`` is specified as a list, so GOOSE made a set of sequences where NCPR was equal to the first value in the list and then a set where NCPR was equal to the second value in the list. Finally, ``hydropathy`` was set equal to a list with 3 values. This means GOOSE was told to generate sequences with a range of the first value of the list ``2``, to the second value in the list, ``4``, at an interval equal to the third value of the list ``0.5``. This resulted in the creation of sequences with values 2.0, 2.5, 3.0, 3.5, and 4.0.
+In the example above, the first value ``40`` in the function is the length. This value must be a single integer value and is **required**. The second value, ``FCR=0.1`` is specified as a single value, so all sequences generated will have that value. The third value ``NCPR=[0, 0.1]`` is specified as a list, so GOOSE made a set of sequences where NCPR was equal to the first value in the list and then a set where NCPR was equal to the second value in the list. Finally, ``hydropathy=[2, 4, 0.5]`` was set equal to a list with 3 values. This means GOOSE was told to generate sequences with a range of the first value of the list ``2``, to the second value in the list, ``4``, at an interval equal to the third value of the list ``0.5``. This resulted in the creation of sequences with values 2.0, 2.5, 3.0, 3.5, and 4.0.
 **If the third value, which is the interval value, cannot be equally used between the range of sequences, GOOSE will just use the maximum value as the last value.** For example, hydropathy = [2, 4, 1.1] would result in hydropathy values of 2, 3.1, and 4.
+
+**Additional Usage** - 
 In addition, you can add a random name to the end of each sequence name by setting ``random_name=True``. This way, if you combine multiple libraries (if you want replicates of sequences with the varying properties you specify), you don't need to worry about overwriting anything due to a shared name. 
 
 **Example**
@@ -667,8 +674,8 @@ For this function, you can specify the amino as a single value, a list of two va
 
     {'>A_0.1_D_0.1_K_0.1': 'SKSSSGTKEHSEAEDNGEDGAATNHDHNDEHGRATGADDKKNHGHTKEHGAQHQSSQGNNNHDKSNSTRDAHNGARSDKRARNKEKQHQKGQAGENDHGE', '>A_0.1_D_0.1_K_0.15': 'EAAGGHQHGKRQSGKSQSADENKGRKKDESTNKDNTSRQSRETASQGKAKKNNGGPKKAGNQDDAQDESEGSQRSSQQAKDAKNGDDQTKTDEGHSTKAQ', '>A_0.1_D_0.1_K_0.2': 'TGGAGKDASAGDATKDRAKSDNKGKTKKERAAKTQNKSHNQAQEKRTGESSHKEKRKDGENQAKSHSKNHKQRKPADTQKTEDERHEEHGHEDKKDEDEQ', '>A_0.1_D_0.2_K_0.1': 'DSSNATTSNDQDDKSHDSNTQAHDQREVGNSKDSNSNASDDENKAGQENTSAEEDNPDDHEEKDDNDRDGHAKKKTSADKDGDNDREAKASHNGKNAEEG', '>A_0.1_D_0.2_K_0.15': 'DQGDEKAQTDASKSKNDTGAADKHGKAKQTGKEEENQDDGKTDDHSGPTDGQDNRGDKKSEGTDDKAKDQQDDTDEQATTTTKRAGHAADEDSTNRKKRS', '>A_0.1_D_0.2_K_0.2': 'SDDKDRRDKQAHSNKHADAKSNEASHRKKHAGKHGQDTGKKDDGQNKDSADKTHKTKDGDSEQKAHDTSEADQAKKDGDHNGEDGDEDGDKAGKKQGNKN'}
 
-In the example above, the first value in the function is the length. This value must be a single integer value and is **required**. The second value, ``A`` is specified as a single value, so all sequences generated will have that value. The third value ``D`` is specified as a two item list, so GOOSE made a set of sequences where the fraction of ``D`` is either 0.1 or 0.2. Finally, ``K`` was set equal to a list with 3 values. This means GOOSE was told to generate sequences with a range of the first value of the list ``0.1``, to the second value in the list, ``0.2``, at an interval equal to the third value of the list ``0.05``. This resulted in the creation of sequences with values 0.1, 0.15, 0.2.
-**If the third value, which is the interval value, cannot be equally used between the range of values from the lowest to the highest, GOOSE will just use start at the lowest value and increase until it can't any more and then will add the maximum value.** For example, K = [0.1, 0.2, 0.08] would result in K fraction values of , 0.1, 0.18, and 0.2.
+In the example above, the first value ``100`` in the function is the length. This value must be a single integer value and is **required**. The second value, ``A=0.1`` is specified as a single value, so all sequences generated will have that value. The third value ``D=[0.1, 0.2]`` is specified as a two item list, so GOOSE made a set of sequences where the fraction of **D** is either 0.1 or 0.2. Finally, ``K=[0.1, 0.2, 0.05]`` was set equal to a list with 3 values. This means GOOSE was told to generate sequences with a range of the first value of the list ``0.1``, to the second value in the list, ``0.2``, at an interval equal to the third value of the list ``0.05``. This resulted in the creation of sequences with values 0.1, 0.15, 0.2.
+**If the third value, which is the interval value, cannot be equally used between the range of values from the lowest to the highest, GOOSE will just use start at the lowest value and increase until it can't any more and then will add the maximum value.** For example, ``K = [0.1, 0.2, 0.08]`` would result in K fraction values of , 0.1, 0.18, and 0.2.
 In addition, you can add a random name to the end of each sequence name by setting ``random_name=True``. 
 
 **Additional usage**
@@ -689,7 +696,5 @@ Some other things you can specify are:
 
 In the above example, we manually overrode the max fraction for K and set it to 0.16. This eliminated sequences where the K fraction was 0.2 like in the example above where the max_aa_Fractions were left as default.
 
-
-### Copyright
 
 Copyright (c) 2023, Ryan Emenecker - Holehouse Lab
