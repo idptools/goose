@@ -2,13 +2,13 @@
 ####### requirements.txt #######
 #
 ###### Requirements without Version Specifiers ######
+cython
 numpy
 torch
 argparse
 matplotlib
 protfasta
 metapredict
-cython
 PredictDSSP
 
 #
