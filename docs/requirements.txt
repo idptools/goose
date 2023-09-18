@@ -5,6 +5,7 @@
 cython
 numpy
 torch
+sphinx-rtd-theme
 argparse
 matplotlib
 protfasta
