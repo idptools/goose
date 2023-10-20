@@ -224,7 +224,7 @@ def predict_polymer_props(sequence):
         dictionary of polymer properties, specifically the Rg and Re
     '''
     seq=pr(sequence)
-    Rg=seq.predictor.radius_of_gyration()
-    Re=seq.predictor.end_to_end_distance()
+    Rg=round(seq.predictor.radius_of_gyration(),4)
+    Re=round(seq.predictor.end_to_end_distance(),4)
     return {'Rg':Rg,'Re':Re}
 

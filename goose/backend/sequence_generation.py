@@ -48,24 +48,21 @@ def check_disorder(sequence, disorder_threshold=parameters.DISORDER_THRESHOLD, s
     else:
         sequence_disorder=meta.predict_disorder(sequence)
 
-    # see what the min disorder is
+    # see what the min disorder is. If min is over thresh, good to go. 
     min_disorder = min(sequence_disorder)
     if min_disorder >= disorder_threshold:
         return True
-
-    # if the minimum disorder is very low, just return false.
-    elif min_disorder < 0.25:
-        return False
-    # see if sequence is likely to be disorderd
+    
+    # Otherwise, check if we are strict with the check disorder functionality. 
     else:
         # if strict set to True, nothing can be below threshold. Return False
         if strict==True:
             return False
-        # if strict not set to True, can have some 'order'
+        # if strict not set to True, can have some residues below thresh value. 
         else:
             # allow a little bit of 'order'
             cur_order_streak = 0
-            # keep track of total number of disordered residues
+            # keep track of total number of ordered residues
             total_ordered_residues = 0
             # allow up to 5 % of residues to be 'ordered' provided they aren't consecutive
             allowed_order_residues = round(0.05*len(sequence))
@@ -88,13 +85,18 @@ def check_disorder(sequence, disorder_threshold=parameters.DISORDER_THRESHOLD, s
                     total_ordered_residues += 1
                 else:
                     cur_order_streak = 0
+                # if our current order streak greater than the consecutive allowed or our
+                # total number of residues above concescutive allowed, return False
                 if cur_order_streak > consec_allowed or total_ordered_residues > allowed_order_residues:
                     return False
+    # finally, return True. Only get here if we have consecutive ordered residues below
+    # the above calculated max and total ordered below above calculated max. 
     return True
 
 
-def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, sigma=None, attempts=20, 
-    allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
+def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, sigma=None, attempts=50, 
+    allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = parameters.DISORDER_THRESHOLD, 
+    strict_disorder=False, exclude = []):
     '''
     Function to actually generate a disordered sequence.
     General idea is to first generate the sequecne and see
@@ -138,6 +140,9 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
         the disorder theshold provided it is minimal. See check_disorder for more
         details.
 
+    exclude : list
+        A list of residues to exclude from sequence generation. 
+
     Returns
     -------
     final_seq : String
@@ -155,7 +160,7 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
         # try to build the sequence
         try:
             attempted_seq = create_seq_by_props(length, FCR=FCR, NCPR=NCPR, hydropathy=hydropathy, attempts=20, 
-            allowed_hydro_error = parameters.HYDRO_ERROR)
+            allowed_hydro_error = parameters.HYDRO_ERROR, exclude=exclude)
 
         # if attempt to build the sequence failed, continue back at the 
         # beginning of the loop

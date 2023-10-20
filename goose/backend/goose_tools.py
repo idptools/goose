@@ -1,9 +1,4 @@
 '''
-various tools for GOOSE
-'''
-
-
-'''
 various essential tools to help GOOSE take flight
 '''
 import random

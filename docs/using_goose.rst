@@ -32,6 +32,8 @@ In addition to the above parameters, you can specify:
 
 2. ``attempts``: The number of attempts defines how many times GOOSE will try to generate a desired sequence. This is relevant because certain parameter combinations of values are more challenging than others, and GOOSE implements a stochastic design algorithm such that different sequences are generated every time. For harder sequence compositions you may need to increase this from the default value. 
 
+3. ``exclude``: A list of residues to exclude from your generated sequence. **NOTE** - If you specify FCR or NCPR, you CANNOT have any charged residues in the ``exclude`` list. Additionally, **you can not specify more than 10 residues to be excluded**. 
+
 Examples of sequence generation by properties
 ----------------------------------------------
 
@@ -120,6 +122,16 @@ You cannot have values for NCPR where the absolute value of NCPR is greater than
     create.sequence(100, hydropathy = 2.65, NCPR = 0.0, FCR = 0.4, kappa=0.2)
     'GKDETATKRQKAPPVDRREAPAKHKRTTAGRRDRSPKEKETRMGQGGPEGESPSSGGDETEGIMARKASEDSTPGKMNSSRDRSDGEHGETPPVEPDPNH'
 
+
+**Hydropathy, FCR, NCPR, excluding values, and increasing attempt number**
+
+.. code-block:: python
+
+    create.sequence(100, FCR=0.6, NCPR=0.6, hydropathy=3, exclude=['C'], attempts=1000)
+    'VSKKLKAKIKSPKRKRKKKKLKVKARSRKRAKLSVVKRKRMSVKVAKRSKVRAFMVRRKKKPKPFKRKVKAVRKKKRRPKKKRIAKKRVKKVKRKRKKVI'
+
+
+**Note** - Generating this sequence fails frequently. To bypass this I increased the number of attempts by specifying ``attempts=100``. It should be noted that creation of this sequence still fails occassionally even when attempts is increased to 1000. 
 
 Generating Sequences specifying Fractions of Amino Acids
 =========================================================
@@ -219,7 +231,7 @@ Types of sequence variants
 
 ``constant_residue_var()`` - Variant where specific residues are held constant. The variant will have the same aggregate properties as the original sequence.
 
-``shuffle_var()`` - Variant that will shuffle specific regions of an IDR. Multiple regions can be specified simultaneously.
+``region_shuffle_var()`` - Variant that will shuffle specific regions of an IDR. Multiple regions can be specified simultaneously.
 
 ``excluded_shuffle_var()`` - Variant where you can specifically shuffle a sequence *except for any specified residues.*
 
@@ -306,18 +318,18 @@ The constant_residue_var()
     QEQSANDQQETTPKQEAPSPQQASQQHEGQQPQ
 
 
-The shuffle_var()
+The region_shuffle_var()
 -------------------
 
-``shuffle_var()`` - Variant that will shuffle specific regions of an IDR. Multiple regions can be specified simultaneously.
-**Note** - The shuffle_var does **NOT** use index values like you would normally in Python. For the shuffle_var, 1 = the first amino acid in the sequence **NOT 0**. 
+``region_shuffle_var()`` - Variant that will shuffle specific regions of an IDR. Multiple regions can be specified simultaneously.
+**Note** - The region_shuffle_var does **NOT** use index values like you would normally in Python. For the region_shuffle_var, 1 = the first amino acid in the sequence **NOT 0**. 
 
 **Example with one shuffled region**
 
 .. code-block:: python
 
     test = 'QQQEEENNNDDDQQQEEENNNDDD'
-    create.shuffle_var(test, shuffle=[3,9])
+    create.region_shuffle_var(test, shuffle=[3,9])
     QQNQENNEEDDDQQQEEENNNDDD
 
 **Example with two residues constant**
@@ -325,7 +337,7 @@ The shuffle_var()
 .. code-block:: python
 
     test = 'QQQEEENNNDDDQQQEEENNNDDD'
-    create.shuffle_var(test, shuffle=[[3,9], [15, 23]])
+    create.region_shuffle_var(test, shuffle=[[3,9], [15, 23]])
     QQNNEEQNEDDDQQNDENNEDEQD
 
 **Notice that when you specify 2 regions, you use a list of lists (a nested list).**

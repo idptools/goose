@@ -129,12 +129,12 @@ class Protein:
         properties_dict = {}
         
         properties_dict['length']     = self.length
-        properties_dict['FCR']        = self.FCR
-        properties_dict['NCPR']       = self.NCPR
-        properties_dict['hydropathy'] = self.hydropathy
-        properties_dict['sigma']      = self.sigma
-        properties_dict['SCD']        = self.SCD
-        properties_dict['kappa']      = self.kappa
+        properties_dict['FCR']        = round(self.FCR,5)
+        properties_dict['NCPR']       = round(self.NCPR,5)
+        properties_dict['hydropathy'] = round(self.hydropathy,5)
+        properties_dict['sigma']      = round(self.sigma,5)
+        properties_dict['SCD']        = round(self.SCD,5)
+        properties_dict['kappa']      = round(self.kappa,5)
         
         return properties_dict
 
@@ -142,9 +142,9 @@ class Protein:
         properties_dict = {}
 
         properties_dict['length']     = self.length
-        properties_dict['FCR']        = self.FCR
-        properties_dict['NCPR']       = self.NCPR
-        properties_dict['hydropathy'] = self.hydropathy
+        properties_dict['FCR']        = round(self.FCR,5)
+        properties_dict['NCPR']       = round(self.NCPR,5)
+        properties_dict['hydropathy'] = round(self.hydropathy,5)
 
         return properties_dict
 

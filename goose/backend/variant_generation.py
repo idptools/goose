@@ -7,7 +7,7 @@ from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
 from goose.backend.protein import Protein
 from goose.goose_exceptions import GooseError, GooseInputError, GooseFail, GooseException
-from goose.backend.variant_generation_backend import create_kappa_variant, create_shuffle_variant, create_constant_residue_variant, create_hydropathy_class_variant, create_new_variant, create_constant_class_variant, create_new_var_constant_class_nums, create_asymmetry_variant, create_fcr_class_variant, create_ncpr_class_variant, create_all_props_class_variant
+from goose.backend.variant_generation_backend import create_kappa_variant, create_region_shuffle_variant, create_constant_residue_variant, create_hydropathy_class_variant, create_new_variant, create_constant_class_variant, create_new_var_constant_class_nums, create_asymmetry_variant, create_fcr_class_variant, create_ncpr_class_variant, create_all_props_class_variant
 
 import metapredict as meta
 
@@ -689,7 +689,7 @@ def gen_constant_residue_variant(sequence, constant_residues = [],
 
 
 
-def gen_shuffle_variant(sequence, shuffle_regions = [], use_index=False,
+def gen_region_shuffle_variant(sequence, shuffle_regions = [], use_index=False,
     attempts=5, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
     '''
     Function that will shuffle specific regions of an IDR.
@@ -733,7 +733,7 @@ def gen_shuffle_variant(sequence, shuffle_regions = [], use_index=False,
     starting_disorder = meta.predict_disorder(sequence)
 
     for attempt_num in range(0, attempts):
-        disordered_seq = create_shuffle_variant(sequence, 
+        disordered_seq = create_region_shuffle_variant(sequence, 
             shuffle_regions=shuffle_regions, use_index=use_index)
         if sequence_variant_disorder(disordered_seq, starting_disorder, 
             cutoff_val=disorder_threshold, strict=strict_disorder) == True:
@@ -785,9 +785,11 @@ def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_
     starting_disorder = meta.predict_disorder(sequence)
 
     for attempt_num in range(0, attempts):
-        disordered_seq = create_kappa_variant(sequence, kappa=kappa, 
-            allowed_kappa_error = allowed_kappa_error)
-
+        try:
+            disordered_seq = create_kappa_variant(sequence, kappa=kappa, 
+                allowed_kappa_error = allowed_kappa_error)
+        except:
+            continue
         if sequence_variant_disorder(disordered_seq, starting_disorder, 
             cutoff_val=disorder_threshold, strict=strict_disorder) == True:
             # if passes the 'disorder test', return the seq

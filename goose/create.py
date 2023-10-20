@@ -8,7 +8,7 @@
 ##Handles the primary functions
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var']
+__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var']
 
 import os
 import sys
@@ -31,7 +31,7 @@ from goose.backend.goose_tools import check_valid_kwargs as _check_valid_kwargs
 
 # variant generation stuff
 from goose.backend.variant_generation import gen_kappa_variant as _gen_kappa_variant
-from goose.backend.variant_generation import gen_shuffle_variant as _gen_shuffle_variant
+from goose.backend.variant_generation import gen_region_shuffle_variant as _gen_region_shuffle_variant
 from goose.backend.variant_generation import gen_constant_residue_variant as _gen_constant_residue_variant
 from goose.backend.variant_generation import gen_hydropathy_class_variant as _gen_hydropathy_class_variant
 from goose.backend.variant_generation import gen_new_variant as _gen_new_variant
@@ -108,6 +108,10 @@ def sequence(length, **kwargs):
     cutoff : float
         The disorder cutoff threshold. This ensures a sequence has a mean disorder above
         this cutoff. (Optional)
+
+    exclude : list
+        A list of residues to exclude from sequence generation. 
+        Cannot exclude charged residues if FCR is specified. 
             
 
     Returns
@@ -120,10 +124,19 @@ def sequence(length, **kwargs):
     # casts a string length to an int
     _length_check(length)
 
+    # verify that charged residues not in exclude if FCR or NCPR specified.
+    if 'exclude' in kwargs:
+        if 'FCR' in kwargs or 'NCPR' in kwargs:
+            for val in kwargs['exclude']:
+                if val in ['R', 'K', 'D', 'E']:
+                    raise goose_exceptions.GooseInputError('Cannot exclude charged residues if FCR or NCPR specified.')
+        if len(kwargs['exclude']) > 10:
+            raise goose_exceptions.GooseInputError('Cannot exclude more than 10 residues.')
+
     # check we passed in acceptable keyword arguments. At this stage, if a keyword
     # was passed that is not found in the list passed to _check_valid_kwargs then
     # an exception is raised. 
-    _check_valid_kwargs(kwargs, ['FCR','NCPR','sigma', 'hydropathy', 'kappa', 'cutoff', 'attempts'])
+    _check_valid_kwargs(kwargs, ['FCR','NCPR','sigma', 'hydropathy', 'kappa', 'cutoff', 'attempts', 'exclude'])
     
 
     # First correct kwargs. Do this first because
@@ -134,10 +147,15 @@ def sequence(length, **kwargs):
     # now make sure that the input vals are within appropriate bounds
     _check_props_parameters(**kwargs)
 
+    # add exclude to kwargs if not in. 
+    if 'exclude' not in kwargs:
+        kwargs['exclude']=[]
+
     # make the sequence
     try:
         generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
-            sigma = kwargs['sigma'], attempts = kwargs['attempts'], allowed_hydro_error = parameters.HYDRO_ERROR, disorder_threshold = kwargs['cutoff'])
+            sigma = kwargs['sigma'], attempts = kwargs['attempts'], allowed_hydro_error = parameters.HYDRO_ERROR,
+            disorder_threshold = kwargs['cutoff'], exclude=kwargs['exclude'])
     except:
         raise goose_exceptions.GooseFail('Unable to generate sequence. Please try again with different parameters or a lower cutoff value.')
 
@@ -534,7 +552,7 @@ def constant_residue_var(sequence, constant=[], attempts=5,
 
 
 
-def shuffle_var(sequence, shuffle=[], attempts=5,
+def region_shuffle_var(sequence, shuffle=[], attempts=5,
     cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     Function that will shuffle specific regions of an IDR.
@@ -602,7 +620,7 @@ def shuffle_var(sequence, shuffle=[], attempts=5,
                         curvals.append(i)
 
     try:
-        final_sequence = _gen_shuffle_variant(sequence, shuffle_regions=shuffle, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
+        final_sequence = _gen_region_shuffle_variant(sequence, shuffle_regions=shuffle, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a lower cutoff value or with different constant residues.')
     return final_sequence

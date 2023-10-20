@@ -44,35 +44,18 @@ def optimal_residue_key(four_amino_acids):
     # make an empty string to hold the 4 amino acids
     key = ""
 
+    # dict for key
+    keydict={'F':'W', 'W':'W', 'Y':'W', 'C':'C',
+            'L':'L', 'V':'L', 'I':'L', 'M':'M',
+            'A':'A', 'H':'H', 'K':'K', 'R':'K',
+            'Q':'Q', 'N':'Q', 'D':'D', 'E':'D',
+            'G':'G', 'S':'G', 'T':'T', 'P':'P'}
+
+
     # for the amino acids in the input amino acids, change each one
     # to the corresponding amino acid used for the dis_val_dict
     for i in four_amino_acids:
-        if i == "F" or i == "W" or i == "Y":
-            key += "W"
-        elif i == "C":
-            key += "C"
-        elif i == "L" or i == "V" or i == "I":
-            key += "L"
-        elif i == "M":
-            key += "M"
-        elif i == "A":
-            key += "A"
-        elif i == "H":
-            key += "H"
-        elif i == "K" or i == "R":
-            key += "K"
-        elif i == "Q" or i == "N":
-            key += "Q"
-        elif i == "D" or i == "E":
-            key += "D"
-        elif i == "G" or i == "S":
-            key += "G"
-        elif i == "T":
-            key += "T"
-        elif i == "P":
-            key += "P"
-        else:
-            continue
+        key+=keydict[i]
     
     # return the final 4 amino acids that are the key to the 
     # dis_val_dict
@@ -553,8 +536,7 @@ def check_hydropathy(sequence, objective_hydropathy, hydro_error = parameters.HY
 
     '''
     cur_hydro = round(Protein(sequence).hydropathy, 5)
-    error = abs(cur_hydro-objective_hydropathy)
-    if error <= hydro_error:
+    if abs(cur_hydro-objective_hydropathy) <= hydro_error:
         return True
     return False
 
@@ -602,7 +584,6 @@ def partially_random_optimization(sequence, nonrandom_iterations = None, random_
     return optimized_sequence
 
 
-
 def gen_charged_positions(length, num_charged):
     '''
     function to generate random positoning for charged residues.
@@ -619,15 +600,14 @@ def gen_charged_positions(length, num_charged):
         number of charged residues to be added to the sequence being
         generated
     '''
-
-    pseudo_seq = ''
-    for i in range(0, length-num_charged):
-        pseudo_seq += '0'
+    pseudo_seq = [aa for aa in range(0, length)]
+    random.shuffle(pseudo_seq)
+    charged_positions=[]
     for i in range(0, num_charged):
-        pseudo_seq += '+'
-    pseudo_seq = shuffle_seq(pseudo_seq)
-    charged_positions = identify_residue_positions(pseudo_seq, '+')
+        charged_positions.append(pseudo_seq[i])
     return charged_positions
+
+
 
 
 def gen_sequence(length, usedlist=[]):
@@ -700,29 +680,28 @@ def all_excluded_residues_hydro(sequence, objective_hydropathy, no_charge=False,
 
     # add any input excluded residues to the excluded list
     for i in input_exclusion:
-        if i not in exclude_amino_acids:
-            exclude_amino_acids.append(i)
+        exclude_amino_acids.append(i)
 
     # if the objective hydro is less than the current hydro add residues greater than objective to list
     if Protein(sequence).hydropathy > objective_hydropathy:
         for i in lists.amino_acids:
             if AminoAcid.hydro(i) > objective_hydropathy:
-                if i not in exclude_amino_acids:
-                    exclude_amino_acids.append(i)
+                exclude_amino_acids.append(i)
 
     # if the objective hydro is greater than the current hydro add residues less than objective to list
     if Protein(sequence).hydropathy < objective_hydropathy:
         for i in lists.amino_acids:
             if AminoAcid.hydro(i) < objective_hydropathy:
-                if i not in exclude_amino_acids:
-                    exclude_amino_acids.append(i)
+                exclude_amino_acids.append(i)
 
     # if the list must include charged residues, make sure they are in the list 
     if no_charge == True:
         charged_list = ['D', 'E', 'K', 'R']
-        for i in charged_list:
-            if i not in exclude_amino_acids:
-                exclude_amino_acids.append(i) 
+        exclude_amino_acids.extend(charged_list)
+
+    # get rid of duplicates
+    exclude_amino_acids=list(set(exclude_amino_acids))
+
 
     # if the list includes every single residue, find the least bad residue 
     if len(exclude_amino_acids) == 20:
@@ -798,7 +777,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
     value_coordinate = 0
     
     # determine whether or not to stop the optimzation
-    if abs(current_hydro - final_hydropathy) < 0.01:
+    if abs(current_hydro - final_hydropathy) < parameters.HYDRO_ERROR:
         stop=True
     else:
         stop=False
@@ -935,7 +914,7 @@ def hydro_seq(length, mean_hydro, just_neutral=False, allowed_error=None, return
     #--------------------------------------------#
     # if no customized allowed error, set to 0.05
     if allowed_error == None:
-        allowed_error = 0.05
+        allowed_error = parameters.HYDRO_ERROR
 
     # set best_error to stupidly high error
     best_error = 10000
@@ -1371,8 +1350,8 @@ def calculate_max_charge(hydropathy):
 
     '''
     # calculate the maximum charge values for a given hydropathy
-    MAXIMUM_CHARGE_WITH_HYDRO_1 = 1.1907 + (-0.2050 * hydropathy)
-    MAXIMUM_CHARGE_WITH_HYDRO_2 = 1.2756 + (-0.2289 * hydropathy)
+    MAXIMUM_CHARGE_WITH_HYDRO_1 = 1.1907 + (-0.1389 * hydropathy)
+    MAXIMUM_CHARGE_WITH_HYDRO_2 = 1.2756 + (-0.1450 * hydropathy)
     # return the lower value between the 2 possibilities.
     return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2])
 
@@ -2038,10 +2017,8 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
         # NCPR and hydropathy and FCR
         #===============================================#
         elif FCR != None and NCPR != None and hydropathy != None:
-            
             if FCR == 0 and NCPR == 0:
                 final_seq = hydro_seq(length, hydropathy, just_neutral=True, exclude_residues=exclude)
-
             else:
                 # figure out how many residues for FCR and how many for NCPR
                 charged_residue_dict = fraction_net_charge(length, fraction=FCR, net_charge=NCPR)
@@ -2060,10 +2037,9 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                     for i in range(0, charged_residue_dict['NCPR_residues']):
                         # add positive residues
                         if hydropathy < 1:
-                            charged_resides += 'R'
+                            charged_residues += 'R'
                         else:
                             charged_residues += random_amino_acid(lists.K_R)
-
 
                 # now accomodate for the FCR residues if necessary
                 if charged_residue_dict['FCR_residues'] != 0:
@@ -2139,6 +2115,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                     # if still off, try K_R optimizations.
                     else:
                         final_seq = K_R_optimization(final_seq, hydropathy)
+
                 # if no non-charged residues, shuffle the sequence and optimize for hydro with K/R if needed
                 else:
                     final_seq = shuffle_seq(charged_residues)
@@ -2149,6 +2126,8 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
 
     # if nothing works, raise error that GOOSE failed to make the sequence.
     raise GooseError('Failed to make sequence.')
+
+
 
 
 def test_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None):
@@ -2169,6 +2148,8 @@ def test_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None):
     if hydropathy != None:
         print(f'Objective hydropathy = {hydropathy} : Actual hydropathy = {seq_hydropathy}')
     print(final_sequence)
+
+
 
 #/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-
 #/-/-/-/-/-/-/-/-/-/-/- Amino acid Fractions /-/-/-/-/-/-/-/-/-/-/-/-/-

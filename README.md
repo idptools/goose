@@ -61,6 +61,10 @@ You can not currently cite GOOSE as we have yet to publish it (hopefully soon!).
 
 The section below logs changes to GOOSE. 
 
+#### V0.1.1 - Bug fix and new feature (October 2023)
+
+Fixed bug where sequences with high FCR specified could not have a high enough hydropathy value using the ``create.sequence()`` function. Added ability to exclude residues from sequence generated using the ``create.sequence()`` function (cannot exclude charged residues when FCR / NCPR are specified). Improved range of kappa values that could be specified. Improved performance of some backend functionality. Fixed some additional edge case bugs. Changed name of ``shuffle_var()`` to ``region_shuffle_var()`` due to previous addition of other types of shuffle variants. Added more tests.
+
 #### V0.1.0 - Initial release (September 2023)
 
 Initial release. Begin tracking changes.

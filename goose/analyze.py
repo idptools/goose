@@ -28,7 +28,7 @@ def properties(sequence, fractions=True):
 
     tmp = Protein(sequence)
     props_dict = tmp.calc_basic_properties()
-    props_dict['kappa'] = tmp.kappa
+    props_dict['kappa'] = round(tmp.kappa,4)
     
     # if fractions are wanted, add to dict
     if fractions == True:
@@ -173,9 +173,9 @@ def everything(sequence, split_predictions = False, just_predictions=False):
         all_info['T phosphorylation'] = all_phosphosites['T']
         all_info['Y phosphorylation'] = all_phosphosites['Y']
         all_localization = cellular_localization(sequence)
-        pol_props=predict_polymer_props(sequence)
-        all_info['Re']=pol_props['Re']
-        all_info['Rg']=pol_props['Rg']
+        pol_props=(sequence)
+        all_info['Re']=round(pol_props['Re'],4)
+        all_info['Rg']=round(pol_props['Rg'],4)
         all_info['NLS'] = all_localization['NLS']
         all_info['NES'] = all_localization['NES']
         all_info['mitochondrial'] = all_localization['mitochondria']
@@ -194,6 +194,9 @@ def everything(sequence, split_predictions = False, just_predictions=False):
 
     if just_predictions==False:
         all_info['fractions'] = Protein(sequence).fractions
+        all_info['fraction aromatic'] = round(Protein(sequence).percent_aromatic,5)
+        all_info['fraction polar'] = round(Protein(sequence).percent_polar,5)
+        all_info['fraction aliphatic']=round(Protein(sequence).percent_aliphatic,5)
         all_info['sequence'] = sequence
 
     return all_info

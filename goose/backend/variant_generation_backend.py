@@ -494,6 +494,9 @@ def create_new_var_constant_class_nums(sequence):
     # get starting hydropathy of sequence
     starting_hydropathy = Protein(sequence).hydropathy
 
+    # get starting kappa
+    starting_kappa = Protein(sequence).kappa
+
     # get the amount of each class
     residues_by_class = return_num_for_class(sequence)
 
@@ -517,6 +520,9 @@ def create_new_var_constant_class_nums(sequence):
     
     # fix hydropathy
     build_sequence = optimize_hydropathy_within_class(build_sequence, objective_hydropathy=starting_hydropathy)
+
+    # fix kappa
+    build_sequence = create_kappa_variant(build_sequence, starting_kappa)
 
     return build_sequence
 
@@ -846,7 +852,7 @@ def seq_chunks_from_regions_list(sequence, regions=[]):
 
 
 
-def create_shuffle_variant(sequence, shuffle_regions=[], use_index=False):
+def create_region_shuffle_variant(sequence, shuffle_regions=[], use_index=False):
     '''
     Function that will shuffle specific regions of an IDR.
     Multiple regions can be specified simultaneously.
@@ -987,17 +993,14 @@ def increase_charge_asymmetry_once(sequence, exclude = []):
         E_coordinates = identify_residue_positions(sequence, 'E')
     else:
         E_coordinates = []
-
     if 'D' not in exclude:
         D_coordinates = identify_residue_positions(sequence, 'D')
     else:
         D_coordinates = []
-
     if 'K' not in exclude:
         K_coordinates = identify_residue_positions(sequence, 'K')
     else:
         K_coordinates = []
-
     if 'R' not in exclude:
         R_coordinates = identify_residue_positions(sequence, 'R')
     else:
@@ -1364,7 +1367,7 @@ def reduce_consecutive_paired(sequence, num_iter=1500):
     return ''.join(best_sequence)
 
 
-def minimize_kappa(sequence, min_kappa, iters=10000):
+def minimize_kappa(sequence, min_kappa, iters=1000):
     best_sequence = sequence
     best_kappa = pr(sequence).kappa
     for _ in range(iters):
@@ -1391,6 +1394,278 @@ def minimize_kappa(sequence, min_kappa, iters=10000):
             return best_sequence
 
     return best_sequence
+
+
+def get_linear_sigma(sequence, bloblen=6):
+    '''
+    function to get linear sigma values. 
+    '''
+    numblobs=len(sequence)-bloblen+1
+    sigmas = []
+    for i in range(0, numblobs):
+        cur_blob = sequence[i:i+bloblen]
+        N_plus = cur_blob.count('R')+cur_blob.count('K')
+        N_minus = cur_blob.count('D')+cur_blob.count('E')
+        if N_plus+N_minus==0:
+            cur_sigma=0
+        else:
+            cur_sigma = ((N_plus-N_minus)**2)/((N_plus+N_minus)/bloblen)
+        sigmas.append(cur_sigma)
+    return sigmas
+
+def slow_reduce_kappa(sequence):
+    bloblen = 6
+    linear_sigma = get_linear_sigma(sequence, bloblen=bloblen)
+    
+    if max(linear_sigma) == min(linear_sigma):
+        bloblen = 5
+        linear_sigma = get_linear_sigma(sequence, bloblen=bloblen)
+    
+    if max(linear_sigma) == min(linear_sigma):
+        return sequence
+
+    charge_max = sequence.count('K') + sequence.count('R') - (sequence.count('D') + sequence.count('E'))
+    
+    if charge_max > 0:
+        res_of_interest = ('K', 'R')
+    elif charge_max < 0:
+        res_of_interest = ('D', 'E')
+    else:
+        res_of_interest = ('D', 'E', 'K', 'R')
+
+    all_max_index = [i for i, x in enumerate(linear_sigma) if x == max(linear_sigma)]
+    all_min_index = [i for i, x in enumerate(linear_sigma) if x == min(linear_sigma)]
+
+    if all_max_index == []:
+        return sequence
+    if all_min_index==[]:
+        return sequence
+
+    max_index = random.choice(all_max_index)
+    min_index = random.choice(all_min_index)
+
+    max_seq = sequence[max_index:max_index + bloblen]
+    min_seq = sequence[min_index:min_index + bloblen]
+
+    # Extract res indices of res to move
+    res_interest_ind = [i for i, res in enumerate(max_seq) if res in res_of_interest]
+    min_res_ind = [i for i, res in enumerate(min_seq) if res not in res_of_interest]
+
+    if not min_res_ind or not res_interest_ind:
+        return sequence
+
+    # Identify the target_res_ind
+    # otherwise get to work
+    target_res_ind = int(len(max_seq)/2)
+    closest_max = min(res_interest_ind, key=lambda x: abs(x - target_res_ind))
+    closest_min = min(min_res_ind, key=lambda x: abs(x - target_res_ind))
+    #choose middel res from min seq
+    max_res = max_seq[closest_max]
+    min_res = min_seq[closest_max]
+    max_res_loc = max_index+closest_max
+    min_res_loc = min_index+closest_max    
+
+    final_sequence = ""
+    # rebuild sequence
+    for resind in range(0, len(sequence)):
+        if resind == max_res_loc:
+            final_sequence += min_res
+        elif resind == min_res_loc:
+            final_sequence += max_res
+        else:
+            final_sequence += sequence[resind]
+            resind+=1
+    
+    # overwrite sequence
+    sequence = final_sequence
+
+    return sequence
+
+
+def slow_increase_kappa(sequence):
+
+    pos_res_of_interest = ('K', 'R')
+    neg_res_of_interest = ('D', 'E')
+    
+    pos_res_ind = [i for i, x in enumerate(sequence) if x in pos_res_of_interest]
+    neg_res_ind = [i for i, x in enumerate(sequence) if x in neg_res_of_interest]
+
+
+    # can't increase kappa if we don't have both charged species. 
+    if pos_res_ind == [] or neg_res_ind==[]:
+        return sequence
+
+    # get location of where pos res are and neg res are.
+    pos_res_weight = sum(pos_res_ind)/len(pos_res_ind)
+    neg_res_weight = sum(neg_res_ind)/len(neg_res_ind)
+
+    # get start loc for neg and pos
+    if len(pos_res_ind) > int(len(sequence)/2):
+        start_pos_res = len(pos_res_ind)
+        start_neg_res = len(sequence)-start_pos_res
+    else:
+        start_pos_res = int(len(sequence)/2)
+
+    if len(neg_res_ind) > int(len(sequence)/2):
+        start_neg_res = len(neg_res_ind)
+        start_pos_res = len(sequence)-start_neg_res
+    else:
+        start_neg_res = int(len(sequence)/2)
+
+
+    if pos_res_weight > neg_res_weight:
+        pos_res_target_locs = [aa for aa in range(len(sequence)-start_pos_res, len(sequence))]
+        neg_res_target_locs = [aa for aa in range(0, start_neg_res)]
+        target_pos_res_ind = min(pos_res_ind)
+        target_neg_res_ind = max(neg_res_ind)
+    else:
+        pos_res_target_locs = [aa for aa in range(0, start_pos_res)]
+        neg_res_target_locs = [aa for aa in range(len(sequence)-start_neg_res,len(sequence))]
+        target_pos_res_ind = max(pos_res_ind)
+        target_neg_res_ind = min(neg_res_ind)
+
+    target_pos_res = sequence[target_pos_res_ind]
+    target_neg_res = sequence[target_neg_res_ind]
+    final_pos_res_loc = random.choice(pos_res_target_locs)
+    final_neg_res_loc = random.choice(neg_res_target_locs)
+
+    # remove values from sequence
+    removed_vals_sequence=''
+    for res_ind in range(0, len(sequence)):
+        if res_ind == target_pos_res_ind:
+            pass
+        elif res_ind == target_neg_res_ind:
+            pass
+        else:
+            removed_vals_sequence+=sequence[res_ind]
+
+    final_sequence = ''
+    current_res_ind = 0
+    for res_ind in range(0, len(sequence)):
+        if res_ind == final_pos_res_loc:
+            final_sequence += target_pos_res
+        elif res_ind == final_neg_res_loc:
+            final_sequence += target_neg_res
+        else:
+            final_sequence += removed_vals_sequence[current_res_ind]
+            current_res_ind+=1
+    return final_sequence
+
+
+
+def quick_reduce_kappa(sequence):
+    '''
+    function to smooth out sigma values across a sequence
+    '''
+    bloblen=6
+    linear_sigma = get_linear_sigma(sequence, bloblen=bloblen)
+    if max(linear_sigma)==min(linear_sigma):
+        bloblen=5
+        linear_sigma=get_linear_sigma(sequence, bloblen=bloblen)
+    if max(linear_sigma)==min(linear_sigma):
+        return sequence
+    else:
+        # identify max and min indices. 
+        all_max_index = [i for i, x in enumerate(linear_sigma) if x == max(linear_sigma)]
+        all_min_index = [i for i, x in enumerate(linear_sigma) if x == min(linear_sigma)]
+
+
+        # remove overlapping indices
+        to_remove_min=[]
+        to_remove_max=[]
+        for i in range(0, len(all_max_index)-1):
+            if all_max_index[i+1]-all_max_index[i]<bloblen:
+                to_remove_max.append(all_max_index[i+1])
+        for i in range(0, len(all_min_index)-1):
+            if all_min_index[i+1]-all_min_index[i]<bloblen:
+                to_remove_min.append(all_min_index[i+1])
+
+        # remove vals
+        for val in to_remove_min:
+            all_min_index.remove(val)
+        for val in to_remove_max:
+            all_max_index.remove(val)
+       
+        # if we don't have anything to work with, returns equence
+        if all_max_index==[] or all_min_index==[]:
+            return sequence
+        
+        # shuffle indices
+        random.shuffle(all_max_index)
+        random.shuffle(all_min_index)
+        
+        # get min num indices
+        num_indices = min([len(all_max_index),len(all_min_index)])
+        for cur_ind in range(0, num_indices):
+            max_index = all_max_index[cur_ind]
+            min_index = all_min_index[cur_ind]
+
+            max_seq = sequence[max_index:max_index+bloblen]
+            min_seq = sequence[min_index:min_index+bloblen]
+            # swap residues between regions
+            charge_max = sequence.count('K')+sequence.count('R')-(sequence.count('D')+sequence.count('E'))
+            if charge_max > 0:
+                res_of_interest=['K', 'R']
+            elif charge_max < 0:
+                res_of_interest=['D', 'E']
+            else:
+                res_of_interest=['D', 'E', 'K', 'R']
+
+            # get res indices of res to move
+            res_interest_ind = []
+            for res in range(0, len(max_seq)):
+                if max_seq[res] in res_of_interest:
+                    res_interest_ind.append(res)
+
+            # get min seq res to move. 
+            min_res_ind = []
+            for res in range(0, len(min_seq)):
+                if min_seq[res] not in res_of_interest:
+                    min_res_ind.append(res)
+
+            # if we can't move things returns equence
+            if min_res_ind == []:
+                return sequence
+
+            # if no res of interest return sequence
+            if res_interest_ind == []:
+                return sequence
+
+            # otherwise get to work
+            target_res_ind = int(len(max_seq)/2)
+            closest_max = min(res_interest_ind, key=lambda x: abs(x - target_res_ind))
+            closest_min = min(min_res_ind, key=lambda x: abs(x - target_res_ind))
+            #choose middel res from min seq
+            max_res = max_seq[closest_max]
+            min_res = min_seq[closest_max]
+            max_res_loc = max_index+closest_max
+            min_res_loc = min_index+closest_max    
+
+            final_sequence = ""
+            # rebuild sequence
+            for resind in range(0, len(sequence)):
+                if resind == max_res_loc:
+                    final_sequence += min_res
+                elif resind == min_res_loc:
+                    final_sequence += max_res
+                else:
+                    final_sequence += sequence[resind]
+                    resind+=1
+            
+            # overwrite sequence
+            sequence = final_sequence
+    
+    # return sequence
+    return sequence
+
+
+
+
+def check_seq_comp(seq1,seq2):
+    amino_acids=['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+    for aa in amino_acids:
+        if seq1.count(aa)!=seq2.count(aa):
+            raise Exception('Different sequence compositions!')
 
 
 
@@ -1425,6 +1700,33 @@ def decrease_kappa_below_value(sequence, max_kappa, attempts=None):
     best_kappa=original_kappa
     best_sequence = sequence
 
+    # now try to use linear sigma smoothing.
+    for i in range(0,50):
+        # iterate each time by the length of the sequence
+        for j in range(0, len(best_sequence)):
+            current_sequence=slow_reduce_kappa(best_sequence)
+            current_kappa=(pr(current_sequence).kappa)
+            if current_kappa < max_kappa:
+                return current_sequence
+            if current_kappa < best_kappa:
+                best_kappa=current_kappa
+                best_sequence=current_sequence
+
+    # if we still havent gone below, reduce further. 
+    # now try to use linear sigma smoothing.
+    for i in range(0,50):
+        # iterate each time by the length of the sequence
+        for j in range(0, len(best_sequence)):
+            current_sequence=quick_reduce_kappa(best_sequence)
+            current_kappa=(pr(current_sequence).kappa)
+            if current_kappa < max_kappa:
+                return current_sequence
+            if current_kappa < best_kappa:
+                best_kappa=current_kappa
+                best_sequence=current_sequence
+
+
+    # now just reduce consecutive paired charged reisudes
     current_sequence = reduce_consecutive_paired(best_sequence)
     current_kappa = pr(current_sequence).kappa
     if current_kappa < max_kappa:
@@ -1434,7 +1736,7 @@ def decrease_kappa_below_value(sequence, max_kappa, attempts=None):
         best_kappa=current_kappa
         best_sequence=current_sequence
 
-    # second fastest way to do this.
+    # third fastest way to do this.
     for i in range(0, attempts):
         current_sequence = decrease_charge_asymmetry_once(best_sequence)
         current_kappa = pr(current_sequence).kappa
@@ -1478,41 +1780,88 @@ def create_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIM
         calculated for the returned sequence
     '''
     if attempts==None:
-        attempts = len(sequence)*50
+        attempts = len(sequence)*100
+    current_kappa = pr(sequence).kappa
+    if abs(current_kappa - kappa) < allowed_kappa_error:
+        return sequence
 
+    worst_error=1
 
-    # first decrease kappa 
-    kappa_below = kappa - 0.01
-    if kappa_below < 0.005:
-        kappa_below = 0.005
+    
+    for attempt in range(0, attempts):
+        if current_kappa > kappa:
+            for i in range(0, 20):
+                new_sequence = slow_reduce_kappa(sequence)
+                new_kappa = pr(new_sequence).kappa
+                if abs(new_kappa - kappa) < allowed_kappa_error:
+                    return new_sequence
+                if abs(new_kappa - kappa) < worst_error:
+                    sequence = new_sequence
+                    current_kappa = new_kappa
+                if new_kappa < kappa:
+                    break  
 
-    decreased_kappa_seq = decrease_kappa_below_value(sequence, kappa_below)
-    starting_kappa = pr(decreased_kappa_seq).kappa
-
-    if abs(starting_kappa-kappa) < allowed_kappa_error:
-        return decreased_kappa_seq
-    else:
-        new_sequence = increase_charge_asymmetry_once(decreased_kappa_seq)
-        curkappa = pr(new_sequence).kappa
-        for i in range(0, attempts):
-            if abs(curkappa - kappa) < allowed_kappa_error:
+        if current_kappa>kappa:
+            new_sequence = reduce_consecutive_paired(sequence)
+            new_kappa = pr(new_sequence).kappa
+            if abs(new_kappa - kappa) < allowed_kappa_error:
                 return new_sequence
-            else:
-                new_sequence = increase_charge_asymmetry_once(new_sequence)
-                curkappa = pr(new_sequence).kappa
-                # if you go too high in value reset and try again.
-                # should be stochastic enough to work....
-                if curkappa > kappa + (allowed_kappa_error*3):
-                    for i in range(0, 10):
-                        new_sequence = decrease_charge_asymmetry_once(new_sequence)
-                        curkappa = pr(new_sequence).kappa
-                        if abs(curkappa - kappa) < allowed_kappa_error:
-                            return new_sequence
-                    # reset if that failed
-                    new_sequence = decreased_kappa_seq
-                    curkappa = starting_kappa
+            if abs(new_kappa - kappa) < worst_error:
+                sequence = new_sequence
+                current_kappa = new_kappa
+            if new_kappa < kappa:
+                break   
+
+        if current_kappa > kappa:
+            for i in range(0, 20):
+                new_sequence = quick_reduce_kappa(sequence)
+                new_kappa = pr(new_sequence).kappa
+                if abs(new_kappa - kappa) < allowed_kappa_error:
+                    return new_sequence
+                if abs(new_kappa - kappa) < worst_error:
+                    sequence = new_sequence
+                    current_kappa = new_kappa
+                if new_kappa < kappa:
+                    break  
+
+        if current_kappa > kappa:
+            for i in range(0, 20):
+                new_sequence = decrease_charge_asymmetry_once(sequence)
+                new_kappa = pr(new_sequence).kappa
+                if abs(new_kappa - kappa) < allowed_kappa_error:
+                    return new_sequence
+                if abs(new_kappa - kappa) < worst_error:
+                    sequence = new_sequence
+                    current_kappa = new_kappa
+                if new_kappa < kappa:
+                    break              
+
+        if current_kappa > kappa:
+            new_sequence = minimize_kappa(sequence, kappa, iters=1000)
+            new_kappa = pr(new_sequence).kappa
+            if abs(new_kappa - kappa) < allowed_kappa_error:
+                return new_sequence
+            if abs(new_kappa - kappa) < worst_error:
+                sequence = new_sequence
+                current_kappa = new_kappa
+            if new_kappa < kappa:
+                break                 
+        
+        if current_kappa < kappa:
+            for i in range(0, len(sequence)):
+                new_sequence = slow_increase_kappa(sequence)
+                new_kappa = pr(new_sequence).kappa
+                if abs(new_kappa - kappa) < allowed_kappa_error:
+                    return new_sequence
+                if abs(new_kappa - kappa) < worst_error:
+                    sequence = new_sequence
+                    current_kappa = new_kappa
+                if new_kappa < kappa:
+                    break  
+
     fail_message = 'Unable to make kappa sequence in variant_generation_backend.py'        
     raise GooseBackendBug(fail_message)
+
 
 
 
