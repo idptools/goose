@@ -523,7 +523,7 @@ In this example we will just change kappa and hydropathy.
 Sequence analysis in GOOSE
 ===========================
 
-GOOSE provides powerful sequence analysis tools. These tools are provided by SPARROW - see https://github.com/idptools/sparrow/tree/main. The phosphosite, cellular localization, and transcriptional activation domain predictions are **all machine learning based**. They should be treated **as predictions** and NOT ground truth. 
+GOOSE provides powerful sequence analysis tools. These tools are provided by SPARROW - see https://github.com/idptools/sparrow/tree/main. The predictions are **all machine learning based**. They should be treated **as predictions** and NOT ground truth. They are **NOT** equivalent to experimental validation.
 
 To start using the analysis tools in GOOSE, first import **analyze**
 

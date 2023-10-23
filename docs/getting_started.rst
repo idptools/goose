@@ -54,7 +54,7 @@ There are four main functionalities currently in GOOSE.
 
 **3.** Make sequence libraries. This includes libraries of sequences spanning different sequence properties or fractions of amino acids. 
 
-**4.** Sequence analysis. Analysis includes sequence properties, fractions of amino acids, and various predicted sequence features. Predicted sequence features are all machine learning based and were generated using PARROT (see https://github.com/idptools/parrot). Predictions include phosphorylation sites, cellular localization, radius of gyration, end-to-end distance, and transcriptional activation domains. 
+**4.** Sequence analysis. Analysis includes sequence properties, fractions of amino acids, and various predicted sequence features. Predicted sequence features are all machine learning based and are generated using SPARROW (see https://github.com/idptools/sparrow). Predictions include phosphorylation sites, cellular localization, radius of gyration, end-to-end distance, and transcriptional activation domains. By using any predictions in GOOSE you acknowledge that they are just predictions and not ground truth and the accuracy of any predictions generated cannot be gauranteed.
 
 Important limitations
 ======================

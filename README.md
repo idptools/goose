@@ -1,7 +1,7 @@
 ![GOOSE_LOGO_FULL](https://github.com/ryanemenecker/goose/blob/main/images/goose_logo_3.png) 
 # GOOSE : Generate disOrdered prOtiens Specifying propErties
 
-### Last updated September 2023
+### Last updated October 2023
 
 ### What is GOOSE?
 GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. Basically, we want to make it easy for you to design IDRs or IDR variants for your research.
