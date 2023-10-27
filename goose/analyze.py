@@ -5,7 +5,7 @@ Limited for now, planning on expanding on in the future
 '''
 
 from goose.backend.protein import Protein
-from goose.backend.predict_features import predict_mitochondrial_localization, predict_NES, predict_NLS, predict_phosphosites, predict_TAD, predict_polymer_props
+from goose.backend.predict_features import predict_mitochondrial_localization, predict_NES, predict_NLS, predict_phosphosites, predict_TAD, predict_polymer_props, get_helical_regions
 
 def properties(sequence, fractions=True):
     '''
@@ -131,7 +131,6 @@ def transcriptional_activation(sequence):
         return TADs
 
 
-
 def everything(sequence, split_predictions = False, just_predictions=False):
     '''
     for when you want all the info in one sweet go.
@@ -163,6 +162,7 @@ def everything(sequence, split_predictions = False, just_predictions=False):
 
     # now get the rest
     if split_predictions == False:
+        all_info['helical regions'] = get_helical_regions(sequence)
         all_info['predicted phosphosites'] = phosphosites(sequence)
         all_info['predicted cellular localization'] = cellular_localization(sequence)
         all_info['predicted transcriptional activation'] = transcriptional_activation(sequence)
@@ -180,6 +180,7 @@ def everything(sequence, split_predictions = False, just_predictions=False):
         all_info['NES'] = all_localization['NES']
         all_info['mitochondrial'] = all_localization['mitochondria']
         all_TADs = transcriptional_activation(sequence)
+        all_info['helical regions'] = get_helical_regions(sequence)
         if all_TADs.keys() != 'No TAD sequences':
             list_TADs=[]
             start_num=1

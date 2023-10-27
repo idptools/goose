@@ -210,6 +210,34 @@ If you want to exclude an amino acid, you can set it equal to 0.
     create.seq_fractions(100, Y=0.5, max_aa_fractions={'Y':1}) 
     'SSYYYYYSYSSYYSYSSGHYYSYSSYYYSSSYYSSYGGTYGYYSYSYGYYSSYYYSYSSNYYYYYYYYSSYGNSGYGGYYSYYSSSQHHYSSYYYSYYSY'
  
+Generating Sequences specifying Ensemble Dimensions
+=========================================================
+
+The ``create.seq_rg()`` and ``create.seq_re()``functions let you create sequences with a specified length and a predicted radius of gyration (Rg) or end-to-end distance (Re). For these functions, you must specify the length and an objective Re or Rg. In addition you can also specify:
+
+1. ``cutoff``:  The disorder cutoff used defines a threshold GOOSE uses to accept/reject sequences. 
+
+2. ``attempts``: The number of attempts defines how many times GOOSE will try to generate a desired sequence. 
+
+3. ``strict_disorder``: Whether you want **all** residues to be above the cutoff value. By default, GOOSE lets a small number (at most 5 for very large sequences) of residues be below 0.5 because a single amino acid (or even a few) below the 0.5 threshold is not realistically going to be a folded domain. 
+
+Examples of generating sequences by specifying Rg or Re
+----------------------------------------------------------
+
+**Specifying a length and Rg:**
+
+.. code-block:: python
+
+    create.seq_rg(50, 20)
+    'PDAESQCNTSRWIVSHPQSNTKYPDSRTDESASPQQEDPSHSQEKIHSRM'
+
+
+**Specifying a length and Re:**
+
+.. code-block:: python
+
+    create.seq_re(50, 20)
+    'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
 
 Creating Sequence Variants in Python
 =====================================
@@ -248,6 +276,10 @@ Types of sequence variants
 ``kappa_var()`` - Variant where you can alter the charge asymmetry by changing the kappa value. Requires the presence of positively charged and negatively charged residues in the original sequence. Higher kappa values increase charge asymmetry, lower kappa values reduce charge asymmetry. Values can be between 0 and 1. 
 
 ``all_props_class_var()`` - Function to make a sequence variant that adjusts the FCR, NCPR, hydropathy, and kappa values while minimizing changes to the position and number of amino acids by class. If you don't specify one of the values, GOOSE will keep it the same as it was in the input sequence.
+
+``re_var()`` - Function to make a sequence variant that adjusts the Re while keeping amino acid composition constant.
+
+``rg_var()`` - Function to make a sequence variant that adjusts the Rg while keeping amino acid composition constant.
 
 **A note about FCR_class(), NCPR_class(), and all_props_class_var() variants** - 
 For the ``fcr_class_var()``, ``ncpr_class_var()``, and ``all_props_class_var()`` variants, the changes to amino acid by class is **MINIMIZED** but not necessarily kept exactly the same. This is because if you (for example) change FCR in your sequence, it is IMPOSSIBLE to keep the order and number of all amino acids by class the same in the returned variant. Similarly, with the NCPR variant, if you change the NCPR to the extent that the FCR has to change as well, then it will change the order / number of amino acids by class.
@@ -520,6 +552,91 @@ In this example we will just change kappa and hydropathy.
     GTKGGSKMTKTKKGKESTHKRTSHKSRDEKGVHTDSHEDNAASE
 
 
+The re_var() and rg_var
+---------------------------
+
+The ``re_var()`` and ``rg_var()`` let you increase or decrease the Re / Rg of your sequence while holding amino acid composition constant. You can choose to just get something that maximally increases or decreases the Re / Rg or you can choose to get back a series of sequence that have increasingly altered Re / Rg from the starting sequence. You need to specify your sequence and ``decrease`` to decrease the Rg / Re or ``increase`` to increase the Rg / Re. The sequence we will start with for the examples below has an 'Rg' = 12.6429 and 'Re' = 19.8837.
+
+**Example chagning Re** - 
+
+.. code-block:: python
+
+    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    create.re_var(test, 'increase')
+    {'QGQGKGFGQQYGQYYNFQFSYFFGYFGFFQYNYYFYFQQQQGYYNFGQQL': 26.680789338243116}
+
+In this example, we increased the Re from 19.8837Å to 26.680789Å. Now let's decrease the Re. 
+
+.. code-block:: python
+
+    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    create.re_var(test, 'decrease')
+    {'YQYYYNYKQYFYGNQGQQFGGQYGYYLNFFGGFFFGQGQFQYQSQFFQQF': 15.126193729754828}
+
+**Example chagning Rg** - 
+
+.. code-block:: python
+
+    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    create.rg_var(test, 'increase')
+    {'FFQKQFGNQGQYQGQQLQGYQYFQGGNGQFSFNQYGFYYYYQFYFFYYGF': 15.116732605201102}
+
+In this example, we increased the Rg from 12.6429Å to 15.1167Å. Now let's decrease the Rg. 
+
+.. code-block:: python
+
+    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    create.rg_var(test, 'decrease')
+    {'LQYQYYYQFGSQYFFNYGQGFFFFQGQFGKQFGGYYGYYFQQNQGNFYQQ': 11.65882476485573}
+
+
+**Additional usage**  
+
+*Getting variants that span a range of Re or Rg values*  
+
+In addition to getting a single sequence variant when increasing or decreasing the Rg / Re of your sequence, you can also get numerous sequences that span a range of Rg / Re values above or below your sequence. To do this, set ``return_all=True`` in the ``create.re_var()`` or ``create.rg_var()`` function. 
+
+**Example getting variants spanning dimensions for Re or Rg** - 
+
+.. code-block:: python
+
+    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    create.re_var(test, 'increase', return_all=True)
+    {'FGGNNQFYFKGYYQFYGQFFQYYFSQQGLYGFQNGFYQYQGFYFGQQQYQ': 19.88582890272039, 'NQFGSYFFGFFFGQYQQYYGQQGGYGFQLQNGYYQGFQQFNFFYYKQYYQ': 20.09158138778087, 'FYQKFGFYYNQQQQLQGFQGGGGYYYFFQFQQQFQFYGYGYFSNFNQYYG': 20.29236054471707, 'GFQFQNYQYYGYYQQGFYYQFKQYGFQYGGFFLFGQYQGFNNQFQYQGSF': 20.493062151452005, 'NYFGQYQYYQQKGFYFSQYFGQFFFFQYFFQYYQLGQFQGNQGQGNGGYY': 20.69843194312801, 'FGQKGYNNQFGFFYYFGQYQLYGYGFNYYGQQGQGFQFSFQYQQQQFFYY': 20.899782611330014, 'QFYQFGYYQFQQFGFNGYQYYYYGGFNQFYKFNQQLQFQQGFYQSYFGGG': 21.10184471833488, 'QYYFQQFGGFQFKFQFLFQNFYQNQYYQYFQGGGQGYYGFYQQFYGYGNS': 21.302967793554927, 'YQYFQQYYFFGQQQQFFGQYGGYFQLYYFYFNKNNYGQYQGFFGQFSGQG': 21.503399660459397, 'YQYFFNQGYGNGQFFQGQFFGYFQQGYYYYYKGQFQFGSNYGQQYFQQFL': 21.708127134164094, 'GFGNYQGGKYFQFQFFQGYQFQQYQLGGNYGFNYFYQSYQFQFQFYQYYG': 21.913070399733165, 'GNYGFYYGQQFFYYQYNFQFQYGQGQFFFQGYQNSFFFQQGKLYYGYQQG': 22.11329490414296, 'GLFYQQYYGFGQQQYQFYQFSGFGNFYQFGGYNQYGFQFYNYQGQFFQYK': 22.313844782223256, 'LQFGYNKFSGFYQQYFYFYFYQFNGYFQQGGYYQYFGNGQGFQQYQQQFG': 22.51790127809966, 'FQGYGFQGGGYNSYFFQNKQGFQQYQFGQQYYYYYFFQFNFGYFQLYQQG': 22.718152756492504, 'FQGGFFFQYYFFGYFFGQFYGNGYYLQFQYGNQYQQQQQYFKNQYSYGQG': 22.923480401319996, 'QQKYGYQFQGYFFYYQFGFFFGQQNFFQNQYGLGYFNYFGQQQGYYYSGQ': 23.124772063934085, 'SYQYFNQYGGYGFNQQQFQNFGYQFKQQYFGFFYGFFYGYQYQGQFGYQL': 23.333739510598978, 'GSQNFYQYQLYYFYYGYGFYGNFNFQQQFYGFQQYQGFGFQYQKQFGQFG': 23.54112054988592, 'KQQGQFGGNFFYYQQYGFQYGYYQLQQGYFYNYGFSFQFQGYNQFYFFQG': 23.747530525783173, 'QKGFGQYQQYFGFFQYLNQYFFYQFYYFGNYNGGGQYFQQYFGFGQYSQQ': 23.98253798133204, 'QFSNFGQGQFYYQYFQFNFFGQKYFQQFYQYGFQGQYGGYNQYQFGYYGL': 24.190898513378375, 'GNFFKQGYQYGYYYGQGNFGFYQFYYQGFQFNQYFQYYQFFFQGGQQSLQ': 24.39256949762906, 'GQQNFQQYFFFQKSYFYFQGQYGFQFYQGFYYQGGFNYQYQGQYNGYGFL': 24.629380838294193, 'QYSQGQNQNFQFGQGYFYGQQYFYGGQFYKFYFYFGQYFGYFYNQFQGQL': 24.839275515626326, 'KQNFQFFNLGFYFYYYFFSYQGFQFQQGYGQYYYYQFGGFQQYNQQGGGQ': 25.04550510301195, 'GKFGYYGNYQQYFFFYYFYSQQFYQGFGFFGYQYNQGQGYQQFQFNQGLQ': 25.327400084592217, 'QQGKQFFQGGQQGNGQYYFFYQGYQQGYNYQGYQFQYFYYFFGFFYNSFL': 25.643400295987494, 'KQGGYGQGSQNQFQFQGQYGFYFGNFFNQFQFYQYYYYFQGGFFQQYYYL': 26.023861583369275, 'KNQGFGYGFFYYNYFQQGFFYQFFQGFSYFGYFYGYQQQYQYGQQQQLGN': 27.021238093522594}
+    
+
+Now let's do the same for Rg.
+
+.. code-block:: python
+
+    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    create.rg_var(test, 'increase', return_all=True)
+    {'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG': 12.642883713816577, 'YFGFFYQQGQFQQQFGYSNFQNGFLQYGQQKQGFYQFQYYYFGGGYYNFY': 12.843408303787768, 'YFGQQYFLQQYFQYFYFNFSYQYQKQQGGYFGGFFQGQQQGGFYYNGNYF': 13.047272610034963, 'QFGQLGGNYNQQFQYKQYQFGFYYQFFNYFYQSQGFFQYQYFGYGFQGYG': 13.249197318313685, 'GQFGKYYNGGGFNQQFYQQYYSGFQQQNGFYFGQFFYQQYQLGQFYYYFF': 13.452808743469815, 'NNYYQQNQGYGQYYQLFFQQQFGGFQFGGQFGYKGQQFFGYFSYYYYFQF': 13.663894490740866, 'GFQQGGFQQQYGGFSNQYKFQFFQYQQFQGNFGQYYNQYGYFGYLFYFYY': 13.868289004342328, 'QYGGQGQKNFYFGGYQQQQFQQYFFQFGNQSGQLFFFQFYYFYYYGYGYN': 14.118385874595063, 'QQYKQQNQYQQGGLGFYQGQQYYQFQGFFYFSQGGGYNFYFFNFYYFYFG': 14.330510120213422, 'FGFLGFFQGQKNQYQQFYGFQGQNFGQGQGQQFQGYSYYQFYYYYFYFNY': 14.801244899483716, 'NFQGNLQFYGQQQGQQNGGQQFQFGYKFQYQGGYGFYQYSYYYYFFFFFY': 15.209855224048953}
+
+
+*Predicting the Rg / Re of your starting sequence simultaneously*  
+GOOSE also lets you get the predicted Rg / Re of your starting sequence. When you set ``include_original=True`` for the ``create.re_var()`` or ``create.rg_var()`` functions, you will get back a dictionary where there with **original** and **variants** as the keys that correspond to values that are dictionaries with sequnce : Rg/Re pairs. You can also set ``return_all=True`` when using this to get back your original sequence and a series of variants with Rg / Re values.  
+
+
+**Example including original sequence Re or Rg** - 
+
+
+.. code-block:: python
+
+    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    create.re_var(test, 'increase', include_original=True)
+    {'original': {'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG': 19.883686156942094}, 'variants': {'QKGFQGGQYQQQQFGFYFFYNYFYQNQFQNYYQFFYGFYYGGQGSGYQFL': 26.436047646562177}}
+
+
+Now let's do the same for Rg. 
+
+.. code-block:: python
+
+    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    create.rg_var(test, 'increase', include_original=True)
+    {'original': {'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG': 12.642882870879607}, 'variants': {'QQNFYQYSGGFQFQKQQQQFNFGGQGFQGFGQFFGYQYYYNYYYLYGFYF': 14.667587127612029}}
+
+
 Sequence analysis in GOOSE
 ===========================
 
@@ -543,6 +660,7 @@ and then you have a full suite of sequence anlysis tools. The analyze module inc
 8. Predicted cellular localization signals including those for nuclear localization, nuclear export and mitochondrial targeting.
 9. Predicted transcriptional activation domains
 10. Predicted radius of gyration (Rg) and predicted end-to-end distance (Re)
+11. Helical regions.
 
 
 Using the analyze module in GOOSE
@@ -619,7 +737,7 @@ If you just want a summary of... well basically everything we've covered so far 
 
     test = 'PNNLNEKLRNQLNSDTNSYSNSISNSNSNSTGNLNSSYFNSLNIDSMLDDYVSSDLLLNDDDDDTNLSR'
     analyze.everything(test)
-    {'length': 69, 'FCR': 0.2028985507246377, 'NCPR': -0.11594202898550726, 'hydropathy': 3.4130434782608696, 'kappa': 0.4222274422645569, 'fractions': {'A': 0.0, 'C': 0.0, 'D': 0.14493, 'E': 0.01449, 'F': 0.01449, 'G': 0.01449, 'H': 0.0, 'I': 0.02899, 'K': 0.01449, 'L': 0.14493, 'M': 0.01449, 'N': 0.23188, 'P': 0.01449, 'Q': 0.01449, 'R': 0.02899, 'S': 0.21739, 'T': 0.04348, 'V': 0.01449, 'W': 0.0, 'Y': 0.04348}, 'predicted phosphosites': {'S': [67], 'T': [30, 64], 'Y': [18, 37, 50]}, 'predicted cellular localization': {'mitochondria': 'No mitochondrial targeting sequences predicted.', 'NES': 'No NES sequences predicted.', 'NLS': 'No NLS targeting sequences predicted.'}, 'predicted transcriptional activation': {'TGNLNSSYFNSLNIDSML': [31, 49]}, 'sequence': 'PNNLNEKLRNQLNSDTNSYSNSISNSNSNSTGNLNSSYFNSLNIDSMLDDYVSSDLLLNDDDDDTNLSR'}
+    {'length': 69, 'FCR': 0.2029, 'NCPR': -0.11594, 'hydropathy': 3.41304, 'kappa': 0.4222, 'fractions': {'A': 0.0, 'C': 0.0, 'D': 0.14493, 'E': 0.01449, 'F': 0.01449, 'G': 0.01449, 'H': 0.0, 'I': 0.02899, 'K': 0.01449, 'L': 0.14493, 'M': 0.01449, 'N': 0.23188, 'P': 0.01449, 'Q': 0.01449, 'R': 0.02899, 'S': 0.21739, 'T': 0.04348, 'V': 0.01449, 'W': 0.0, 'Y': 0.04348}, 'helical regions': [[3, 13], [44, 50]], 'predicted phosphosites': {'S': [67], 'T': [30, 64], 'Y': [18, 37, 50]}, 'predicted cellular localization': {'mitochondria': 'No mitochondrial targeting sequences predicted.', 'NES': 'No NES sequences predicted.', 'NLS': 'No NLS targeting sequences predicted.'}, 'predicted transcriptional activation': {'TGNLNSSYFNSLNIDSML': [31, 49]}, 'predicted polymer properties': {'Rg': 23.2913, 'Re': 55.2608}, 'fraction aromatic': 0.05797, 'fraction polar': 0.50725, 'fraction aliphatic': 0.2029, 'sequence': 'PNNLNEKLRNQLNSDTNSYSNSISNSNSNSTGNLNSSYFNSLNIDSMLDDYVSSDLLLNDDDDDTNLSR'}
 
 The analyze.everything() function will return a dictionary holding all of the information from sequence properties to predicted phosphosites, cellular localization, and transcriptional activation domains all from one simple function!
 

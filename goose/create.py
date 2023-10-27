@@ -8,7 +8,7 @@
 ##Handles the primary functions
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var']
+__all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var']
 
 import os
 import sys
@@ -19,6 +19,7 @@ import random
 #for sequence generation
 from goose.backend.sequence_generation import generate_disordered_seq_by_fractions as _generate_disordered_seq_by_fractions
 from goose.backend.sequence_generation import generate_disordered_seq_by_props as _generate_disordered_seq_by_props
+from goose.backend.sequence_generation import generate_disordered_seq_by_dimensions as _generate_disordered_seq_by_dimensions
 
 # goose tools for checking and fixing parameters
 from goose.backend.goose_tools import check_and_correct_props_kwargs as _check_and_correct_props_kwargs
@@ -43,6 +44,7 @@ from goose.backend.variant_generation import gen_ncpr_class_variant as _gen_ncpr
 from goose.backend.variant_generation import gen_all_props_class_variant as _gen_all_props_class_variant
 from goose.backend.variant_generation import gen_targeted_shuffle_variant as _gen_targeted_shuffle_variant
 from goose.backend.variant_generation import gen_excluded_shuffle_variant as _gen_excluded_shuffle_variant
+from goose.backend.variant_generation import gen_dimensions_variant as _gen_dimensions_variant
 
 # for minimal variant, need to... get rid of this old code.
 from goose.backend.gen_minimal_variant_backend import gen_minimal_sequence_variant as _gen_minimal_sequence_variant
@@ -241,6 +243,118 @@ def seq_fractions(length, **kwargs):
 
     # return the seq
     return generated_seq
+
+
+#-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
+#-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/             \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
+#-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/  Create     \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
+#-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/  sequence   \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
+#-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/  By         \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
+#-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/  dimensions \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
+#-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/             \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
+#-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
+
+def seq_re(length, objective_re, allowed_error=parameters.re_error, attempts=20, 
+    cutoff=parameters.DISORDER_THRESHOLD, strict_disorder=False,
+    individual_rg_re_attempts=parameters.rg_re_attempt_num):
+    '''
+    Parameters
+    ----------
+    length: int
+        Length of sequence to generate
+    objective_re: float
+        the wanted Re in Å
+    allowed_error: float
+        Allowed error between the specified radius of gyration and the actual radius of gyration
+        default is from the backend.parameters module, re_error or rg_error
+    attempts : Int
+        The number of times to attempt to build a sequence before throwing
+        in the towel
+    cutoff : Float
+        The value for a residue to be considered disordered.
+    strict_disorder : Bool
+        Whether to have a strict cutoff for disorder where if any single residue
+        falls below cutoff, the sequence is not considered disordered.
+        Set to False by default allowing single residues to occassionally drop below
+        the disorder theshold provided it is minimal. See check_disorder for more
+        details.
+    individual_rg_re_attempts : int
+        Number of attempts to make the objective rg or re. 
+        Does not account for disorder
+
+    Returns
+    -------
+    sequence : str
+        The generated sequence.
+    '''
+    # check length. Note this checks min/max length as well as
+    # casts a string length to an int
+    _length_check(length)
+
+    # check that the rg or re range is possible. 
+    if objective_re < parameters.get_min_re(length) or objective_re > parameters.get_max_re(length):
+        min_possible_value=parameters.get_min_re(length)
+        max_possible_value=parameters.get_max_re(length)
+        raise goose_exceptions.GooseInputError(f'Cannot generate sequence, for length {length}, min Re = {min_possible_value}, max Re = {max_possible_value}.')
+
+    # try to make the sequence.
+    sequence=_generate_disordered_seq_by_dimensions(
+        length, 're', objective_re, attempts=attempts, allowed_error=allowed_error,
+        disorder_threshold=cutoff, strict_disorder=strict_disorder,
+        individual_rg_re_attempts=individual_rg_re_attempts)
+    return sequence
+
+
+
+def seq_rg(length, objective_rg, allowed_error=parameters.re_error, attempts=20, 
+    cutoff=parameters.DISORDER_THRESHOLD, strict_disorder=False,
+    individual_rg_re_attempts=parameters.rg_re_attempt_num):
+    '''
+    Parameters
+    ----------
+    length: int
+        Length of sequence to generate
+    objective_re: float
+        the wanted Re in Å
+    allowed_error: float
+        Allowed error between the specified radius of gyration and the actual radius of gyration
+        default is from the backend.parameters module, re_error or rg_error
+    attempts : Int
+        The number of times to attempt to build a sequence before throwing
+        in the towel
+    cutoff : Float
+        The value for a residue to be considered disordered.
+    strict_disorder : Bool
+        Whether to have a strict cutoff for disorder where if any single residue
+        falls below cutoff, the sequence is not considered disordered.
+        Set to False by default allowing single residues to occassionally drop below
+        the disorder theshold provided it is minimal. See check_disorder for more
+        details.
+    individual_rg_re_attempts : int
+        Number of attempts to make the objective rg or re. 
+        Does not account for disorder
+
+    Returns
+    -------
+    sequence : str
+        The generated sequence.
+    '''
+    # check length. Note this checks min/max length as well as
+    # casts a string length to an int
+    _length_check(length)
+
+    # check that the rg or re range is possible. 
+    if objective_rg < parameters.get_min_rg(length) or objective_rg > parameters.get_max_rg(length):
+        min_possible_value=parameters.get_min_rg(length)
+        max_possible_value=parameters.get_max_rg(length)
+        raise goose_exceptions.GooseInputError(f'Cannot generate sequence, for length {length}, min Rg = {min_possible_value}, max Rg = {max_possible_value}.')
+
+    # try to make the sequence.
+    sequence=_generate_disordered_seq_by_dimensions(
+        length, 'rg', objective_rg, attempts=attempts, allowed_error=allowed_error,
+        disorder_threshold=cutoff, strict_disorder=strict_disorder,
+        individual_rg_re_attempts=individual_rg_re_attempts)
+    return sequence
 
 
 '''
@@ -1065,6 +1179,157 @@ def excluded_shuffle_var(sequence, exclude_aas, attempts=10,
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence
+
+
+
+
+def re_var(sequence, increase_or_decrease, return_all=False, return_all_interval=0.2,
+    include_original=False, attempts=None, cutoff=parameters.DISORDER_THRESHOLD, 
+    strict=False):
+    '''
+    User facing funcitonality to generate variants with increased or decreased Re. 
+
+    parameters
+    ----------
+    sequence : str
+        The amino acid sequence as a string.
+
+    increase_or_decrease : str
+        Whether to increase or decrease the Re value.   
+
+    return_all : bool
+        Whether to return all sequences that have an increased or decreased Re. 
+        Default=False
+
+    return_all_interval : float
+        minimum difference between Re values for each sequence returned if
+        return_all=True. 
+        Default=0.2
+
+    include_original : bool
+        Whether to return the orignal sequence along with the variants.
+        Default=False
+        If set to True, a nested dictionary with the keys 'original' and 'variant'
+        are returned with a corresponding dictionary as the value where the key value pairs
+        in the nested dictionary are the sequence and the rg for that sequence.
+
+    number_attempts : int
+        The number of attempts to mkae the sequence. 
+        Default is 50*sequence length. 
+
+    cutoff : float
+        the cutoff value for somethign to be considered disordered. This only
+        really matters if you set 'strict' to 'False'. Otherwise, the disorder
+        of your input sequence is what is important. 
+
+    strict : bool
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
+    
+    Returns
+    -------
+    Dict or nested dict
+        If 'include' is set to True, returns a nested dict with 'original' and 'variants' as the
+        keys with dictionaries as values wher the dictionaries contain the sequence as the key and 
+        the predicted re as the value. If 'include_original' is set to fault (Default), then the 
+        returned dictionary just has sequences as keys and thier corresponding predicted Rg as values. 
+    '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+
+    # make sequence.
+    try:
+        final_sequence = _gen_dimensions_variant(sequence, increase_or_decrease, 're', 
+            return_all=return_all, return_all_interval=return_all_interval,
+            disorder_threshold=cutoff, strict_disorder=strict,
+            include_original=include_original,
+            num_attempts=attempts)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
+    return final_sequence
+
+
+
+
+def rg_var(sequence, increase_or_decrease, return_all=False, return_all_interval=0.2,
+    include_original=False, attempts=None, cutoff=parameters.DISORDER_THRESHOLD, 
+    strict=False):
+    '''
+    User facing funcitonality to generate variants with increased or decreased Rg. 
+
+    parameters
+    ----------
+    sequence : str
+        The amino acid sequence as a string.
+
+    increase_or_decrease : str
+        Whether to increase or decrease the Re value.   
+
+    return_all : bool
+        Whether to return all sequences that have an increased or decreased Re. 
+        Default=False
+
+    return_all_interval : float
+        minimum difference between Re values for each sequence returned if
+        return_all=True. 
+        Default=0.2
+
+    include_original : bool
+        Whether to return the orignal sequence along with the variants.
+        Default=False
+        If set to True, a nested dictionary with the keys 'original' and 'variant'
+        are returned with a corresponding dictionary as the value where the key value pairs
+        in the nested dictionary are the sequence and the rg for that sequence.
+
+    number_attempts : int
+        The number of attempts to mkae the sequence. 
+        Default is 50*sequence length. 
+
+    cutoff : float
+        the cutoff value for somethign to be considered disordered. This only
+        really matters if you set 'strict' to 'False'. Otherwise, the disorder
+        of your input sequence is what is important. 
+
+    strict : bool
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
+    
+    Returns
+    -------
+    Dict or nested dict
+        If 'include' is set to True, returns a nested dict with 'original' and 'variants' as the
+        keys with dictionaries as values wher the dictionaries contain the sequence as the key and 
+        the predicted re as the value. If 'include_original' is set to fault (Default), then the 
+        returned dictionary just has sequences as keys and thier corresponding predicted Rg as values. 
+    '''
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+
+    # make sequence.
+    try:
+        final_sequence = _gen_dimensions_variant(sequence, increase_or_decrease, 'rg', 
+            return_all=return_all, return_all_interval=return_all_interval,
+            disorder_threshold=cutoff, strict_disorder=strict,
+            include_original=include_original,
+            num_attempts=attempts)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
+    return final_sequence
+
 
 
 '''

@@ -9,6 +9,7 @@ of input sequences that can then be checked here.
 import metapredict as meta
 
 from goose.backend.sequence_generation_backend import create_seq_by_props, sigma_FCR_NCPR, create_seq_by_fracs
+from goose.backend.seq_by_dimension_backend import build_seq_by_dimensions
 from goose.backend import parameters
 from goose.goose_exceptions import GooseFail
 
@@ -295,4 +296,66 @@ def generate_disordered_seq_by_fractions(length, **kwargs):
 
     # if no disordered sequence in number of attempts, raise GooseFail
     raise GooseFail('Unable to generate sequence! Try increasing attempts!')
+
+
+def generate_disordered_seq_by_dimensions(seq_length, rg_or_re, objective_dims, attempts=20, 
+    allowed_error = 'default_error', disorder_threshold = parameters.DISORDER_THRESHOLD, 
+    strict_disorder=False, individual_rg_re_attempts=parameters.rg_re_attempt_num):
+    '''
+    Parameters
+    ----------
+    seq_length: int
+        Length of sequence to generate
+    rg_or_re: str
+        'rg' or 're' depending on whether you want to specify radius of gyration or end to end distance
+    objective_dim : float
+        objective rg or re value
+    allowed_error: float
+        Allowed error between the specified radius of gyration and the actual radius of gyration
+        default is from the backend.parameters module, re_error or rg_error
+    attempts : Int
+        The number of times to attempt to build a sequence before throwing
+        in the towel
+    disorder_threshold : Float
+        The value for a residue to be considered disordered.
+    strict_disorder : Bool
+        Whether to have a strict cutoff for disorder where if any single residue
+        falls below disorder_threshold, the sequence is not considered disordered.
+        Set to False by default allowing single residues to occassionally drop below
+        the disorder theshold provided it is minimal. See check_disorder for more
+        details.
+    individual_rg_re_attempts : int
+        Number of attempts to make the objective rg or re. 
+        Does not account for disorder
+
+    Returns
+    -------
+    attempted_seq : String
+        Returns the final sequence that was specified as a string.
+    '''
+    # make sure rg or re is good. 
+    if rg_or_re not in ['re', 'rg']:
+        raise GooseError('rg_or_re must be "rg" or "re"')
+
+    # try for number of attempts. 
+    for attempt in range(0, attempts):
+        # try to build the sequence
+        try:
+            attempted_seq = build_seq_by_dimensions(seq_length,
+            rg_or_re = rg_or_re, objective_dim=objective_dims,
+            allowed_error=allowed_error, num_attempts=individual_rg_re_attempts)
+
+        # if attempt to build the sequence failed, continue back at the 
+        # beginning of the loop
+        except:
+            continue
+
+        # if the sequence is disordered, return it
+        if check_disorder(attempted_seq, disorder_threshold=disorder_threshold, strict=strict_disorder):
+            return attempted_seq
+
+    # if no disordered sequence in number of attempts, raise GooseFail
+    raise GooseFail('Unable to generate sequence! Try increasing attempts!')
+
+
 

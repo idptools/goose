@@ -8,6 +8,34 @@ This will allow easier updating of networks as they become better over time.
 from sparrow import Protein as pr
 
 
+def get_helical_regions(sequence):
+    '''
+    function that returns amino acid coordinates 
+    of helical regions
+
+    Parameters
+    ----------
+    sequence : string
+        the amino acid sequence as a string
+    Returns
+    -------
+    helical_regions : list
+        list of lists of helical regions
+    '''
+    helicity_scores=pr(sequence).predictor.dssp_helicity()
+    helical_regions = []
+    subregion=[]
+    for aa in range(0, len(helicity_scores)):
+        if helicity_scores[aa] == 1:
+            subregion.append(aa)
+        else:
+            if len(subregion) > 0:
+                helical_regions.append([subregion[0]+1, subregion[-1]+1])
+                subregion = []
+    return helical_regions
+
+
+
 def predict_mitochondrial_localization(sequence, return_raw=False):
     '''
     function for predicting mitochondrial localization sequences.

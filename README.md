@@ -10,13 +10,16 @@ GOOSE is a python package developed to make the generation of IDRs or IDR varian
 
 There are four main functionalities currently in GOOSE. 
 
-**1.** Generatae IDRs where you can specify the properties *length*, *average hydropathy*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa*, which is a property that defines opposite charge distribution in a sequence.
+**1.** Generate synthetic IDRs where you can specify the length and:  
+ • properties including *average hydropathy*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa* (which is a property that defines opposite charge distribution in a sequence),  
+ • fractions of amino acids (you can specify multiple fractions simultaneously), or  
+ • ensemble dimensions, either end-to-end distance (Re) or radius of gyration (Rg)  
 
-**2.** Generate IDR variants.
+**2.** Generate IDR variants. There are over 16 different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test different hypotheses.  
 
-**3.** Make sequence libraries. This includes libraries of sequences spanning different sequence properties or fractions of amino acids. 
+**3.** Make sequence libraries spanning sequence properties or fractions of amino acids.  
 
-**4.** Analyze sequences. 
+**4.** Analyze sequences.  
 
 ## How can I use GOOSE?
 
@@ -24,7 +27,16 @@ You can use GOOSE from Python or from a Google Colab notebook. The Colab noteboo
 
 ## Installation - GOOSE takes flight!
 
-Right now you can only install GOOSE through Github. It will be on PyPi to allow for pip installation soon!
+Right now you can only install GOOSE through Github. It will be on PyPi to allow for pip installation soon!  
+
+GOOSE has a few requirements **prior** to installation. Just follow the steps below to use GOOSE!  
+
+1. Install cython and numpy.  
+
+	$ pip install cython
+	$ pip install numpy
+
+2. Install GOOSE.  
 
 To install directly from the git repository simply run:
 
@@ -38,28 +50,29 @@ Or to clone the GitHub repository and install locally run -
 
 **Important note**
 
-GOOSE also requires the package ``sparrow``. Sparrow should be downloaded automatically just by pip installing GOOSE, but if you have issues, try installing it by running:
+GOOSE requires the package ``sparrow``. Sparrow should be downloaded automatically just by pip installing GOOSE, but if you have issues, try installing it by running:
 
 	$ pip install git+https://github.com/holehouse-lab/sparrow.git
 
-This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have numpy or cython installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. If you still have problems, try running from terminal:
-
-	$ pip install cython
-	$ pip install numpy
+This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have numpy or cython installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. See step 1. of Installation for instructions on installing cython and numpy. 
 
 
 ## Documentation
 
-Documentation for GOOSE can be found at https://goose.readthedocs.io/en/latest/index.html.
+Documentation for GOOSE can be found at https://goose.readthedocs.io/en/latest/index.html.  
 
 
 ## How to cite GOOSE
 
-You can not currently cite GOOSE as we have yet to publish it (hopefully soon!). We would appreciate if you would mention GOOSE in your methods section with a link to the Github page so readers of your paper can understand how you generated the sequences you used.
+You can not currently cite GOOSE as we have yet to publish it (hopefully soon!). We would appreciate if you would mention GOOSE in your methods section with a link to the Github page so readers of your paper can understand how you generated the sequences you used.  
 
 ## Changes
 
-The section below logs changes to GOOSE. 
+The section below logs changes to GOOSE.  
+
+#### V0.1.2 - New features, bug fixes, general improvement. (October 2023)
+
+Made sequence generation by specifying radius of gyration or end-to-end distance user-facing. It was hiding in the backend code for some time now but I finally had time to make the user-facing functionality and write up the docs :). The user facing functions are called ``seq_re()`` and ``seq_rg()``. Added sequence variants that alter Re and Rg called ``re_var()`` and ``rg_var()``, respectively. Added helicity predictions to ``analyze`` functionality.
 
 #### V0.1.1 - Bug fix and new feature (October 2023)
 

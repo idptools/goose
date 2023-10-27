@@ -8,13 +8,14 @@ from goose.backend import parameters
 from goose.backend.protein import Protein
 from goose.goose_exceptions import GooseError, GooseInputError, GooseFail, GooseException
 from goose.backend.variant_generation_backend import create_kappa_variant, create_region_shuffle_variant, create_constant_residue_variant, create_hydropathy_class_variant, create_new_variant, create_constant_class_variant, create_new_var_constant_class_nums, create_asymmetry_variant, create_fcr_class_variant, create_ncpr_class_variant, create_all_props_class_variant
+from goose.backend.seq_by_dimension_backend import make_rg_re_variant, predict_rg, predict_re
 
 import metapredict as meta
 
 import random
 
-
-def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_val=parameters.DISORDER_THRESHOLD, strict=False):
+def sequence_variant_disorder(current_seq_or_disorder, original_disorder_list, 
+    cutoff_val=parameters.DISORDER_THRESHOLD, strict=False, input_disorder_val=False):
     """
     Function for determining if a sequence variant is disordered. The
     purpose of this over the typical check_disorder function for generated
@@ -30,7 +31,7 @@ def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_v
     Parameters
     -------------
 
-    current_sequence : String
+    current_seq_or_disorder : String
         The variant sequence that is being checked for disorder
 
     original_disorder_list : List
@@ -45,6 +46,9 @@ def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_v
         if set to true, will not count a sequence as disordered even if a single amino
         acid falls below the cutoff value.
 
+    input_disorder_val : bool  
+        whether the disorder value is being input
+
     Returns
     ---------
 
@@ -55,9 +59,11 @@ def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_v
         the cutoff_val.
 
     """
-
-    # first get the list of disordered residues for the current sequence
-    variant_disorder_list = meta.predict_disorder(current_sequence)
+    # first get the list of disordered residues if not input
+    if input_disorder_val == False:
+        variant_disorder_list = meta.predict_disorder(current_seq_or_disorder)
+    else:
+        variant_disorder_list = current_seq_or_disorder
 
     # first make a 'modified' disorder value list so that
     # residues can go below cutoff.
@@ -86,14 +92,14 @@ def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_v
     total_ordered_residues = 0
 
     # allow up to 5 % of residues to be 'ordered' provided they aren't consecutive
-    allowed_order_residues = round(0.05*len(current_sequence))
+    allowed_order_residues = round(0.05*len(current_seq_or_disorder))
     if allowed_order_residues < 1:
         allowed_order_residues = 1
 
     # calculate number of conseuctively allowed residues
     # going to allow up to the length of the sequence over 25 but 
     # not greater than 10
-    consec_allowed = round(len(current_sequence)/25)
+    consec_allowed = round(len(current_seq_or_disorder)/25)
     if consec_allowed < 1:
         consec_allowed = 1
     if consec_allowed > 10:
@@ -124,8 +130,6 @@ def sequence_variant_disorder(current_sequence, original_disorder_list, cutoff_v
     # if all residues in the sequence variant are greater than either
     # the original value or at least the cutoff value, return True
     return True
-
-
 
 
 
@@ -1245,3 +1249,122 @@ def gen_excluded_shuffle_variant(sequence, exclude_aas, attempts=10,
     # if it doesn't work, raise an error
     raise GooseFail('Unable to generate sequence.')
 
+
+def gen_dimensions_variant(sequence, increase_or_decrease, rg_or_re, return_all=False, 
+    return_all_interval=0.2, disorder_threshold=parameters.DISORDER_THRESHOLD, 
+    strict_disorder=False, include_original=False, num_attempts=None):
+    '''
+    Function to make a sequence more compact or expanded
+    based on predicted Rg or Re values. 
+    Keeps sequence composition constant. 
+
+    parameters
+    -----------
+    sequence : str
+        The amino acid sequence as a string
+
+    increase_or_decrease : str
+        Whether to make the sequence more compact or expanded
+        Options are 'increase' or 'decrease'
+
+    rg_or_re :  str
+        Whether to alter rg or re
+        Options are 'rg' or 're'
+    
+    return_all : bool
+        whether to return all sequences. 
+
+    return_all_interval : float
+        the minimal difference between each sequence required 
+        to be included in the return_all list. 
+
+    disorder_threshold : float
+        The minimum disorder value required for a position
+
+    strict_disorder : Bool
+        whether or not to require all disorder values to be 
+        over threshold or if it is okay to use the values
+        from the input sequence
+
+    include_original : Bool
+        whether to inlcude the orignal sequence.
+        If set to True, you will get a dictionary with 2 keys:
+            'original' and 'variants' where each one will have a dictionary
+            of sequences as keys that correspond to values that are the Rg 
+            or Re for that sequence
+
+    num_attempts : int
+        how many times to attempt to increase or decrease the Rg. 
+
+    Returns 
+    --------
+    dictionary or nested dictionary:
+        Depending on if you want the original sequence or not, will
+        return a dictionary or a nested dictionary.
+
+    '''    
+    # get starting dimensions
+    if rg_or_re=='rg':
+        # get the starting dimensions
+        starting_dimensions=predict_rg(sequence)
+    else:
+        starting_dimensions=predict_re(sequence)
+
+    # get original sequence disorder
+    starting_disorder = meta.predict_disorder(sequence)
+    
+    if num_attempts==None:
+        num_attempts=len(sequence)*75
+    else:
+        if num_attempts<1:
+            raise Exception('cannot have number of attempts be below 1.')
+
+    # get all the sequences. 
+    seqs_to_dims=make_rg_re_variant(sequence, increase_or_decrease,
+        rg_or_re, numseqs=num_attempts)
+
+    # predict disorder
+    nest_seq_disorder_vals=meta.predict_disorder_batch(list(seqs_to_dims.keys()), 
+                                                        show_progress_bar=False)
+
+    # get confirmed disordered seqs
+    confirmed_dims_to_seq = {}
+    for seq, disorder in nest_seq_disorder_vals:
+        if strict_disorder==False:
+            if sequence_variant_disorder(disorder, starting_disorder, 
+                                            cutoff_val=disorder_threshold, 
+                                            strict=False, input_disorder_val=True):
+                confirmed_dims_to_seq[seqs_to_dims[seq]]=seq
+        else:
+            if min(disorder) > disorder_threshold:
+                confirmed_dims_to_seq[seqs_to_dims[seq]]=seq
+
+    # get seqs to return. 
+    final_dim_vals_sorted = sorted(list(confirmed_dims_to_seq.keys()))
+
+    # dict for final variants
+    final_seqs={}
+    if return_all==True:
+        final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[0]]]=final_dim_vals_sorted[0]
+        cur_val=final_dim_vals_sorted[0]
+        for dim_val in range(1, len(final_dim_vals_sorted)):
+            cur_dim = final_dim_vals_sorted[dim_val]
+            if abs(cur_dim-cur_val)> return_all_interval:
+                final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[dim_val]]]=final_dim_vals_sorted[dim_val]
+                cur_val=final_dim_vals_sorted[dim_val]
+
+        # make sure we get the whole range. 
+        if final_dim_vals_sorted[-1] not in final_seqs:
+            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[-1]]]=final_dim_vals_sorted[-1]
+
+    else:
+        if increase_or_decrease=='increase':
+            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[-1]]]=final_dim_vals_sorted[-1]
+        else:
+            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[0]]]=final_dim_vals_sorted[0]
+
+    # add original if needed. 
+    if include_original==True:
+        return{'original':{sequence:starting_dimensions}, 'variants':final_seqs}
+    else:
+        return final_seqs

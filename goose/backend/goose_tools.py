@@ -52,7 +52,7 @@ def check_valid_kwargs(kwargs_dict, valid_keywords):
             raise GooseInputError(f'Error: Invalid keyword [{kw}] was passed')
     
 
-def length_check(input_val):
+def length_check(input_val, length_max=parameters.MAXIMUM_LENGTH, length_min=parameters.MINIMUM_LENGTH):
     '''
     function to make sure length parameters don't go out of bounds
     '''
@@ -63,7 +63,7 @@ def length_check(input_val):
     else:
         raise GooseError('length check function in goose tools got an input value not string or int.')
 
-    if length > parameters.MAXIMUM_LENGTH or length < parameters.MINIMUM_LENGTH:
+    if length > length_max or length < length_min:
         error_message = f'\nLength of {length} is not within the allowed range for length of between {parameters.MINIMUM_LENGTH} and {parameters.MAXIMUM_LENGTH}'
         raise GooseInputError(error_message)
 

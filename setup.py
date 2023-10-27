@@ -50,7 +50,7 @@ setup(
     install_requires=[
                 'cython', 
                 'numpy',
-                'metapredict',
+                'metapredict>=2.6.2',
                 'PredictDSSP',
                 'torch',
                 'PredictDSSP',

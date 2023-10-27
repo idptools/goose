@@ -2,6 +2,8 @@
 Basic parameters for GOOSE that set the boundaries of possible sequences to make.
 Can change parameters here and it will change paramters in GOOSE globally
 '''
+# need this for the min and max Rg / Re functions
+import statistics as stat
 
 MINIMUM_LENGTH = 10
 MAXIMUM_LENGTH = 10000
@@ -17,9 +19,16 @@ MAXIMUM_SIGMA = 1
 MINIMUM_SIGMA = 0
 
 
-# Empirically determined fcr threhsholds based on hydro values
-#MAXIMUM_CHARGE_WITH_HYDRO_1 = 1.1907 + (-0.2050 * mean_hydro)
-#MAXIMUM_CHARGE_WITH_HYDRO_2 = 1.2756 + (-0.2289 * mean_hydro)
+# Empirically determined Rg / Re min and max based on length.
+def get_min_re(length):
+  return stat.sqrt(length+(length/2.8))+5
+def get_max_re(length):
+  return stat.sqrt(length+(length*140))-10
+def get_max_rg(length):
+  return stat.sqrt(length+(length*24))-4
+def get_min_rg(length):
+  return stat.sqrt(length+(length/200))+2
+
 
 DISORDER_THRESHOLD = 0.5
 
@@ -31,6 +40,11 @@ MAXIMUM_DISORDER = 1.0
 MINIMUM_DISORDER = 0
 
 DEFAULT_ATTEMPTS = 100
+
+# error allowed for rg or re
+re_error=0.5
+rg_error=0.5
+rg_re_attempt_num=100
 
 # maximums for fractions of amino acids
 '''
