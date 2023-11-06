@@ -126,6 +126,14 @@ def sequence(length, **kwargs):
     # casts a string length to an int
     _length_check(length)
 
+    # increase attempts if hydropathy over 5.9
+    if 'hydropathy' in kwargs:
+        if kwargs['hydropathy']>=5.9:
+            if 'attempts' not in kwargs:
+                kwargs['attempts']=200
+            else:
+                kwargs['attempts']=kwargs['attempts']+200
+
     # verify that charged residues not in exclude if FCR or NCPR specified.
     if 'exclude' in kwargs:
         if 'FCR' in kwargs or 'NCPR' in kwargs:
