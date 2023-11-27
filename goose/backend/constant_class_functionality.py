@@ -9,7 +9,6 @@ import random
 from random import randint
 
 from goose.backend.amino_acids import AminoAcid
-#from goose.backend.protein import Protein
 
 
 from metapredict import meta

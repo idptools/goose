@@ -5,7 +5,7 @@ import numpy as np
 
 # Uncomment later
 from goose.backend import parameters
-from goose import goose_exceptions
+from goose.goose_exceptions import GooseError, GooseException, GooseInputError, GooseFail
 from goose.backend.sequence_generation_backend import calculate_max_charge
 import itertools
 
@@ -114,7 +114,7 @@ def generate_library_by_parameter_ranges(length,
                         # make sure the specified interval value is possible.
                         if param[2]> max(param):
                             message = f'\n\tThe third number specified in the list for {param_name} of {param[2]} is\n\t greater than the range specified of {param[0]} and {param[1]}.\n\t Specify a third value in the list between the parameter\n\t value range of {param[0]} and {param[1]}\n'
-                            raise Exception(message)
+                            raise GooseInputError(message)
                         if param[2]<=0:
                             message = f'\n\tThe third number specified in the list for {param_name} of {param[2]} is\n\t less than 0. You must specify a value greater than 0 between {param[0]} and {param[1]}.\n'
                         # now that that's taken care of, make sure all values in list are int or float
@@ -123,7 +123,7 @@ def generate_library_by_parameter_ranges(length,
                             if type(val) != int:
                                 if type(val) != float:
                                     message = f'\n\tThe input type for {param_name} for value {val}\n\tis not an integer or decimal value!'
-                                    raise Exception(message)
+                                    raise GooseInputError(message)
                         # finally can get on with it.
                         interval = param[2]
                         values_list = list(np.arange(param[0], param[1], interval))
@@ -140,11 +140,11 @@ def generate_library_by_parameter_ranges(length,
                     else:
                         # The range / range+interval list cannot be over 3 values.
                         message = f'\n\tThe number of inputs for {param_name} cannot be over 3!\n\tPlease specify 3 or fewer numbers for each parameter.\n'
-                        raise Exception(message)
+                        raise GooseInputError(message)
                 else:
                     # if something other than float, int, or list is input, ...
                     message = f'The input for parameter {param_name} has an invalid input data type of {type(param)}!'
-                    raise Exception(message)
+                    raise GooseInputError(message)
         else:
             parameter_dictionary[param_name]=[None]
     # now have the parameter_dictionary populated with values specified by
@@ -288,7 +288,7 @@ def generate_library_by_fraction_ranges(length, **kwargs):
                         # make sure the specified interval value is possible.
                         if param[2]> max(param):
                             message = f'\n\tThe third number specified in the list for {param_name} of {param[2]} is\n\t greater than the range specified of {param[0]} and {param[1]}.\n\t Specify a third value in the list between the parameter\n\t value range of {param[0]} and {param[1]}\n'
-                            raise Exception(message)
+                            raise GooseInputError(message)
                         if param[2]<=0:
                             message = f'\n\tThe third number specified in the list for {param_name} of {param[2]} is\n\t less than 0. You must specify a value greater than 0 between {param[0]} and {param[1]}.\n'
                         # now that that's taken care of, make sure all values in list are int or float
@@ -297,7 +297,7 @@ def generate_library_by_fraction_ranges(length, **kwargs):
                             if type(val) != int:
                                 if type(val) != float:
                                     message = f'\n\tThe input type for {param_name} for value {val}\n\tis not an integer or decimal value!'
-                                    raise Exception(message)
+                                    raise GooseInputError(message)
                         # finally can get on with it.
                         interval = param[2]
                         values_list = list(np.arange(param[0], param[1], interval))
@@ -314,11 +314,11 @@ def generate_library_by_fraction_ranges(length, **kwargs):
                     else:
                         # The range / range+interval list cannot be over 3 values.
                         message = f'\n\tThe number of inputs for {param_name} cannot be over 3!\n\tPlease specify 3 or fewer numbers for each parameter.\n'
-                        raise Exception(message)
+                        raise GooseInputError(message)
                 else:
                     # if something other than float, int, or list is input, ...
                     message = f'The input for parameter {param_name} has an invalid input data type of {type(param)}!'
-                    raise Exception(message)
+                    raise GooseInputError(message)
 
     # now have the parameter_dictionary populated with values specified by
     # the user. Now get all possible combinations.

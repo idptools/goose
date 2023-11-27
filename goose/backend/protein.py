@@ -8,6 +8,7 @@ import math
 
 from goose.backend.amino_acids import AminoAcid
 from sparrow import Protein as SP
+from goose.goose_exceptions import GooseInputError
 
 
 class Protein:
@@ -29,7 +30,7 @@ class Protein:
             if i in AminoAcid.standard_amino_acids:
                 continue
             else:
-                raise Exception ("Invalid amino acid detected. Make sure sequence only has canonical amino acids.")
+                raise GooseInputError ("Invalid amino acid detected. Make sure sequence only has canonical amino acids.")
 
         # build a new sparrow Protein object which can then be called as needed
         self._sparrow_protein = SP(seq)

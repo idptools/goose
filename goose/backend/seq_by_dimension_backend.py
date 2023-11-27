@@ -19,7 +19,7 @@ from sparrow.predictors import batch_predict
 from goose.backend.sequence_generation_backend import gen_sequence
 from goose.backend.parameters import re_error, rg_error, rg_re_attempt_num
 from goose.backend.lists import disordered_list
-from goose.goose_exceptions import GooseError
+from goose.goose_exceptions import GooseError, GooseException, GooseInputError, GooseFail
 from goose.backend.variant_generation_backend import create_asymmetry_variant
 
 
@@ -83,7 +83,7 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
         if allowed_error == 'default_error':
             allowed_error=re_error
     else:
-        raise GooseError('rg_or_re must be "rg" or "re"')
+        raise GooseInputError('rg_or_re must be "rg" or "re"')
     if abs(start_dim - objective_dim)<=allowed_error:
         return start_seq
     else:
@@ -116,7 +116,7 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
             elif rg_or_re=='re':
                 seq_dims = batch_predict_re(test_seqs)
             else:
-                raise GooseError('Somehow first exception was noat raised, rg_or_re must be "rg" or "re"')
+                raise GooseError('Somehow first exception was not raised, rg_or_re must be "rg" or "re"')
             # get closest rg
             for val in seq_dims:
                 cur_seq, cur_dims = seq_dims[val]
@@ -128,7 +128,7 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
                     starter = list(cur_seq)
                     start_dim = cur_dims
                     
-    raise GooseError(f'Could not generate sequence with specified {rg_or_re}. \nTry increasing number of attempts or with a different rg/re value or length value')
+    raise GooseFail(f'Could not generate sequence with specified {rg_or_re}. \nTry increasing number of attempts or with a different rg/re value or length value')
 
 
 def make_rg_re_variant(sequence, increase_or_decrease, rg_or_re, 
@@ -162,10 +162,10 @@ def make_rg_re_variant(sequence, increase_or_decrease, rg_or_re,
     elif rg_or_re=='re':
         start_dims=predict_re(sequence)
     else:
-        raise Exception('rg_or_re must be either rg or re')
+        raise GooseInputError('rg_or_re must be either rg or re')
     # make sure we are increasing or decreasing. 
     if increase_or_decrease not in ['increase', 'decrease']:
-        raise Exception('increase_or_decrease must be either increase or decrease')
+        raise GooseInputError('increase_or_decrease must be either increase or decrease')
     # list to hold seqs
     seqs=[]
     # keep original in list in case we don't make anything better
@@ -209,7 +209,7 @@ def make_rg_re_variant(sequence, increase_or_decrease, rg_or_re,
             if dim < start_dims:
                 seq_to_dim[seq]=dim
     if len(seq_to_dim)==0:
-        raise Exception('Could not generate any sequences with different Rg / Re')
+        raise GooseFail('Could not generate any sequences with different Rg / Re')
     else:
         return seq_to_dim
 

@@ -1317,7 +1317,7 @@ def gen_dimensions_variant(sequence, increase_or_decrease, rg_or_re, return_all=
         num_attempts=len(sequence)*75
     else:
         if num_attempts<1:
-            raise Exception('cannot have number of attempts be below 1.')
+            raise GooseException('cannot have number of attempts be below 1.')
 
     # get all the sequences. 
     seqs_to_dims=make_rg_re_variant(sequence, increase_or_decrease,

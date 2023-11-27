@@ -931,8 +931,8 @@ def hydro_seq(length, mean_hydro, just_neutral=False, allowed_error=None, return
     
     #if mean hydro is any value greater than the max that I can make disordered (6.1).
     if just_neutral == False:
-        if mean_hydro > 6.1:
-            used_list = lists.HydroDict['Hydro_dis_6_1']
+        if mean_hydro > 6.6:
+            used_list = lists.HydroDict['Hydro_dis_6_6']
         else:
             dict_key = "Hydro_dis_"+str(final_value)
             used_list = lists.HydroDict[dict_key]
@@ -1506,6 +1506,39 @@ def FCR_optimization(sequence, objective_hydropathy, allowed_error=parameters.HY
         final_seq = sequence
     return final_seq   
 
+def check_hydro_is_possible(length, hydropathy, FCR=None, NCPR=None):
+    '''
+    Function to do a basic check if a sequence is theoretically possible
+    to make when specifying the FCR, NCPR, and hydropathy. Basically 
+    raises an exception early if not possible to make it so we aren't
+    wasting time here. 
+    
+    Parameters
+    ----------
+    length : Int
+        The length of the sequence as an integer value
+    FCR : Float
+        The fraction of charged residues wanted for the sequence as a
+        decimal value.
+    NCPR : Float
+        The wanted net charge of the sequence given as a decimal value
+    hydropathy : Float
+        The wanted mean hydropathy value of the sequence. Uses ajusted
+        Kyte-doolittle hydropathy scale that goes from 0 to 9
+
+    Returns
+    --------
+    Boolean
+        Returns True if sequence is possible and False if it is not.
+    '''
+    # get the num charged residues
+    if FCR != None:
+        num_charged=round(length*FCR)
+        # min hydropathy will be 1.0*(number non charged residues)
+        # because Q an dN are equal to 1
+        min_hydropathy = (length-num_charged)*1.0
+    else:
+        num_charged=round(length*(abs(NCPR)))
 
 
 

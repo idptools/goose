@@ -13,6 +13,7 @@ from random import randint
 from PredictDSSP import dssp
 from goose.backend.protein import Protein
 from goose.backend.lists import alpha_helix_lists
+from goose.goose_exceptions import GooseError, GooseException, GooseInputError, GooseFail
 
 
 ''' 
@@ -85,7 +86,7 @@ def get_dssp_subcategory_scores(sequence, category):
         for subprobs in raw_scores_all:
             returned_scores.append(subprobs[2])
     else:
-        raise Exception('\n\nplease specify c for coil, h for helix, or b for beta sheet/strand\n')
+        raise GooseInputError('\n\nplease specify c for coil, h for helix, or b for beta sheet/strand\n')
 
     return returned_scores
 
@@ -142,7 +143,7 @@ def gen_helix(length, cutoff=0.85, max_iters=500):
         seq = gen_helix_starter(length)
         if check_helicity(seq, cutoff=cutoff):
             return seq
-    raise Exception('Unable to generate specified sequence')
+    raise GooseFail('Unable to generate specified sequence')
 
 
 
@@ -170,7 +171,7 @@ def gen_helix_hydro(length, hydropathy, cutoff=0.85, itrs=10000):
             if check_helicity(cur_helix, cutoff=cutoff):
                 return cur_helix
 
-    raise Exception('Unable to generate helix with specified hydrophobicity')
+    raise GooseFail('Unable to generate helix with specified hydrophobicity')
 
 
 def gen_beta_strand(length=12, cutoff=0.6, max_iters=5000):
@@ -191,7 +192,7 @@ def gen_beta_strand(length=12, cutoff=0.6, max_iters=5000):
             cutoff=0.4
         if check_beta_strand(seq, cutoff=cutoff):
             return seq
-    raise Exception('Unable to generate specified sequence')
+    raise GooseFail('Unable to generate specified sequence')
 
 
 
@@ -204,7 +205,7 @@ def gen_coil(length=7, cutoff=0.9, max_iters=500):
         seq = gen_coil_starter(length)
         if check_coil(seq, cutoff=cutoff):
             return seq
-    raise Exception('Unable to generate specified sequence')
+    raise GooseFail('Unable to generate specified sequence')
 
 
 def gen_beta_sheet(length, strand_length=14, coil_length=6):
@@ -215,7 +216,7 @@ def gen_beta_sheet(length, strand_length=14, coil_length=6):
     '''
     # set length constraint
     if length < 18:
-        raise Exception('cannot generate beta sheet less than 18 amino acids.')
+        raise GooseInputError('cannot generate beta sheet less than 18 amino acids.')
 
     # modulate the strand and coil lengths based on the total length
 
