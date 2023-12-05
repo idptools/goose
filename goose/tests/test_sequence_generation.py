@@ -1,5 +1,10 @@
 '''
 Test for GOOSE functionality to generate sequences.
+Very basic quick tests. Use deep_seq_gen_prop_tesy.py 
+for thorough testing if you make any changes.
+Use this for when you aren't making changes that impact
+sequence generation to make sure you didn't break random stuff.
+
 '''
 
 import pytest

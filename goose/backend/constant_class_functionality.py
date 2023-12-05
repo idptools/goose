@@ -74,7 +74,7 @@ def generate_random_seq(length, seq_list = []):
 
     # add residues to the sequence
     for i in range(0, length):
-        sequence += random_amino_acid(amino_acids)
+        sequence += random.choice(amino_acids)
 
     # return the sequence 
     return sequence

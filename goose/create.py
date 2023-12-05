@@ -20,6 +20,7 @@ import random
 from goose.backend.sequence_generation import generate_disordered_seq_by_fractions as _generate_disordered_seq_by_fractions
 from goose.backend.sequence_generation import generate_disordered_seq_by_props as _generate_disordered_seq_by_props
 from goose.backend.sequence_generation import generate_disordered_seq_by_dimensions as _generate_disordered_seq_by_dimensions
+from goose.backend.sequence_generation_backend import calculate_max_charge as _calculate_max_charge
 
 # goose tools for checking and fixing parameters
 from goose.backend.goose_tools import check_and_correct_props_kwargs as _check_and_correct_props_kwargs
@@ -126,6 +127,38 @@ def sequence(length, **kwargs):
     # casts a string length to an int
     _length_check(length)
 
+    # if just specifying kappa, add in some charged residues. Otherwise can't adjust kappa.
+    '''
+    This section has expanded more or less into a hack to keep things possible as far as sequence
+    space. When only a few parameters are specified, there are inherent ranges on some other parameters.
+    There is a better way to do this, but there's also this way. I'm doing this way because it will be faster. 
+    I'll probably rewrite this sooner or later because it's pretty inefficiently written at the moment. 
+    '''
+    if 'kappa' in kwargs and 'hydropathy' not in kwargs and 'FCR' not in kwargs and 'NCPR' not in kwargs:
+        just_kappa=True
+    else:
+        just_kappa=False
+    if 'kappa' in kwargs and 'hydropathy' not in kwargs and 'FCR' not in kwargs and 'NCPR' in kwargs:
+        kappa_ncpr=True
+    else:
+        kappa_ncpr=False
+    if 'kappa' in kwargs and 'hydropathy' not in kwargs and 'FCR' in kwargs and 'NCPR' not in kwargs:
+        kappa_FCR=True
+    else:
+        kappa_FCR=False
+    if 'kappa' in kwargs and 'hydropathy' in kwargs and 'FCR' not in kwargs and 'NCPR' not in kwargs:
+        kappa_hydro=True
+    else:
+        kappa_hydro=False
+
+    # Here's a way to disable all of these constraints.
+    if 'no_constraints' in kwargs:
+        if kwargs['no_constraints']==True:
+            just_kappa=False
+            kappa_ncpr=False
+            kappa_FCR=False
+            kappa_hydro=False
+
     # increase attempts if hydropathy over 5.9
     if 'hydropathy' in kwargs:
         if kwargs['hydropathy']>=5.9:
@@ -154,6 +187,7 @@ def sequence(length, **kwargs):
     # can only take in corrected kwargs.
     kwargs = _check_and_correct_props_kwargs(**kwargs)
 
+
     # now make sure that the input vals are within appropriate bounds
     _check_props_parameters(**kwargs)
 
@@ -161,22 +195,111 @@ def sequence(length, **kwargs):
     if 'exclude' not in kwargs:
         kwargs['exclude']=[]
 
+    # placeholder for sequence we haven't managed to make
+    generated_seq=None
     # make the sequence
-    try:
-        generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
-            sigma = kwargs['sigma'], attempts = kwargs['attempts'], allowed_hydro_error = parameters.HYDRO_ERROR,
-            disorder_threshold = kwargs['cutoff'], exclude=kwargs['exclude'])
-    except:
-        raise goose_exceptions.GooseFail('Unable to generate sequence. Please try again with different parameters or a lower cutoff value.')
+    if kwargs['kappa'] == None:
+        for sub_attempt in range(0, 10):
+            try:
+                generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
+                    sigma = kwargs['sigma'], attempts = kwargs['attempts'], allowed_hydro_error = parameters.HYDRO_ERROR,
+                    disorder_threshold = kwargs['cutoff'], exclude=kwargs['exclude'])
+            except:
+                continue
+            # return the seq
+            if generated_seq != None:
+                return generated_seq
+    
+    else:        
+        for sub_attempt in range(0, 30):
+            # if just specifying kappa, can do variable FCR and NCPR values. 
+            # choosing within a specific range to avoid making sequences with no charge. 
+            if just_kappa==True:
+                # minimum 4 residues
+                min_charged = round(0.2*length)
+                if min_charged < 4:
+                    min_charged=4
+                max_charged = length
+                num_charged = random.randint(min_charged, max_charged)
+                fcr_val = num_charged/length
+                if num_charged<=6:
+                    ncpr_val=0.0
+                else:
+                    min_ncpr = -fcr_val+(2/length)+0.05
+                    if min_ncpr < -0.3:
+                        min_ncpr=-0.3
+                    max_ncpr = fcr_val-(2/length)-0.05
+                    if max_ncpr > 0.3:
+                        max_ncpr=0.3
+                    ncpr_val = random.uniform(min_ncpr, max_ncpr)
+                kwargs['FCR']=fcr_val
+                kwargs['NCPR']=ncpr_val   
+            if kappa_ncpr==True:
+                absncpr=abs(kwargs['NCPR'])
+                # when we have just kappa and ncpr specified, we need to get the FCR as high as possible
+                # because that increases the chance that we can acheive a kappa value between 0 and 1. 
+                # sequences with high (>0.9)or low(< -0.9) NCPR are difficult or impossible to get kappa
+                # to very low values. 
+                if absncpr>=0.75:
+                    kwargs['FCR']=1
+                elif absncpr>=0.5 and absncpr<0.75:
+                    kwargs['FCR']=random.uniform(min([absncpr+0.35,0.99]), 1)
+                elif absncpr >= 0.25 and absncpr < 0.5:
+                    kwargs['FCR']=random.uniform((absncpr+0.25), 1)
+                else:
+                    kwargs['FCR']=random.uniform((absncpr+0.15), 1)
+            if kappa_FCR==True:
+                # when choosing kappa and FCR, we want a closer to neutral NCPR so we can adjust kappa. 
+                fcr_val = kwargs['FCR']
+                if length <= 15:
+                    ncpr_val=0.0
+                else:
+                    min_ncpr = -fcr_val+(2/length)+0.05
+                    if min_ncpr < -0.3:
+                        min_ncpr=-0.3
+                    max_ncpr = fcr_val-(2/length)-0.05
+                    if max_ncpr > 0.3:
+                        max_ncpr=0.3
+                    ncpr_val = random.uniform(min_ncpr, max_ncpr)
+                    kwargs['NCPR']=ncpr_val
+            if kappa_hydro==True:
+                # when FCR and NCPR not specified, we can modulate them based on hydropathy. 
+                max_FCR = min([1, _calculate_max_charge(kwargs['hydropathy'])])
+                if max_FCR-0.05 < 0.2:
+                    max_FCR=0.21
+                else:
+                    max_FCR = max_FCR-0.05
+                # make sure we have some charged residues to be able to moduelate kappa. 
+                fcr_val = random.uniform(0.15, max_FCR)
+                min_ncpr = -fcr_val+(2/length)+0.05
+                if min_ncpr < -0.3:
+                    min_ncpr=-0.3
+                max_ncpr = fcr_val-(2/length)-0.05
+                if max_ncpr > 0.3:
+                    max_ncpr=0.3
+                ncpr_val = random.uniform(min_ncpr, max_ncpr)
+                kwargs['NCPR']=ncpr_val
+                kwargs['FCR']=fcr_val
 
-    # this is a bit hacky for now, but it works.
-    if kwargs['kappa'] != None:
-        try:
-            generated_seq = _gen_kappa_variant(generated_seq, kappa=kwargs['kappa'], allowed_kappa_error = parameters.MAXIMUM_KAPPA_ERROR, disorder_threshold=kwargs['cutoff'], strict_disorder=False)
-        except:
-            raise goose_exceptions.GooseFail('Unable to get kappa of generated sequence correct')
-    # return the seq
-    return generated_seq
+            generated_seq=None
+            try:
+                generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
+                    sigma = kwargs['sigma'], attempts = kwargs['attempts'], allowed_hydro_error = parameters.HYDRO_ERROR,
+                    disorder_threshold = kwargs['cutoff'], exclude=kwargs['exclude'])
+            except:
+                continue
+            if generated_seq != None:
+                try:
+                    generated_seq = _gen_kappa_variant(generated_seq, kappa=kwargs['kappa'], 
+                        allowed_kappa_error = parameters.MAXIMUM_KAPPA_ERROR, 
+                        disorder_threshold=kwargs['cutoff'], strict_disorder=False)
+                except:
+                    continue
+            if generated_seq != None:
+                return generated_seq
+
+
+    raise goose_exceptions.GooseFail('Unable to generate sequence. Please try again with different parameters or a lower cutoff value.')
 
 
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-

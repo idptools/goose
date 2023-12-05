@@ -33,7 +33,7 @@ def gen_sequence(length, usedlist=[]):
     if usedlist == []:
         usedlist = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
     for i in range(0, length):
-        final_sequence += random_amino_acid(usedlist)
+        final_sequence += random.choice(usedlist)
     return final_sequence
 
 

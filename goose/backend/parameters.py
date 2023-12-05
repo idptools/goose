@@ -17,7 +17,14 @@ MINIMUM_HYDRO_CHARGED = 0
 MAXIMUM_HYDRO_CHARGED = 6.6
 MAXIMUM_SIGMA = 1
 MINIMUM_SIGMA = 0
+MINIMUM_KAPPA = 0.03
+MAXIMUM_KAPPA = 1
 
+# allowed error
+HYDRO_ERROR = 0.07
+MAXIMUM_KAPPA_ERROR=0.03
+re_error=0.5
+rg_error=0.5
 
 # Empirically determined Rg / Re min and max based on length.
 def get_min_re(length):
@@ -29,21 +36,13 @@ def get_max_rg(length):
 def get_min_rg(length):
   return stat.sqrt(length+(length/200))+2
 
-
+# thresholds
 DISORDER_THRESHOLD = 0.5
-
-HYDRO_ERROR = 0.07
-
-MAXIMUM_KAPPA_ERROR=0.03
-
 MAXIMUM_DISORDER = 1.0
 MINIMUM_DISORDER = 0
 
+# attempts
 DEFAULT_ATTEMPTS = 100
-
-# error allowed for rg or re
-re_error=0.5
-rg_error=0.5
 rg_re_attempt_num=100
 
 # maximums for fractions of amino acids

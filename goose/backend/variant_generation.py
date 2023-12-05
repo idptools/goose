@@ -787,23 +787,21 @@ def gen_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIMUM_
 
     # get original sequence disorder
     starting_disorder = meta.predict_disorder(sequence)
-
-    for attempt_num in range(0, attempts):
-        try:
-            disordered_seq = create_kappa_variant(sequence, kappa=kappa, 
-                allowed_kappa_error = allowed_kappa_error)
-        except:
-            continue
-        if sequence_variant_disorder(disordered_seq, starting_disorder, 
+    try:
+        disordered_seq = create_kappa_variant(sequence, kappa=kappa, 
+            allowed_kappa_error = allowed_kappa_error)
+    except:
+        raise GooseFail('Unable to generate kappa variant.')
+    if sequence_variant_disorder(disordered_seq, starting_disorder, 
+        cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+        # if passes the 'disorder test', return the seq
+        return disordered_seq
+    else:
+        newsequence = optimize_disorder_within_class(disordered_seq, num_iterations=50)
+        if sequence_variant_disorder(newsequence, starting_disorder, 
             cutoff_val=disorder_threshold, strict=strict_disorder) == True:
-            # if passes the 'disorder test', return the seq
-            return disordered_seq
-        else:
-            newsequence = optimize_disorder_within_class(disordered_seq, num_iterations=50)
-            if sequence_variant_disorder(newsequence, starting_disorder, 
-                cutoff_val=disorder_threshold, strict=strict_disorder) == True:
-                return newsequence
-    raise GooseFail('Unable to generate sequence.')
+            return newsequence
+    raise GooseFail('Unable to generate kappa variant.')
 
 
 def gen_asymmetry_variant(sequence, increase_decrease, aa_class, num_change=None, window_size = 6,

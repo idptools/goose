@@ -1,7 +1,7 @@
 ![GOOSE_LOGO_FULL](https://github.com/ryanemenecker/goose/blob/main/images/goose_logo_3.png) 
 # GOOSE : Generate disOrdered prOtiens Specifying propErties
 
-### Last updated October 2023
+### Last updated December 2023
 
 ### What is GOOSE?
 GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. Basically, we want to make it easy for you to design IDRs or IDR variants for your research.
@@ -69,6 +69,10 @@ You can not currently cite GOOSE as we have yet to publish it (hopefully soon!).
 ## Changes
 
 The section below logs changes to GOOSE.  
+
+#### V0.1.3 - Bug fixes and more tests. (December 2023)
+
+Wrote up tests for nearly all possible combinations of creating sequences by specifying different numbers of sequence properties. Found some bugs along the way and fixed them (as far as I can tell). Generally made sequence generation more robust across parameter space. Fixed some issues with exceptions. Updated minimum kappa parameter to a value of 0.03 because GOOSE often has a hard time getting to 0.0. Also increased max hydropathy value that GOOSE can generate to 6.6 on the adjusted Kyte-Doolittle scale. 
 
 #### V0.1.2 - New features, bug fixes, general improvement. (October 2023)
 

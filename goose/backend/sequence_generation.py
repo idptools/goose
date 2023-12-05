@@ -149,8 +149,10 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
     final_seq : String
         Returns the final sequence that was specified as a string.
     '''
+    
     # try the number of specified attempts to build the seq
     for attempt_num in range(0, attempts):
+        attempted_seq=None
         # if sigma is specified, get the corresponding
         # FCR and NCPR values
         if sigma != None:
@@ -160,7 +162,7 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
 
         # try to build the sequence
         try:
-            attempted_seq = create_seq_by_props(length, FCR=FCR, NCPR=NCPR, hydropathy=hydropathy, attempts=20, 
+            attempted_seq = create_seq_by_props(length, FCR=FCR, NCPR=NCPR, hydropathy=hydropathy, attempts=200, 
             allowed_hydro_error = parameters.HYDRO_ERROR, exclude=exclude)
 
         # if attempt to build the sequence failed, continue back at the 
@@ -169,8 +171,9 @@ def generate_disordered_seq_by_props(length, FCR=None, NCPR=None, hydropathy=Non
             continue
 
         # if the sequence is disordered, return it
-        if check_disorder(attempted_seq, disorder_threshold=disorder_threshold, strict=strict_disorder):
-            return attempted_seq
+        if attempted_seq != None:
+            if check_disorder(attempted_seq, disorder_threshold=disorder_threshold, strict=strict_disorder):
+                return attempted_seq
 
     # if no disordered sequence in number of attempts, raise GooseFail
     raise GooseFail('Unable to generate sequence! Try increasing attempts!')

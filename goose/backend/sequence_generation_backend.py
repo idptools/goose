@@ -635,7 +635,7 @@ def gen_sequence(length, usedlist=[]):
     if usedlist == []:
         usedlist = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
     for i in range(0, length):
-        final_sequence += random_amino_acid(usedlist)
+        final_sequence += random.choice(usedlist)
     return final_sequence
 
 
@@ -1047,7 +1047,7 @@ def generate_charged_residues(length, FCR, objective_hydropathy):
     # if total_hydro_charged > 1, just add 'D' or 'E'
     elif average_hydro_val > 1:
         for i in range(0, number_charged):
-            final_charged_res += random_amino_acid(D_E)
+            final_charged_res += random.choice(D_E)
         return final_charged_res
     # otherwise we need to figure out how to get as close as possilbe.
     else:
@@ -1062,10 +1062,10 @@ def generate_charged_residues(length, FCR, objective_hydropathy):
                 elif remaining_hydro == 0.6:
                     final_charged_res += 'K'
                 elif remaining_hydro == 1:
-                    final_charged_res += random_amino_acid(D_E)
+                    final_charged_res += random.choice(D_E)
                 else:
                     if cur_average_hydro < average_hydro_val:
-                        final_charged_res += random_amino_acid(D_E)
+                        final_charged_res += random.choice(D_E)
                         remaining_hydro -= 1
                     else:
                         final_charged_res += 'K'
@@ -1080,10 +1080,10 @@ def generate_charged_residues(length, FCR, objective_hydropathy):
                 elif remaining_hydro == 0.6:
                     final_charged_res += 'K'
                 elif remaining_hydro == 1:
-                    final_charged_res += random_amino_acid(D_E)
+                    final_charged_res += random.choice(D_E)
                 else:
                     if cur_average_hydro < average_hydro_val:
-                        final_charged_res += random_amino_acid('K')
+                        final_charged_res += random.choice('K')
                         remaining_hydro -= 0.6
                     else:
                         final_charged_res += 'R'
@@ -1320,7 +1320,6 @@ def fraction_net_charge(length, fraction, net_charge):
     # otherwise, don't do anything to added_residues       
     else:
         added_residues = added_residues 
-
     # return the final dict
     return {'NCPR_residues': added_NCPR_residues, 'FCR_residues': added_residues}   
 
@@ -1353,7 +1352,8 @@ def calculate_max_charge(hydropathy):
     MAXIMUM_CHARGE_WITH_HYDRO_1 = 1.1907 + (-0.1389 * hydropathy)
     MAXIMUM_CHARGE_WITH_HYDRO_2 = 1.2756 + (-0.1450 * hydropathy)
     # return the lower value between the 2 possibilities.
-    return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2])
+    # can't have FCR > 1. so 1 is also in the list
+    return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2, 1])
 
 
 def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = parameters.HYDRO_ERROR):
@@ -1506,43 +1506,11 @@ def FCR_optimization(sequence, objective_hydropathy, allowed_error=parameters.HY
         final_seq = sequence
     return final_seq   
 
-def check_hydro_is_possible(length, hydropathy, FCR=None, NCPR=None):
-    '''
-    Function to do a basic check if a sequence is theoretically possible
-    to make when specifying the FCR, NCPR, and hydropathy. Basically 
-    raises an exception early if not possible to make it so we aren't
-    wasting time here. 
-    
-    Parameters
-    ----------
-    length : Int
-        The length of the sequence as an integer value
-    FCR : Float
-        The fraction of charged residues wanted for the sequence as a
-        decimal value.
-    NCPR : Float
-        The wanted net charge of the sequence given as a decimal value
-    hydropathy : Float
-        The wanted mean hydropathy value of the sequence. Uses ajusted
-        Kyte-doolittle hydropathy scale that goes from 0 to 9
-
-    Returns
-    --------
-    Boolean
-        Returns True if sequence is possible and False if it is not.
-    '''
-    # get the num charged residues
-    if FCR != None:
-        num_charged=round(length*FCR)
-        # min hydropathy will be 1.0*(number non charged residues)
-        # because Q an dN are equal to 1
-        min_hydropathy = (length-num_charged)*1.0
-    else:
-        num_charged=round(length*(abs(NCPR)))
 
 
 
-def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1, allowed_hydro_error = parameters.HYDRO_ERROR, exclude = []):
+def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1, 
+    allowed_hydro_error = parameters.HYDRO_ERROR, exclude = []):
 
     '''
     Function that allows the user to generate a sequence with specific
@@ -1593,7 +1561,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
         # amino acids for the get_optimal_residue function.
         seq = ''
         for i in range(0, 4):
-            seq += random_amino_acid(lists.disordered_list)
+            seq += random.choice(lists.disordered_list)
 
         # empty string to hold amino acids for the final sequence
         final_seq = ''
@@ -1621,7 +1589,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                 final_seq = hydro_seq(length, hydropathy, exclude_residues=exclude)
                 return final_seq
             except:
-                raise GooseError('Failed to make sequence.')
+                continue
 
 
         # Just FCR
@@ -1651,12 +1619,10 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                         residue = get_optimal_residue(cur_input, exclude_residues = final_exclusion)
                         final_seq += residue
                 else:
-                    residue = random_amino_acid(lists.charged_list)
+                    residue = random.choice(lists.charged_list)
                     seq += residue
                     final_seq += residue
             return final_seq
-
-
 
         # Just NCPR
         #===============================================#
@@ -1673,13 +1639,13 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
             if NCPR < 0:
                 for i in range(0, num_charged):
                     # add negative residues
-                    charged_residues += random_amino_acid(lists.D_E)
+                    charged_residues += random.choice(lists.D_E)
 
             # if the net charge is positive
             elif NCPR > 0:
                 for i in range(0, num_charged):
                     # add positive residues
-                    charged_residues += random_amino_acid(lists.K_R)
+                    charged_residues += random.choice(lists.K_R)
 
             #  Randomly adjust FCR while matching net_Charge
             #-----------------------------------------------#
@@ -1694,8 +1660,8 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                 # for the number of added additional charges 
                 for i in range(0, added_additional_charges):
                     # add one positive and one negative to keep the sequence NCPR from changing
-                    charged_residues += random_amino_acid(lists.D_E)
-                    charged_residues += random_amino_acid(lists.K_R)
+                    charged_residues += random.choice(lists.D_E)
+                    charged_residues += random.choice(lists.K_R)
 
 
             # Generate random list of charged residue positions
@@ -1738,27 +1704,26 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
             
             # figure out how many residues for FCR and how many for NCPR
             charged_residue_dict = fraction_net_charge(length, fraction=FCR, net_charge=NCPR)
-
             # now use that to make charged_residues str
             charged_residues = ''
             # if the net_charge is negative...
             if NCPR < 0:
                 for i in range(0, charged_residue_dict['NCPR_residues']):
                     # add negative residues
-                    charged_residues += random_amino_acid(lists.D_E)
+                    charged_residues += random.choice(lists.D_E)
 
             # if the net charge is positive
             elif NCPR > 0:
                 for i in range(0, charged_residue_dict['NCPR_residues']):
-                    # add positive residues
-                    charged_residues += random_amino_acid(lists.K_R)
 
+                    # add positive residues
+                    charged_residues += random.choice(lists.K_R)
 
             # now accomodate for the FCR residues if necessary
             if charged_residue_dict['FCR_residues'] != 0:
                 for fcr_residues in range(0, charged_residue_dict['FCR_residues']):
-                    charged_residues += random_amino_acid(lists.K_R)
-                    charged_residues += random_amino_acid(lists.D_E)
+                    charged_residues += random.choice(lists.K_R)
+                    charged_residues += random.choice(lists.D_E)
 
             # Generate random list of charged residue positions
             charged_positions = gen_charged_positions(length, len(charged_residues))
@@ -1814,7 +1779,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
 
                 # add necessary charged residues to the string
                 for fcr_residues in range(0, number_charged_res):    
-                    charged_residues += random_amino_acid(lists.charged_list)
+                    charged_residues += random.choice(lists.charged_list)
 
                 # figure out how much hydropathy is taken by charged residues
                 charged_residue_hydropathy = Protein(charged_residues).hydropathy
@@ -1937,26 +1902,26 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                     else:
                         FCR_value = potential_FCR_values[0]
                 if FCR_value != 0:
-                    num_residues = length*FCR_value
+                    num_residues = round(length*FCR_value,2)
                     if num_residues >= 2:
                         if num_residues % 2 != 0:
                             num_residues = num_residues - 1
                         # figure out if you need a specific charge value
                         charge_iterations = round(num_residues / 2)
                         for i in range(0, charge_iterations):
-                            charged_residues += random_amino_acid(lists.D_E)
+                            charged_residues += random.choice(lists.D_E)
                             if hydropathy > 1:
-                                charged_residues += random_amino_acid(lists.K_R)
+                                charged_residues += random.choice(lists.K_R)
                             else:
                                 charged_residues += 'R'
-
+                                add_test+='R'
             # now take care of FCR
             ncpr_residues_to_add = round(length*abs(NCPR))
             # if the net_charge is negative...
             if NCPR < 0:
                 for i in range(0, ncpr_residues_to_add):
                     # add negative residues
-                    charged_residues += random_amino_acid(lists.D_E)
+                    charged_residues += random.choice(lists.D_E)
 
             # if the net charge is positive
             elif NCPR > 0:
@@ -1965,7 +1930,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                     if hydropathy < 1:
                         charged_residues += 'R'
                     else:                
-                        charged_residues += random_amino_acid(lists.K_R)
+                        charged_residues += random.choice(lists.K_R)
 
 
             # if NCPR was set to 0 and the FCR ends at 0, just make the sequence
@@ -1975,7 +1940,6 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
             else:
                 # calculate FCR
                 final_FCR = round(len(charged_residues) / length, 4)
-
 
                 # now need to take care of the hydropathy part.
                 number_hydro_res = length - len(charged_residues)
@@ -2063,7 +2027,7 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                 if NCPR < 0:
                     for i in range(0, charged_residue_dict['NCPR_residues']):
                         # add negative residues
-                        charged_residues += random_amino_acid(lists.D_E)
+                        charged_residues += random.choice(lists.D_E)
 
                 # if the net charge is positive
                 elif NCPR > 0:
@@ -2072,18 +2036,18 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                         if hydropathy < 1:
                             charged_residues += 'R'
                         else:
-                            charged_residues += random_amino_acid(lists.K_R)
+                            charged_residues += random.choice(lists.K_R)
 
                 # now accomodate for the FCR residues if necessary
                 if charged_residue_dict['FCR_residues'] != 0:
                     for fcr_residues in range(0, charged_residue_dict['FCR_residues']):
 
                         if hydropathy > 1:
-                            charged_residues += random_amino_acid(lists.K_R)
+                            charged_residues += random.choice(lists.K_R)
                         else:
                             charged_residues += 'R'
 
-                        charged_residues += random_amino_acid(lists.D_E)
+                        charged_residues += random.choice(lists.D_E)
 
                 # first figure out total hydropathy needed
                 total_hydropathy = hydropathy*length
@@ -2097,6 +2061,8 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                 total_charged_hydro = charged_residue_hydropathy * len(charged_residues)
                 remaining_needed_hydro = total_hydropathy - total_charged_hydro
 
+
+
                 if number_hydro_res > 0:
 
                     new_mean_hydro = round(remaining_needed_hydro/number_hydro_res, 4)
@@ -2107,8 +2073,10 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                     
                     # figure out allowed error
                     standard_hydro_error = allowed_hydro_error
-                    if FCR != 0:
+                    if FCR != 0 and FCR != 1:
                         adjusted_error = standard_hydro_error / (1-FCR)
+                    elif FCR == 1:
+                        adjusted_error=standard_hydro_error
                     else:
                         adjusted_error = allowed_hydro_error
                     if adjusted_error < allowed_hydro_error:
@@ -2135,7 +2103,6 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
                         else:
                             residue = charged_residue_list.pop()
                             final_seq += residue
-
                     # check hydropathy
                     if check_hydropathy(final_seq, hydropathy, allowed_hydro_error):
                         final_seq = final_seq
@@ -2161,8 +2128,6 @@ def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1
     raise GooseError('Failed to make sequence.')
 
 
-
-
 def test_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None):
     """
     TO DO - add docstring
@@ -2181,7 +2146,6 @@ def test_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None):
     if hydropathy != None:
         print(f'Objective hydropathy = {hydropathy} : Actual hydropathy = {seq_hydropathy}')
     print(final_sequence)
-
 
 
 #/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-
@@ -2362,7 +2326,7 @@ def create_seq_by_fracs(length, max_aa_fractions={}, choose_optimized_residue=Tr
         # randomly generated disordered residues 
         starter_seq = ''
         for i in range(0, 4):
-            starter_seq += random_amino_acid(lists.disordered_list)
+            starter_seq += random.choice(lists.disordered_list)
 
         # create a copy of sequence_list. 
         local_sequence_list = sequence_list.copy()

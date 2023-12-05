@@ -1528,7 +1528,7 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
     if remove_these_positions != []:
         for i in remove_these_positions:
             if i == 0:
-                new_sequence = random_amino_acid(neutral_IDR_list) + sequence[1:]
+                new_sequence = random.choice(neutral_IDR_list) + sequence[1:]
             elif i == len(sequence):
                 new_sequence = sequence[0:len(sequence)] + get_optimal_residue(sequence[i-4:], exclude_residues = ['D', 'E', 'K', 'R', 'P'])
             else:
@@ -1536,7 +1536,7 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
                 if len(sequence_chunk) > 4:
                     new_sequence = sequence[0:i] + get_optimal_residue(sequence[i-4:i], exclude_residues = ['D', 'E', 'K', 'R', 'P']) + sequence[i+1:]
                 else:
-                    new_sequence = sequence[0:i] + random_amino_acid(neutral_IDR_list) + sequence[i+1:]
+                    new_sequence = sequence[0:i] + random.choice(neutral_IDR_list) + sequence[i+1:]
             # overwrite with new sequence
             sequence = new_sequence
 
@@ -1574,11 +1574,11 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
 
             # now delete the residue and add in a D/E
             if best_position == 0:
-                new_sequence = random_amino_acid(D_E) + sequence[1:]
+                new_sequence = random.choice(D_E) + sequence[1:]
             elif best_position == len(sequence):
-                new_sequence = sequence[0:len(sequence)] + random_amino_acid(D_E)
+                new_sequence = sequence[0:len(sequence)] + random.choice(D_E)
             else:
-                new_sequence = sequence[0:best_position] + random_amino_acid(D_E) + sequence[best_position+1:]
+                new_sequence = sequence[0:best_position] + random.choice(D_E) + sequence[best_position+1:]
             # now overwrite sequence with new_sequence
             sequence = new_sequence
 
@@ -1609,11 +1609,11 @@ def gen_minimal_sequence_variant(input_sequence, mean_hydro = '', fraction = '',
 
             # now delete the residue and add in a D/E
             if best_position == 0:
-                new_sequence = random_amino_acid(K_R) + sequence[1:]
+                new_sequence = random.choice(K_R) + sequence[1:]
             elif best_position == len(sequence):
-                new_sequence = sequence[0:len(sequence)] + random_amino_acid(K_R)
+                new_sequence = sequence[0:len(sequence)] + random.choice(K_R)
             else:
-                new_sequence = sequence[0:best_position] + random_amino_acid(K_R) + sequence[best_position+1:]
+                new_sequence = sequence[0:best_position] + random.choice(K_R) + sequence[best_position+1:]
             # now overwrite sequence with new_sequence
             sequence = new_sequence
             
