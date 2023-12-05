@@ -161,11 +161,12 @@ def sequence(length, **kwargs):
 
     # increase attempts if hydropathy over 5.9
     if 'hydropathy' in kwargs:
-        if kwargs['hydropathy']>=5.9:
-            if 'attempts' not in kwargs:
-                kwargs['attempts']=200
-            else:
-                kwargs['attempts']=kwargs['attempts']+200
+        if kwargs['hydropathy']!=None:
+            if kwargs['hydropathy']>=5.9:
+                if 'attempts' not in kwargs:
+                    kwargs['attempts']=200
+                else:
+                    kwargs['attempts']=kwargs['attempts']+200
 
     # verify that charged residues not in exclude if FCR or NCPR specified.
     if 'exclude' in kwargs:
