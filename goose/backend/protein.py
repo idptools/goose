@@ -154,7 +154,7 @@ class Protein:
         random_name = '>'
         amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
         for i in range(0, 5):
-            random_name += amino_acids[random.randint(0, len(amino_acids)-1)]
+            random_name += random.choice(amino_acids)
             random_name += str(random.randint(0, 9))
         return random_name
 

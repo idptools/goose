@@ -70,6 +70,10 @@ You can not currently cite GOOSE as we have yet to publish it (hopefully soon!).
 
 The section below logs changes to GOOSE.  
 
+#### V0.1.4 - More bug fixes and more tests. (December 2023)
+
+Added in tests to many thousands (maybe millions) of sequences that span sequence parameter space and sequence fraction space. Using these tests, I found some very edge case bugs in GOOSE. These bugs have been fixed. Additionally, some of the backend code has been updated to be more efficient, which will increase the speed at which GOOSE can generate sequences. Also added more information on GOOSE's ability to make sequences at the edge of kappa values. Finally, synthetic sequence creation when kappa is specified has been made to be a bit faster. 
+
 #### V0.1.3 - Bug fixes and more tests. (December 2023)
 
 Wrote up tests for nearly all possible combinations of creating sequences by specifying different numbers of sequence properties. Found some bugs along the way and fixed them (as far as I can tell). Generally made sequence generation more robust across parameter space. Fixed some issues with exceptions. Updated minimum kappa parameter to a value of 0.03 because GOOSE often has a hard time getting to 0.0. Also increased max hydropathy value that GOOSE can generate to 6.6 on the adjusted Kyte-Doolittle scale. 

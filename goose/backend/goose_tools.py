@@ -421,7 +421,8 @@ def check_fracs_parameters(**kwargs):
             
             summed_fraction = summed_fraction + kwargs[aa]
 
-    if summed_fraction > 1:
+    # round to 10th fractional value to avoid dumb errors
+    if round(summed_fraction,10) > 1:
         raise GooseInputError(f'Requested a sequence where the sum of the fractional components is greater than 1. This will not work!')
         
 

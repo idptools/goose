@@ -5,7 +5,7 @@ import random
 from random import randint
 import numpy as np
 
-
+from sparrow import Protein as pr
 from goose.goose_exceptions import GooseInputError, GooseInstallError, GooseBackendBug
 from goose.backend.protein import Protein
 from goose.backend.sequence_generation_backend import identify_residue_positions, get_optimal_residue, optimal_residue_key, create_seq_by_props, fast_predict_disorder, calculate_max_charge, fraction_net_charge
@@ -13,12 +13,6 @@ from goose.backend import lists
 from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
 from goose.backend.ginell_clustering_parameter import calculate_average_inverse_distance_from_sequence as clustering_param
-
-# will update when sparrow is on pip
-try:
-    from sparrow import Protein as pr
-except:
-    raise GooseInstallError('\nSparrow is not installed. Please install Sparrow using : \n pip install git+https://github.com/holehouse-lab/sparrow.git ')
 
 
 def return_num_for_class(sequence):
@@ -48,47 +42,19 @@ def return_num_for_class(sequence):
         class as defined above
 
     '''
-    # define which residues in each class
-    aromatics = ['F', 'W', 'Y']
-    polar = ['Q', 'N', 'S', 'T']
-    hydrophobic = ['I', 'V', 'L', 'A', 'M']
-    positive = ['K', 'R']
-    negative = ['D', 'E']
+    # make sure sequence is uppercase
+    sequence=sequence.upper()
 
-
-    # first count the number of each class in the sequence
-    num_aromatics = 0
-    num_polar = 0
-    num_hydro = 0
-    num_positive = 0
-    num_negative = 0
-    num_G = 0
-    num_P = 0
-    num_H = 0
-    num_C = 0
-
-    # now iterate through the sequence adding to each class as necessary
-    for amino_acid in sequence:
-        if amino_acid == 'G':
-            num_G += 1
-        elif amino_acid == 'P':
-            num_P += 1
-        elif amino_acid == 'H':
-            num_H += 1
-        elif amino_acid == 'C':
-            num_C += 1
-        elif amino_acid in negative:
-            num_negative += 1
-        elif amino_acid in positive:
-            num_positive += 1
-        elif amino_acid in hydrophobic:
-            num_hydro += 1
-        elif amino_acid in polar:
-            num_polar += 1
-        elif amino_acid in aromatics:
-            num_aromatics += 1
-        else:
-            raise GooseInputError('Invalid amino acid detected!')
+    # count number of residues in each class.
+    num_aromatics = sequence.count('F')+sequence.count('W')+sequence.count('Y')
+    num_polar = sequence.count('Q')+sequence.count('N')+sequence.count('S')+sequence.count('T')
+    num_hydro = sequence.count('I')+sequence.count('V')+sequence.count('L')+sequence.count('A')+sequence.count('M')
+    num_positive = sequence.count('K')+sequence.count('R')
+    num_negative = sequence.count('D')+sequence.count('E')
+    num_G = sequence.count('G')
+    num_P = sequence.count('P')
+    num_H = sequence.count('H')
+    num_C = sequence.count('C')
 
     return {'aromatic': num_aromatics, 'polar': num_polar, 'hydrophobic': num_hydro, 'positive': num_positive,
     'negative': num_negative, 'C': num_C, 'H': num_H, 'P': num_P, 'G': num_G}
@@ -272,7 +238,7 @@ def hydro_range_constant_classes(sequence):
         max_possible += AA_hydro_max[aa]
 
     # return the max and min values dividued by sequence length in a list 
-    return[round(min_possible/len(sequence), 6), round(max_possible/len(sequence), 6)]
+    return[round(min_possible/len(sequence), 10), round(max_possible/len(sequence), 10)]
 
 
 def residue_optimize_hydropathy_within_class(sequence, objective_hydropathy, target_residue_index):
@@ -366,10 +332,8 @@ def residue_optimize_hydropathy_within_class(sequence, objective_hydropathy, tar
                             potential_res.append(possible_residues)
         if potential_res == []:
             potential_res.append(cur_aa)
-        if len(potential_res) > 1:
-            build_sequence += potential_res[random.randint(0, len(potential_res)-1)]
-        else:
-            build_sequence += potential_res[0]
+        # randomly select residue.
+        build_sequence += random.choice(potential_res)
     # return the sequence
     return build_sequence  
 
@@ -416,8 +380,6 @@ def optimize_hydropathy_within_class(sequence, objective_hydropathy, allowed_hyd
     return new_sequence
 
 
-
-
 def get_charge_locs(sequence):
     '''
     function that returns the locations of residues
@@ -443,17 +405,11 @@ def get_charge_locs(sequence):
     negatives = []
     positives = []
 
-    for aa_ind in range(0, len(sequence)):
-        aa = sequence[aa_ind]
-        if aa == 'K':
+    for aa_ind, aa in enumerate(sequence):
+        if aa == 'K' or aa =='R':
             positives.append(aa_ind)
-        elif aa == 'R':
-            positives.append(aa_ind)
-        elif aa == 'D':
+        elif aa == 'D' or aa == 'E':
             negatives.append(aa_ind)
-        elif aa == 'E':
-            negatives.append(aa_ind)
-
     return {'negative':negatives, 'positive':positives}
 
 

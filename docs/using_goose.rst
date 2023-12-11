@@ -22,7 +22,7 @@ The only required argument is the length, which must be between 10 and 10,000. I
 
 3. ``NCPR``: The net charge per residue (`NCPR`), which must be between -1 and +1.
 
-4. ``kappa``: The kappa value is a charge asymmetry parameter where higher values mean greater charge asymmetry. This must be between 0 and 1.
+4. ``kappa``: The kappa value is a charge asymmetry parameter where higher values mean greater charge asymmetry. This must be between 0 and 1. NOTE: kappa values of 0 or 1 can take a long time to make because there are very few sequences that satisfy these values. GOOSE is much faster at making sequences between 0.1 and 0.9. Also, specifying kappa **requires** that you do not have an FCR=0 and that you do not have FCR=NCPR (there needs to be some + and some - charged residues for kappa).
 
 **Importantly, you do not need to specify all of these sequence properties simultaneously.** For example, if you specify FCR and hydropathy, GOOSE will return sequences that have varying NCPR and kappa values while making sure that the specified hydropathy and FCR values are what you input. In this way, you can generate many sequences that have the fixed properties that you want to stay fixed, while other properties vary.
 
@@ -33,6 +33,9 @@ In addition to the above parameters, you can specify:
 2. ``attempts``: The number of attempts defines how many times GOOSE will try to generate a desired sequence. This is relevant because certain parameter combinations of values are more challenging than others, and GOOSE implements a stochastic design algorithm such that different sequences are generated every time. For harder sequence compositions you may need to increase this from the default value. 
 
 3. ``exclude``: A list of residues to exclude from your generated sequence. **NOTE** - If you specify FCR or NCPR, you CANNOT have any charged residues in the ``exclude`` list. Additionally, **you can not specify more than 10 residues to be excluded**. 
+
+4. ``no_constraints``: A boolean value that lets you generate sequences without any constraints on sequence properties. Constraints on sequence properties are only added if ``kappa`` is specified and ``NCPR`` or ``FCR`` are not specified. The reason for these constraints is to make sure that there are oppositely charged residues in the sequence generated. In other words, FCR and NCPR are chosen to be random values that are result in at least some oppositely charged residues to be in the sequence generated (but the FCR and NCPR values are **still randomly chosen**, just within a more constrained space than 0-1). To bypass this, you can set ``no_constraints=True`` when generated a sequence; although, this is generally not recommended. 
+
 
 Examples of sequence generation by properties
 ----------------------------------------------
@@ -131,7 +134,16 @@ You cannot have values for NCPR where the absolute value of NCPR is greater than
     'VSKKLKAKIKSPKRKRKKKKLKVKARSRKRAKLSVVKRKRMSVKVAKRSKVRAFMVRRKKKPKPFKRKVKAVRKKKRRPKKKRIAKKRVKKVKRKRKKVI'
 
 
-**Note** - Generating this sequence fails frequently. To bypass this I increased the number of attempts by specifying ``attempts=100``. It should be noted that creation of this sequence still fails occassionally even when attempts is increased to 1000. 
+**Kappa with no_constraints set to True**
+
+.. code-block:: python
+
+    create.sequence(100, kappa=0.2, no_constraints=True)
+    'THQQSEEAQASSQTTSEDGKQSHEGHEASGAKNESHGHHKQSNGTKHGDTRTHDTQNKTTAQSHRGDENRKKEGNDDEGAHAADDAHPAHSGTRQHQTKH'
+
+
+
+**Note** - Generating this sequence fails frequently. To bypass this I increased the number of attempts by specifying ``attempts=1000``. It should be noted that creation of this sequence still fails occassionally even when attempts is increased to 1000. 
 
 Generating Sequences specifying Fractions of Amino Acids
 =========================================================
@@ -273,7 +285,7 @@ Types of sequence variants
 
 ``ncpr_class_var()`` - Function to make a sequence variant that adjusts the NCPR while minimizing changes to the position and number of amino acids by class.
 
-``kappa_var()`` - Variant where you can alter the charge asymmetry by changing the kappa value. Requires the presence of positively charged and negatively charged residues in the original sequence. Higher kappa values increase charge asymmetry, lower kappa values reduce charge asymmetry. Values can be between 0 and 1. 
+``kappa_var()`` - Variant where you can alter the charge asymmetry by changing the kappa value. Requires the presence of positively charged and negatively charged residues in the original sequence. Higher kappa values increase charge asymmetry, lower kappa values reduce charge asymmetry. Values can be between 0 and 1. As mentioned in the sequence generation section, specifying kappa **requires** that you do not have an FCR=0 and that you do not have FCR=NCPR (there needs to be some + and some - charged residues for kappa). Also, GOOSE is much faster at making sequences with kappa between 0.1 and 0.9. Values below 0.1 or above 0.9 may take longer. 
 
 ``all_props_class_var()`` - Function to make a sequence variant that adjusts the FCR, NCPR, hydropathy, and kappa values while minimizing changes to the position and number of amino acids by class. If you don't specify one of the values, GOOSE will keep it the same as it was in the input sequence.
 

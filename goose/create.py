@@ -134,30 +134,6 @@ def sequence(length, **kwargs):
     There is a better way to do this, but there's also this way. I'm doing this way because it will be faster. 
     I'll probably rewrite this sooner or later because it's pretty inefficiently written at the moment. 
     '''
-    if 'kappa' in kwargs and 'hydropathy' not in kwargs and 'FCR' not in kwargs and 'NCPR' not in kwargs:
-        just_kappa=True
-    else:
-        just_kappa=False
-    if 'kappa' in kwargs and 'hydropathy' not in kwargs and 'FCR' not in kwargs and 'NCPR' in kwargs:
-        kappa_ncpr=True
-    else:
-        kappa_ncpr=False
-    if 'kappa' in kwargs and 'hydropathy' not in kwargs and 'FCR' in kwargs and 'NCPR' not in kwargs:
-        kappa_FCR=True
-    else:
-        kappa_FCR=False
-    if 'kappa' in kwargs and 'hydropathy' in kwargs and 'FCR' not in kwargs and 'NCPR' not in kwargs:
-        kappa_hydro=True
-    else:
-        kappa_hydro=False
-
-    # Here's a way to disable all of these constraints.
-    if 'no_constraints' in kwargs:
-        if kwargs['no_constraints']==True:
-            just_kappa=False
-            kappa_ncpr=False
-            kappa_FCR=False
-            kappa_hydro=False
 
     # increase attempts if hydropathy over 5.9
     if 'hydropathy' in kwargs:
@@ -177,10 +153,19 @@ def sequence(length, **kwargs):
         if len(kwargs['exclude']) > 10:
             raise goose_exceptions.GooseInputError('Cannot exclude more than 10 residues.')
 
+    if 'kappa' in kwargs:
+        if 'FCR' in kwargs and 'NCPR' in kwargs:
+            if kwargs['FCR']==kwargs['NCPR']:
+                raise goose_exceptions.GooseInputError('Cannot specify FCR and NCPR to be the same value and specify kappa. Kappa requires the presence of oppositely charged residues to be specified.')
+        if 'FCR' in kwargs:
+            if kwargs['FCR']==0:
+                raise goose_exceptions.GooseInputError('When specifying kappa, FCR must be greater than 0. FCR must be a high enough value to result in at least 2 charged residues to be in the sequence so oppositely charged residue spacing (kappa) can be specified.')
+
+
     # check we passed in acceptable keyword arguments. At this stage, if a keyword
     # was passed that is not found in the list passed to _check_valid_kwargs then
     # an exception is raised. 
-    _check_valid_kwargs(kwargs, ['FCR','NCPR','sigma', 'hydropathy', 'kappa', 'cutoff', 'attempts', 'exclude'])
+    _check_valid_kwargs(kwargs, ['FCR','NCPR','sigma', 'hydropathy', 'kappa', 'cutoff', 'attempts', 'exclude', 'no_constraints'])
     
 
     # First correct kwargs. Do this first because
@@ -200,7 +185,7 @@ def sequence(length, **kwargs):
     generated_seq=None
     # make the sequence
     if kwargs['kappa'] == None:
-        for sub_attempt in range(0, 10):
+        for sub_attempt in range(0, 20):
             try:
                 generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
                     sigma = kwargs['sigma'], attempts = kwargs['attempts'], allowed_hydro_error = parameters.HYDRO_ERROR,
@@ -213,78 +198,98 @@ def sequence(length, **kwargs):
     
     else:        
         for sub_attempt in range(0, 30):
-            # if just specifying kappa, can do variable FCR and NCPR values. 
-            # choosing within a specific range to avoid making sequences with no charge. 
-            if just_kappa==True:
-                # minimum 4 residues
-                min_charged = round(0.2*length)
-                if min_charged < 4:
-                    min_charged=4
-                max_charged = length
-                num_charged = random.randint(min_charged, max_charged)
-                fcr_val = num_charged/length
-                if num_charged<=6:
-                    ncpr_val=0.0
+            # if specifying kappa and FCR or NCPR are not specified, this code
+            # helps use increase our odds of making a sequence successfully.
+            # You can disable these constraints using 'no_constraints=True.'
+            if 'no_constraints' not in kwargs:
+                remove_constraints=False
+            else:
+                if kwargs['no_constraints']==False:
+                    remove_constraints=False
                 else:
-                    min_ncpr = -fcr_val+(2/length)+0.05
-                    if min_ncpr < -0.3:
-                        min_ncpr=-0.3
-                    max_ncpr = fcr_val-(2/length)-0.05
-                    if max_ncpr > 0.3:
-                        max_ncpr=0.3
-                    ncpr_val = random.uniform(min_ncpr, max_ncpr)
-                kwargs['FCR']=fcr_val
-                kwargs['NCPR']=ncpr_val   
-            if kappa_ncpr==True:
-                absncpr=abs(kwargs['NCPR'])
-                # when we have just kappa and ncpr specified, we need to get the FCR as high as possible
-                # because that increases the chance that we can acheive a kappa value between 0 and 1. 
-                # sequences with high (>0.9)or low(< -0.9) NCPR are difficult or impossible to get kappa
-                # to very low values. 
-                if absncpr>=0.75:
-                    kwargs['FCR']=1
-                elif absncpr>=0.5 and absncpr<0.75:
-                    kwargs['FCR']=random.uniform(min([absncpr+0.35,0.99]), 1)
-                elif absncpr >= 0.25 and absncpr < 0.5:
-                    kwargs['FCR']=random.uniform((absncpr+0.25), 1)
+                    remove_constraints=True
+            # if we have not set remove_constraints to True...
+            if remove_constraints==False:
+                # first let's see if we can modify FCR. 
+                if kwargs['FCR']!=None:
+                    fcr_val = kwargs['FCR']
                 else:
-                    kwargs['FCR']=random.uniform((absncpr+0.15), 1)
-            if kappa_FCR==True:
-                # when choosing kappa and FCR, we want a closer to neutral NCPR so we can adjust kappa. 
-                fcr_val = kwargs['FCR']
-                if length <= 15:
-                    ncpr_val=0.0
+                    # this is hydropathy dependent, so check that. 
+                    if kwargs['hydropathy']==None:
+                        # set max number of charged resiudes to be the length.
+                        max_FCR = 1
+                    else:
+                        # set max to be dependent on hydropathy. 
+                        max_FCR = min([1, _calculate_max_charge(kwargs['hydropathy'])])
+                        if max_FCR-0.04 < 0.2:
+                            max_FCR=0.21
+                        else:
+                            max_FCR = max_FCR-0.04
+                    # check for NCPR. This will help us decide a minimum FCR val.
+                    if kwargs['NCPR']==None:
+                        min_FCR = 0.2
+                    else:
+                        absncpr=abs(kwargs['NCPR'])
+                        if absncpr>=0.75:
+                            min_FCR=1
+                        elif absncpr>=0.5 and absncpr<0.75:
+                            min_FCR = min([absncpr+0.35,0.99,1])
+                        elif absncpr >= 0.25 and absncpr < 0.5:
+                            min_FCR = min([absncpr+0.25, 1])
+                        else:
+                            min_FCR = min([absncpr+0.15, 1])
+                    # make sure min_FCR not greater than max FCR. Then set FCR val. 
+                    if min_FCR >= max_FCR:
+                        fcr_val = max_FCR
+                    else:
+                        fcr_val = random.uniform(min_FCR, max_FCR)
+                    
+                # now let's see if we can modify NCPR. 
+                if kwargs['NCPR']!=None:
+                    ncpr_val = kwargs['NCPR']
                 else:
-                    min_ncpr = -fcr_val+(2/length)+0.05
-                    if min_ncpr < -0.3:
-                        min_ncpr=-0.3
-                    max_ncpr = fcr_val-(2/length)-0.05
-                    if max_ncpr > 0.3:
-                        max_ncpr=0.3
-                    ncpr_val = random.uniform(min_ncpr, max_ncpr)
-                    kwargs['NCPR']=ncpr_val
-            if kappa_hydro==True:
-                # when FCR and NCPR not specified, we can modulate them based on hydropathy. 
-                max_FCR = min([1, _calculate_max_charge(kwargs['hydropathy'])])
-                if max_FCR-0.05 < 0.2:
-                    max_FCR=0.21
+                    # we can modulate the NCPR. 
+                    if length <= 15:
+                        ncpr_val=0.0
+                    else:
+                        min_ncpr = -fcr_val+(2/length)+0.05
+                        if min_ncpr < -0.3:
+                            min_ncpr=-0.3
+                        max_ncpr = fcr_val-(2/length)-0.05
+                        if max_ncpr > 0.3:
+                            max_ncpr=0.3
+                        if min_ncpr >= max_ncpr:
+                            ncpr_val = max_ncpr
+                        else:
+                            ncpr_val = random.uniform(min_ncpr, max_ncpr)
+                # modulate the NCPR value if we have a specified FCR but not NCPR. 
+                if kwargs['FCR']!=None and kwargs['NCPR']==None:
+                    FCR_res = length*fcr_val
+                    ncpr_res = abs(ncpr_val)*length
+                    if round(FCR_res-ncpr_res)%2 != 0:
+                        if ncpr_res < FCR_res:
+                            ncpr_res+=1
+                        else:
+                            ncpr_res-=1
+                    if ncpr_val < 0:
+                        ncpr_val = -ncpr_res/length
+                    else:
+                        ncpr_val = ncpr_res/length
+            else:
+                # make sure we have fcr_val, ncpr_val specified.
+                if 'FCR' in kwargs:
+                    fcr_val = kwargs['FCR']
                 else:
-                    max_FCR = max_FCR-0.05
-                # make sure we have some charged residues to be able to moduelate kappa. 
-                fcr_val = random.uniform(0.15, max_FCR)
-                min_ncpr = -fcr_val+(2/length)+0.05
-                if min_ncpr < -0.3:
-                    min_ncpr=-0.3
-                max_ncpr = fcr_val-(2/length)-0.05
-                if max_ncpr > 0.3:
-                    max_ncpr=0.3
-                ncpr_val = random.uniform(min_ncpr, max_ncpr)
-                kwargs['NCPR']=ncpr_val
-                kwargs['FCR']=fcr_val
+                    fcr_val = None
+                if 'NCPR' in kwargs:
+                    ncpr_val = kwargs['NCPR']
+                else:
+                    ncpr_val = None
+
 
             generated_seq=None
             try:
-                generated_seq = _generate_disordered_seq_by_props(length, FCR=kwargs['FCR'], NCPR=kwargs['NCPR'], hydropathy=kwargs['hydropathy'],
+                generated_seq = _generate_disordered_seq_by_props(length, FCR=fcr_val, NCPR=ncpr_val, hydropathy=kwargs['hydropathy'],
                     sigma = kwargs['sigma'], attempts = kwargs['attempts'], allowed_hydro_error = parameters.HYDRO_ERROR,
                     disorder_threshold = kwargs['cutoff'], exclude=kwargs['exclude'])
             except:
