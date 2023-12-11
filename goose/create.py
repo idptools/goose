@@ -146,21 +146,23 @@ def sequence(length, **kwargs):
 
     # verify that charged residues not in exclude if FCR or NCPR specified.
     if 'exclude' in kwargs:
-        if 'FCR' in kwargs or 'NCPR' in kwargs:
-            for val in kwargs['exclude']:
-                if val in ['R', 'K', 'D', 'E']:
-                    raise goose_exceptions.GooseInputError('Cannot exclude charged residues if FCR or NCPR specified.')
-        if len(kwargs['exclude']) > 10:
-            raise goose_exceptions.GooseInputError('Cannot exclude more than 10 residues.')
+        if kwargs['exclude'] != None:
+            if 'FCR' in kwargs or 'NCPR' in kwargs:
+                for val in kwargs['exclude']:
+                    if val in ['R', 'K', 'D', 'E']:
+                        raise goose_exceptions.GooseInputError('Cannot exclude charged residues if FCR or NCPR specified.')
+            if len(kwargs['exclude']) > 10:
+                raise goose_exceptions.GooseInputError('Cannot exclude more than 10 residues.')
 
     if 'kappa' in kwargs:
-        if 'FCR' in kwargs and 'NCPR' in kwargs:
-            if kwargs['FCR'] != None and kwargs['NCPR']!= None
-                if kwargs['FCR']==kwargs['NCPR']:
-                    raise goose_exceptions.GooseInputError('Cannot specify FCR and NCPR to be the same value and specify kappa. Kappa requires the presence of oppositely charged residues to be specified.')
-        if 'FCR' in kwargs:
-            if kwargs['FCR']==0:
-                raise goose_exceptions.GooseInputError('When specifying kappa, FCR must be greater than 0. FCR must be a high enough value to result in at least 2 charged residues to be in the sequence so oppositely charged residue spacing (kappa) can be specified.')
+        if kwargs['kappa'] != None:
+            if 'FCR' in kwargs and 'NCPR' in kwargs:
+                if kwargs['FCR'] != None and kwargs['NCPR']!= None:
+                    if kwargs['FCR']==kwargs['NCPR']:
+                        raise goose_exceptions.GooseInputError('Cannot specify FCR and NCPR to be the same value and specify kappa. Kappa requires the presence of oppositely charged residues to be specified.')
+            if 'FCR' in kwargs:
+                if kwargs['FCR']==0:
+                    raise goose_exceptions.GooseInputError('When specifying kappa, FCR must be greater than 0. FCR must be a high enough value to result in at least 2 charged residues to be in the sequence so oppositely charged residue spacing (kappa) can be specified.')
 
 
     # check we passed in acceptable keyword arguments. At this stage, if a keyword
