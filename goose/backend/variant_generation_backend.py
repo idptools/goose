@@ -510,48 +510,50 @@ def create_constant_class_variant(sequence):
     neg_charged=['D', 'E']
     pos_charged=['K', 'R']
     for amino_acid in sequence:
-        if amino_acid in aromatics:
-            place_aro.append(amino_acid)
-            sequence_placeholder+='0'
-            build_sequence+=amino_acid
-        elif amino_acid in neg_charged:
-            place_neg_charged.append(amino_acid)
-            sequence_placeholder+='-'
-            build_sequence+=amino_acid
-        elif amino_acid in pos_charged:
-            place_pos_charged.append(amino_acid)
-            sequence_placeholder+='+'
-            build_sequence+=amino_acid
-        else:
-            cur_class = AminoAcid.return_AA_class(amino_acid)
-            if len(build_sequence)>1:
-                if build_sequence.count('I')/len(build_sequence) > 0.1:
-                    potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=['I'], return_all = True)
-                    exclude_I=True
-                else:
-                    potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=[], return_all = True)
-                    exclude_I=False
+        cur_class = AminoAcid.return_AA_class(amino_acid)
+        if len(build_sequence)>1:
+            if build_sequence.count('I')/len(build_sequence) > 0.1:
+                potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=['I'], return_all = True)
+                exclude_I=True
             else:
                 potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=[], return_all = True)
                 exclude_I=False
-            if len(potential_residues) == 1:
-                build_sequence += potential_residues[0]
-            else:
-                if amino_acid in potential_residues:
-                    if amino_acid == 'I':
-                        if exclude_I == False:
-                            potential_residues.remove(amino_acid)
-                    else:
+        else:
+            potential_residues = get_optimal_res_within_class(cur_class, build_sequence, additional_exclusion=[], return_all = True)
+            exclude_I=False
+        if len(potential_residues) == 1: 
+            chosen_residue=potential_residues[0]
+        else:
+            if amino_acid in potential_residues:
+                if amino_acid == 'I':
+                    if exclude_I == False:
                         potential_residues.remove(amino_acid)
-                if len(potential_residues) == 1:
-                    build_sequence += potential_residues[0]
                 else:
-                    build_sequence += potential_residues[randint(0, len(potential_residues)-1)]
+                    potential_residues.remove(amino_acid)
+            chosen_residue = random.choice(potential_residues)
+        
+        # add to the sequence we are using to build the base sequence and choose optimal residues
+        build_sequence+=chosen_residue
+        
+        # if negative positive or aromatic add to list, update placeholder
+        # sequence we will use later.
+        if cur_class=='negative':
+            sequence_placeholder+='-'
+            place_neg_charged.append(chosen_residue)
+        elif cur_class=='positive':
+            sequence_placeholder+='+'
+            place_pos_charged.append(chosen_residue)
+        elif cur_class=='aromatic':
+            sequence_placeholder+='0'
+            place_aro.append(chosen_residue)
+        else:
             sequence_placeholder+='_'
-    # shuffle the residues to place
+    
+    # shuffle the residues to place if aromatic, negative, or positive
     random.shuffle(place_aro)
     random.shuffle(place_pos_charged)
     random.shuffle(place_neg_charged)
+    
     # place the residues
     final_sequence=''
     for aa_ind, aa in enumerate(sequence_placeholder):
@@ -563,6 +565,7 @@ def create_constant_class_variant(sequence):
             final_sequence+=place_pos_charged.pop()
         else:
             final_sequence+=build_sequence[aa_ind]
+    
     # now add back in +/- charged residues and aromatics
     # now correct hydropathy
     starting_hydro = Protein(sequence).hydropathy
