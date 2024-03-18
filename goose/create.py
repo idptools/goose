@@ -396,7 +396,8 @@ def seq_fractions(length, **kwargs):
 
 def seq_re(length, objective_re, allowed_error=parameters.re_error, attempts=20, 
     cutoff=parameters.DISORDER_THRESHOLD, strict_disorder=False,
-    individual_rg_re_attempts=parameters.rg_re_attempt_num):
+    individual_rg_re_attempts=parameters.rg_re_attempt_num,
+    reduce_pos_charged=True, exclude_aas=None):
     '''
     Parameters
     ----------
@@ -421,6 +422,16 @@ def seq_re(length, objective_re, allowed_error=parameters.re_error, attempts=20,
     individual_rg_re_attempts : int
         Number of attempts to make the objective rg or re. 
         Does not account for disorder
+    reduce_pos_charged : bool
+        Whether to reduce positively charged amino acids in the sequence. 
+        default is True
+        Reason for this is that in vivo data suggests that positively charged
+        residues may not drive sequence expansion as much as was predicted by
+        the model used here for predicted rg / re. Therefore, when set to True,
+        this function will largely avoid (+) charged residues. 
+    exclude_aas : list
+        list of amino acids to exclude from the sequence. 
+        default is None
 
     Returns
     -------
@@ -441,14 +452,16 @@ def seq_re(length, objective_re, allowed_error=parameters.re_error, attempts=20,
     sequence=_generate_disordered_seq_by_dimensions(
         length, 're', objective_re, attempts=attempts, allowed_error=allowed_error,
         disorder_threshold=cutoff, strict_disorder=strict_disorder,
-        individual_rg_re_attempts=individual_rg_re_attempts)
+        individual_rg_re_attempts=individual_rg_re_attempts,
+        reduce_pos_charged=reduce_pos_charged, exclude_aas=exclude_aas)
     return sequence
 
 
 
 def seq_rg(length, objective_rg, allowed_error=parameters.re_error, attempts=20, 
     cutoff=parameters.DISORDER_THRESHOLD, strict_disorder=False,
-    individual_rg_re_attempts=parameters.rg_re_attempt_num):
+    individual_rg_re_attempts=parameters.rg_re_attempt_num,
+    reduce_pos_charged=True, exclude_aas=None):
     '''
     Parameters
     ----------
@@ -473,6 +486,16 @@ def seq_rg(length, objective_rg, allowed_error=parameters.re_error, attempts=20,
     individual_rg_re_attempts : int
         Number of attempts to make the objective rg or re. 
         Does not account for disorder
+    reduce_pos_charged : bool
+        Whether to reduce positively charged amino acids in the sequence. 
+        default is True
+        Reason for this is that in vivo data suggests that positively charged
+        residues may not drive sequence expansion as much as was predicted by
+        the model used here for predicted rg / re. Therefore, when set to True,
+        this function will largely avoid (+) charged residues. 
+    exclude_aas : list
+        list of amino acids to exclude from the sequence. 
+        default is None
 
     Returns
     -------
@@ -493,7 +516,8 @@ def seq_rg(length, objective_rg, allowed_error=parameters.re_error, attempts=20,
     sequence=_generate_disordered_seq_by_dimensions(
         length, 'rg', objective_rg, attempts=attempts, allowed_error=allowed_error,
         disorder_threshold=cutoff, strict_disorder=strict_disorder,
-        individual_rg_re_attempts=individual_rg_re_attempts)
+        individual_rg_re_attempts=individual_rg_re_attempts,
+        reduce_pos_charged=reduce_pos_charged, exclude_aas=None)
     return sequence
 
 

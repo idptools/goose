@@ -43,7 +43,7 @@ MINIMUM_DISORDER = 0
 
 # attempts
 DEFAULT_ATTEMPTS = 200
-rg_re_attempt_num=100
+rg_re_attempt_num=200
 
 # maximums for fractions of amino acids
 '''

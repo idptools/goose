@@ -233,6 +233,12 @@ The ``create.seq_rg()`` and ``create.seq_re()``functions let you create sequence
 
 3. ``strict_disorder``: Whether you want **all** residues to be above the cutoff value. By default, GOOSE lets a small number (at most 5 for very large sequences) of residues be below 0.5 because a single amino acid (or even a few) below the 0.5 threshold is not realistically going to be a folded domain. 
 
+4. ``exclude_aas``: A list of residues to exclude from your generated sequence. There are some limitations on excluding AAs, specifically you can't simultaneously exclude  W, Y, G, F, Q, and N or D, E, K, P, S, and T. 
+
+5. ``allowed_error``: How far off from your desired Re/Rg in Å GOOSE can be before returning the sequence. A higher value here will decrease the time it takes GOOSE to make the sequence. 
+
+6. ``reduce_pos_charged``: Whether to reduce positively charged amino acids in the sequence. Default is True. The reason for this is that in vivo data suggests that positively charged residues may not drive sequence expansion as much as was predicted by the model used here for predicted rg / re. Therefore, when set to True, this function will largely avoid high numbers of (+) charged residues if possible. 
+
 Examples of generating sequences by specifying Rg or Re
 ----------------------------------------------------------
 
@@ -241,7 +247,7 @@ Examples of generating sequences by specifying Rg or Re
 .. code-block:: python
 
     create.seq_rg(50, 20)
-    'PDAESQCNTSRWIVSHPQSNTKYPDSRTDESASPQQEDPSHSQEKIHSRM'
+    'NSETSEFYNDPVNAQPGDDHNSENNSVTYDNTGTYSNEFPDTEPSDLHAP'
 
 
 **Specifying a length and Re:**
@@ -249,8 +255,17 @@ Examples of generating sequences by specifying Rg or Re
 .. code-block:: python
 
     create.seq_re(50, 20)
-    'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
+    'FGQQGGQWGQWGNGQWGYWQNFGYGGNGGWYFYQWYNWFQYNWWFWQWWF'
 
+  
+**Specifying a length and Rg, allowing positive charged residues:**
+
+.. code-block:: python
+
+    create.seq_rg(50, 20, reduce_pos_charged=False)
+    'NQKDSPEIDKPKPGNASGKFQTIRGNNRRKQKGGQGYPEKTIGERHMSEA'
+  
+  
 Creating Sequence Variants in Python
 =====================================
 
