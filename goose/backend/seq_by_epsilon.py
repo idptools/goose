@@ -16,7 +16,6 @@ interact with a specific protein in a similar way to another protein.
 '''
 TO DO: (if time)
     • Also need seq by chunked epsilon.
-    • Add in 'make more attractive' or 'make more repulsive' optimizations. 
 '''
 
 from collections import Counter
@@ -28,7 +27,9 @@ import numpy as np
 
 from finches import epsilon_calculation
 from finches.forcefields.mpipi import Mpipi_model
+from finches.forcefields.calvados import calvados_model
 from goose.backend import lists
+from goose.backend.lists import precomputed_epsilon
 from goose import goose_exceptions
 
 
@@ -36,7 +37,35 @@ from goose import goose_exceptions
 #        -=-=-=-=-=-= Code for epsilon related stuffs =-=-=-=-=-=-=
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-def get_interaction_vectors(seq1, seq2, model='Mpipi_GGv1', approach='mean'):
+def load_IMC_object(model='Mpipi_GGv1'):
+    '''
+    Function to load a FINCHES IMC object.
+    Lets us only load it once and then can use it iteratively. 
+
+    Parameters
+    -----------
+    model : string
+        The specific model parameters we are using
+        default = Mpipi_GGv1
+        options are 'Mpipi_GGv1', 'CALVADOS2'
+
+    '''
+
+    # check the current implementations of forcefields.
+    if model not in ['Mpipi_GGv1', 'CALVADOS2']:
+        raise goose_exceptions.GooseInputError('Only Mpipi_GGv1 and CALVADOS2 forcefields have been implemented.')
+    
+    # initialize forcefield parameters
+    if model in ['Mpipi_GGv1']:
+        ff_model = Mpipi_model(model)
+    else:
+        ff_model = calvados_model(model)
+    
+    # make IMC Object
+    IMC_object = epsilon_calculation.InteractionMatrixConstructor(ff_model)
+    return IMC_object
+
+def get_interaction_vectors(seq1, seq2, IMC_object, approach='mean'):
     '''
     Function that returns the interaction vectors between two sequences. 
     The vector will return a list where the first list is seq1 vector
@@ -53,9 +82,8 @@ def get_interaction_vectors(seq1, seq2, model='Mpipi_GGv1', approach='mean'):
     seq2 : string
         the amino acid sequence for seq2 as a string
 
-    model : string
-        The specific model parameters we are using
-        default = Mpipi_GGv1
+    IMC_object : Object
+        A loaded FINCHES IMC object.
 
     approach : string
         How the vectors should be calculated. Options are sum and mean.
@@ -70,16 +98,6 @@ def get_interaction_vectors(seq1, seq2, model='Mpipi_GGv1', approach='mean'):
         Returns a list of np.arrays. First item in the list is the
         interaction vector for seq1, the second is for seq2. 
     '''
-    # temporary hold over unitl I implement other forcefields
-    if model != 'Mpipi_GGv1':
-        raise Exception('Other forcefields have not been implemented. Please set to Mpipi_GGv1.')
-    
-    # initialize forcefield parameters
-    Mpipi_GGv1_model = Mpipi_model('Mpipi_GGv1')
-    
-    # make IMC Object
-    IMC_object = epsilon_calculation.InteractionMatrixConstructor(Mpipi_GGv1_model)
-    
     # use IMC_object to calculate heterotypic matrix
     interaction_matrix=IMC_object.calculate_pairwise_heterotypic_matrix(seq1,seq2)
     # now get the mean or sum values
@@ -95,7 +113,7 @@ def get_interaction_vectors(seq1, seq2, model='Mpipi_GGv1', approach='mean'):
     return [t1_vector, t2_vector]
 
 
-def get_epsilon_vectors(seq1, seq2, model='Mpipi_GGv1'):
+def get_epsilon_vectors(seq1, seq2, IMC_object):
     '''
     Function that returns the interaction vectors between two sequences. 
     The vector will return a list where the first list is seq1 vector
@@ -112,9 +130,8 @@ def get_epsilon_vectors(seq1, seq2, model='Mpipi_GGv1'):
     seq2 : string
         the amino acid sequence for seq2 as a string
 
-    model : string
-        The specific model parameters we are using
-        default = Mpipi_GGv1
+    IMC_object : Object
+        A loaded FINCHES IMC object.
 
     Returns
     -------
@@ -122,22 +139,13 @@ def get_epsilon_vectors(seq1, seq2, model='Mpipi_GGv1'):
         Returns a list of np.arrays. First item in the list is the
         interaction vector for seq1, the second is for seq2. 
     '''
-    # temporary hold over unitl I implement other forcefields
-    if model != 'Mpipi_GGv1':
-        raise Exception('Other forcefields have not been implemented. Please set to Mpipi_GGv1.')
-    
-    # initialize forcefield parameters
-    Mpipi_GGv1_model = Mpipi_model('Mpipi_GGv1')
-    
-    # make IMC Object
-    IMC_object = epsilon_calculation.InteractionMatrixConstructor(Mpipi_GGv1_model)
-    
     # use IMC_object to calculate heterotypic matrix
     interaction_matrix=IMC_object.calculate_epsilon_vectors(seq1,seq2)
 
     return [interaction_matrix[0], interaction_matrix[1]]
 
-def get_epsilon_value(seq1, seq2, model='Mpipi_GGv1'):
+
+def get_epsilon_value(seq1, seq2, IMC_object):
     '''
     Function to get the epsilon value using the Mpipi_GGv1 model. 
 
@@ -149,26 +157,15 @@ def get_epsilon_value(seq1, seq2, model='Mpipi_GGv1'):
     seq2 : string
         the amino acid sequence for seq2 as a string
 
-    model : string
-        The specific model parameters we are using
-        default = Mpipi_GGv1
+    IMC_object : Object
+        A loaded FINCHES IMC object.
 
     Returns
     -------
     list of np.arrays
         Returns a list of np.arrays. First item in the list is the
         interaction vector for seq1, the second is for seq2. 
-    '''
-    # temporary hold over unitl I implement other forcefields
-    if model != 'Mpipi_GGv1':
-        raise Exception('Other forcefields have not been implemented. Please set to Mpipi_GGv1.')
-    
-    # initialize forcefield parameters
-    Mpipi_GGv1_model = Mpipi_model('Mpipi_GGv1')
-    
-    # make IMC Object
-    IMC_object = epsilon_calculation.InteractionMatrixConstructor(Mpipi_GGv1_model)
-    
+    '''    
     # use IMC_object to calculate heterotypic matrix
     epslon_value=IMC_object.calculate_epsilon_value(seq1,seq2)
 
@@ -182,7 +179,8 @@ def get_epsilon_value(seq1, seq2, model='Mpipi_GGv1'):
 
 
 def optimize_to_epsilon_value(starting_sequence, interacting_sequence, objective_epsilon,
-    allowed_error=0.1, optimization_iterations=None, exclude_aas=[]):
+    allowed_error=0.1, optimization_iterations=None, exclude_aas=[], model='Mpipi_GGv1',
+    preloaded_IMC_object=None, return_best_sequence=False, maximal_optimization=False):
     '''
     Function to optimze a sequence to have a specific epsilon value relative to another sequence. 
 
@@ -204,18 +202,41 @@ def optimize_to_epsilon_value(starting_sequence, interacting_sequence, objective
     optimization_iterations : int
         The number of iterations to run the optimization. Default is length of the sequence
 
-    exclude_aas=[]
+    exclude_aas : list
         A list of amino acids to exclude from being added to the sequence during optimization.
 
+    model : str
+        The specific model parameters we are using
+        default = Mpipi_GGv1
+        options are 'Mpipi_GGv1', 'CALVADOS2'
+
+    preloaded_IMC_object : object
+        If we are using this optimizer and we already loaded the FINCHES model, we can
+        skip that here to speed things up. 
+        Default is None. 
+
+    return_best_sequence : bool
+        whether to just return the best sequence we could get to
+        the objective epsilon value. 
+        Default is False. 
+
+    maximal_optimization : bool
+        Whether to optimize to the maximal extent possible. 
+        Reduces the sequence space explored, so default is False
 
     Returns
     -------
     str
         The optimized sequence that has the closest epsilon value to the objective epsilon value.
     '''
+
+    # check the current implementations of forcefields.
+    if model not in lists.implimented_finches_models:
+        raise goose_exceptions.GooseInputError(f'Only {lists.implimented_finches_models} forcefields have been implemented.')
+
     # pairwise interaction values for each amino acid and U (RNA) against all
     # amino acids and U. Uses mPiPi-GGv1.
-    epsilon_aas={'A': {'A': 0.1729, 'C': 0.1479, 'D': 0.1122, 'E': 0.0991, 'F': -0.1814, 'G': 0.1355, 'H': -0.1472, 'I': 0.1184, 'K': 0.1819, 'L': 0.1302, 'M': 0.1617, 'N': 0.0295, 'P': 0.0992, 'Q': 0.0159, 'R': -0.1, 'S': 0.1578, 'T': 0.1822, 'V': 0.1273, 'W': -0.3609, 'Y': -0.2128}, 'C': {'A': 0.1479, 'C': 0.1244, 'D': 0.0871, 'E': 0.0731, 'F': -0.2188, 'G': 0.1127, 'H': -0.1831, 'I': 0.1859, 'K': 0.1586, 'L': 0.1751, 'M': 0.1461, 'N': 0.0009, 'P': 0.0673, 'Q': -0.0136, 'R': -0.1343, 'S': 0.1352, 'T': 0.16, 'V': 0.1827, 'W': -0.4051, 'Y': -0.2514}, 'D': {'A': 0.1122, 'C': 0.0871, 'D': 2.574, 'E': 2.4772, 'F': 0.0495, 'G': 0.0783, 'H': -1.1931, 'I': 0.1469, 'K': -2.5449, 'L': 0.136, 'M': 0.1068, 'N': -0.0382, 'P': 0.0172, 'Q': -0.0538, 'R': -2.4973, 'S': 0.0989, 'T': 0.1225, 'V': 0.1447, 'W': -0.0261, 'Y': 0.0362}, 'E': {'A': 0.0991, 'C': 0.0731, 'D': 2.4772, 'E': 2.3835, 'F': 0.0398, 'G': 0.0643, 'H': -1.1415, 'I': 0.1344, 'K': -2.4518, 'L': 0.1232, 'M': 0.0931, 'N': -0.056, 'P': -0.0018, 'Q': -0.0721, 'R': -2.3995, 'S': 0.0854, 'T': 0.1096, 'V': 0.1323, 'W': -0.0378, 'Y': 0.0262}, 'F': {'A': -0.1814, 'C': -0.2188, 'D': 0.0495, 'E': 0.0398, 'F': -0.6114, 'G': -0.2051, 'H': -0.566, 'I': -0.1716, 'K': 0.0014, 'L': -0.1832, 'M': -0.2144, 'N': -0.3574, 'P': -0.393, 'Q': -0.3819, 'R': -0.2339, 'S': -0.199, 'T': -0.1842, 'V': -0.1662, 'W': -0.8217, 'Y': -0.6489}, 'G': {'A': 0.1355, 'C': 0.1127, 'D': 0.0783, 'E': 0.0643, 'F': -0.2051, 'G': -0.0747, 'H': -0.1708, 'I': 0.1667, 'K': 0.1411, 'L': 0.1568, 'M': 0.1302, 'N': -0.0007, 'P': 0.0525, 'Q': -0.0154, 'R': -0.1286, 'S': -0.0354, 'T': 0.1446, 'V': 0.1647, 'W': -0.3788, 'Y': -0.2356}, 'H': {'A': -0.1472, 'C': -0.1831, 'D': -1.1931, 'E': -1.1415, 'F': -0.566, 'G': -0.1708, 'H': 0.8857, 'I': -0.1362, 'K': 1.3994, 'L': -0.1475, 'M': -0.178, 'N': -0.3183, 'P': -0.3451, 'Q': -0.3419, 'R': 1.289, 'S': -0.1641, 'T': -0.1492, 'V': -0.1313, 'W': -0.7715, 'Y': -0.6027}, 'I': {'A': 0.1184, 'C': 0.1859, 'D': 0.1469, 'E': 0.1344, 'F': -0.1716, 'G': 0.1667, 'H': -0.1362, 'I': 0.0416, 'K': 0.2281, 'L': 0.0644, 'M': 0.1023, 'N': 0.056, 'P': 0.149, 'Q': 0.0432, 'R': -0.0806, 'S': 0.1954, 'T': 0.2247, 'V': 0.0536, 'W': -0.3651, 'Y': -0.2054}, 'K': {'A': 0.1819, 'C': 0.1586, 'D': -2.5449, 'E': -2.4518, 'F': 0.0014, 'G': 0.1411, 'H': 1.3994, 'I': 0.2281, 'K': 2.2789, 'L': 0.2165, 'M': 0.1853, 'N': 0.0263, 'P': 0.1123, 'Q': 0.0126, 'R': 2.0644, 'S': 0.1688, 'T': 0.1977, 'V': 0.2233, 'W': 0.017, 'Y': 0.0275}, 'L': {'A': 0.1302, 'C': 0.1751, 'D': 0.136, 'E': 0.1232, 'F': -0.1832, 'G': 0.1568, 'H': -0.1475, 'I': 0.0644, 'K': 0.2165, 'L': 0.0794, 'M': 0.1153, 'N': 0.045, 'P': 0.1346, 'Q': 0.0319, 'R': -0.0924, 'S': 0.1849, 'T': 0.2138, 'V': 0.0761, 'W': -0.3771, 'Y': -0.2171}, 'M': {'A': 0.1617, 'C': 0.1461, 'D': 0.1068, 'E': 0.0931, 'F': -0.2144, 'G': 0.1302, 'H': -0.178, 'I': 0.1023, 'K': 0.1853, 'L': 0.1153, 'M': 0.1501, 'N': 0.0155, 'P': 0.0957, 'Q': 0.0016, 'R': -0.1241, 'S': 0.1566, 'T': 0.1844, 'V': 0.1118, 'W': -0.4093, 'Y': -0.2485}, 'N': {'A': 0.0295, 'C': 0.0009, 'D': -0.0382, 'E': -0.056, 'F': -0.3574, 'G': -0.0007, 'H': -0.3183, 'I': 0.056, 'K': 0.0263, 'L': 0.045, 'M': 0.0155, 'N': -0.127, 'P': -0.0983, 'Q': -0.1452, 'R': -0.2736, 'S': 0.0151, 'T': 0.0356, 'V': 0.0562, 'W': -0.5511, 'Y': -0.3917}, 'P': {'A': 0.0992, 'C': 0.0673, 'D': 0.0172, 'E': -0.0018, 'F': -0.393, 'G': 0.0525, 'H': -0.3451, 'I': 0.149, 'K': 0.1123, 'L': 0.1346, 'M': 0.0957, 'N': -0.0983, 'P': 0.0539, 'Q': -0.1179, 'R': -0.2801, 'S': 0.0821, 'T': 0.1148, 'V': 0.1451, 'W': -0.6428, 'Y': -0.4368}, 'Q': {'A': 0.0159, 'C': -0.0136, 'D': -0.0538, 'E': -0.0721, 'F': -0.3819, 'G': -0.0154, 'H': -0.3419, 'I': 0.0432, 'K': 0.0126, 'L': 0.0319, 'M': 0.0016, 'N': -0.1452, 'P': -0.1179, 'Q': -0.1638, 'R': -0.2956, 'S': 0.001, 'T': 0.0222, 'V': 0.0435, 'W': -0.5805, 'Y': -0.417}, 'R': {'A': -0.1, 'C': -0.1343, 'D': -2.4973, 'E': -2.3995, 'F': -0.2339, 'G': -0.1286, 'H': 1.289, 'I': -0.0806, 'K': 2.0644, 'L': -0.0924, 'M': -0.1241, 'N': -0.2736, 'P': -0.2801, 'Q': -0.2956, 'R': 2.08, 'S': -0.1167, 'T': -0.098, 'V': -0.0777, 'W': -0.3863, 'Y': -0.2948}, 'S': {'A': 0.1578, 'C': 0.1352, 'D': 0.0989, 'E': 0.0854, 'F': -0.199, 'G': -0.0354, 'H': -0.1641, 'I': 0.1954, 'K': 0.1688, 'L': 0.1849, 'M': 0.1566, 'N': 0.0151, 'P': 0.0821, 'Q': 0.001, 'R': -0.1167, 'S': 0.1455, 'T': 0.1698, 'V': 0.1921, 'W': -0.3809, 'Y': -0.2308}, 'T': {'A': 0.1822, 'C': 0.16, 'D': 0.1225, 'E': 0.1096, 'F': -0.1842, 'G': 0.1446, 'H': -0.1492, 'I': 0.2247, 'K': 0.1977, 'L': 0.2138, 'M': 0.1844, 'N': 0.0356, 'P': 0.1148, 'Q': 0.0222, 'R': -0.098, 'S': 0.1698, 'T': 0.1965, 'V': 0.2204, 'W': -0.371, 'Y': -0.2168}, 'V': {'A': 0.1273, 'C': 0.1827, 'D': 0.1447, 'E': 0.1323, 'F': -0.1662, 'G': 0.1647, 'H': -0.1313, 'I': 0.0536, 'K': 0.2233, 'L': 0.0761, 'M': 0.1118, 'N': 0.0562, 'P': 0.1451, 'Q': 0.0435, 'R': -0.0777, 'S': 0.1921, 'T': 0.2204, 'V': 0.0726, 'W': -0.3555, 'Y': -0.1992}, 'W': {'A': -0.3609, 'C': -0.4051, 'D': -0.0261, 'E': -0.0378, 'F': -0.8217, 'G': -0.3788, 'H': -0.7715, 'I': -0.3651, 'K': 0.017, 'L': -0.3771, 'M': -0.4093, 'N': -0.5511, 'P': -0.6428, 'Q': -0.5805, 'R': -0.3863, 'S': -0.3809, 'T': -0.371, 'V': -0.3555, 'W': -1.0436, 'Y': -0.8617}, 'Y': {'A': -0.2128, 'C': -0.2514, 'D': 0.0362, 'E': 0.0262, 'F': -0.6489, 'G': -0.2356, 'H': -0.6027, 'I': -0.2054, 'K': 0.0275, 'L': -0.2171, 'M': -0.2485, 'N': -0.3917, 'P': -0.4368, 'Q': -0.417, 'R': -0.2948, 'S': -0.2308, 'T': -0.2168, 'V': -0.1992, 'W': -0.8617, 'Y': -0.687}}    
+    epsilon_aas=precomputed_epsilon[model]
     
     # list of all amino acids
     all_aas=['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
@@ -235,8 +256,14 @@ def optimize_to_epsilon_value(starting_sequence, interacting_sequence, objective
     if optimization_iterations is None:
         optimization_iterations=len(starting_sequence)
 
+    if preloaded_IMC_object==None:
+        # load IMC object
+        loaded_model = load_IMC_object(model)
+    else:
+        loaded_model=preloaded_IMC_object
+
     # calculate the epsilon value of the starting sequence
-    eps_vectors=get_epsilon_vectors(starting_sequence, interacting_sequence)
+    eps_vectors=get_epsilon_vectors(starting_sequence, interacting_sequence, loaded_model)
     starting_epsilon=np.sum(eps_vectors)
     # calculate the difference between the starting epsilon and the objective epsilon
     epsilon_diff=objective_epsilon-starting_epsilon
@@ -249,7 +276,7 @@ def optimize_to_epsilon_value(starting_sequence, interacting_sequence, objective
     for i in range(0, optimization_iterations):
         # if i > 1, recalculate the eps vectors. 
         if i > 1:
-            eps_vectors=get_epsilon_vectors(current_sequence, interacting_sequence)
+            eps_vectors=get_epsilon_vectors(current_sequence, interacting_sequence, loaded_model)
         # choose a random amino acid to change. 
         aa_to_change=random.randint(0, len(starting_sequence)-1)
         
@@ -264,19 +291,42 @@ def optimize_to_epsilon_value(starting_sequence, interacting_sequence, objective
             possible_aas[aa]=curv/len(interacting_sequence)
         # sort the possible aas by the difference between the current epsilon value and the objective epsilon value
         possible_aas=sorted(possible_aas, key=lambda x:abs(possible_aas[x]-current_epsilon_diff))
-        # get the new amino acid
-        new_aa=possible_aas[0]
+
+        # see if we are trying to maximize the optimziation
+        if maximal_optimization==True:
+            new_aa=possible_aas[0]
+        else:
+            # based on the class, allow variable amounts of 'randomness'
+            # this lets us keep the chemical interaction specificity close
+            # but explore maximal sequecne space.
+            if possible_aas[0] in ['D', 'E', 'K', 'R']:
+                randomness=2
+            elif possible_aas[0] in ['W', 'Y', 'F']:
+                randomness=3
+            elif possible_aas[0] in ['A', 'I', 'L', 'V', 'M']:
+                randomness=5
+            elif possible_aas[0] in ['N', 'Q', 'S', 'T', 'G']:
+                randomness=4
+            else:
+                randomness=3
+            # choose amino acid to add
+            new_aa=random.choice(possible_aas[:randomness])
+
+
         # change the amino acid
         current_sequence=current_sequence[:aa_to_change]+new_aa+current_sequence[aa_to_change+1:]
         # recalculate the epsilon value
-        eps_vectors=get_epsilon_vectors(current_sequence, interacting_sequence)
+        eps_vectors=get_epsilon_vectors(current_sequence, interacting_sequence, loaded_model)
         current_epsilon=np.sum(eps_vectors)
         # calculate the new difference
         current_epsilon_diff=objective_epsilon-current_epsilon
         # if the difference is less than the allowed error, break
         if abs(current_epsilon_diff) < allowed_error:
             return current_sequence
-    raise goose_exceptions.GooseFail('Failed to optimize to epsilon value.')
+    if return_best_sequence==False:
+        raise goose_exceptions.GooseFail('Failed to optimize to epsilon value.')
+    else:
+        return current_sequence
 
 
 
@@ -400,7 +450,7 @@ def create_starting_sequence(length, exclude_aas=[]):
 
 
 def create_seq_by_epsilon_vectors(sequence_of_interest, interacting_sequence=None, 
-    exclude_aas=[]):
+    exclude_aas=[], model='Mpipi_GGv1'):
     '''
     Function to create a sequence with approximately similar 
     interaction vectors to a sequence of interest. This function
@@ -411,21 +461,36 @@ def create_seq_by_epsilon_vectors(sequence_of_interest, interacting_sequence=Non
     Parameters
     -----------
     sequence_of_interest : str
-        The sequence that you want your generated sequence to
-        have an epsilon value relative to.
+        The sequence that you want your generated sequence to have an epsilon value relative to.
 
     interacting_sequence : str
-        The seqence that the sequence of interest is interacting with.
-        If None, then it will be the same as sequence of interest (
-        so will make something with the same homotypic interactions)
+        If you want to make a sequence that has an epsilon equal
+        to that between your sequence_of_interest and some interacting sequence,
+        set this equal to the interacting sequence. If None, then it will be the same as sequence of interest (
+        so will make something with the same homotypic interactions).
+
+        ex. If you want to make a FUS variant that interacts with hnRNPA1 in a specific way, 
+        set sequence_of_interest=FUS and interacting_sequence=hnRNPA1.
+
+        Default = None
 
     exclude_aas : list
         A list of amino acids to exclude from the generated sequence. 
         Default = []
+
+    model : str
+        The specific model parameters we are using
+        default = Mpipi_GGv1
+        options are 'Mpipi_GGv1', 'CALVADOS2'
+
     '''
+    # check the current implementations of forcefields.
+    if model not in lists.implimented_finches_models:
+        raise goose_exceptions.GooseInputError(f'Only {lists.implimented_finches_models} forcefields have been implemented.')
+
     # pairwise interaction values for each amino acid and U (RNA) against all
     # amino acids and U. Uses mPiPi-GGv1.
-    epsilon_aas={'A': {'A': 0.1729, 'C': 0.1479, 'D': 0.1122, 'E': 0.0991, 'F': -0.1814, 'G': 0.1355, 'H': -0.1472, 'I': 0.1184, 'K': 0.1819, 'L': 0.1302, 'M': 0.1617, 'N': 0.0295, 'P': 0.0992, 'Q': 0.0159, 'R': -0.1, 'S': 0.1578, 'T': 0.1822, 'V': 0.1273, 'W': -0.3609, 'Y': -0.2128}, 'C': {'A': 0.1479, 'C': 0.1244, 'D': 0.0871, 'E': 0.0731, 'F': -0.2188, 'G': 0.1127, 'H': -0.1831, 'I': 0.1859, 'K': 0.1586, 'L': 0.1751, 'M': 0.1461, 'N': 0.0009, 'P': 0.0673, 'Q': -0.0136, 'R': -0.1343, 'S': 0.1352, 'T': 0.16, 'V': 0.1827, 'W': -0.4051, 'Y': -0.2514}, 'D': {'A': 0.1122, 'C': 0.0871, 'D': 2.574, 'E': 2.4772, 'F': 0.0495, 'G': 0.0783, 'H': -1.1931, 'I': 0.1469, 'K': -2.5449, 'L': 0.136, 'M': 0.1068, 'N': -0.0382, 'P': 0.0172, 'Q': -0.0538, 'R': -2.4973, 'S': 0.0989, 'T': 0.1225, 'V': 0.1447, 'W': -0.0261, 'Y': 0.0362}, 'E': {'A': 0.0991, 'C': 0.0731, 'D': 2.4772, 'E': 2.3835, 'F': 0.0398, 'G': 0.0643, 'H': -1.1415, 'I': 0.1344, 'K': -2.4518, 'L': 0.1232, 'M': 0.0931, 'N': -0.056, 'P': -0.0018, 'Q': -0.0721, 'R': -2.3995, 'S': 0.0854, 'T': 0.1096, 'V': 0.1323, 'W': -0.0378, 'Y': 0.0262}, 'F': {'A': -0.1814, 'C': -0.2188, 'D': 0.0495, 'E': 0.0398, 'F': -0.6114, 'G': -0.2051, 'H': -0.566, 'I': -0.1716, 'K': 0.0014, 'L': -0.1832, 'M': -0.2144, 'N': -0.3574, 'P': -0.393, 'Q': -0.3819, 'R': -0.2339, 'S': -0.199, 'T': -0.1842, 'V': -0.1662, 'W': -0.8217, 'Y': -0.6489}, 'G': {'A': 0.1355, 'C': 0.1127, 'D': 0.0783, 'E': 0.0643, 'F': -0.2051, 'G': -0.0747, 'H': -0.1708, 'I': 0.1667, 'K': 0.1411, 'L': 0.1568, 'M': 0.1302, 'N': -0.0007, 'P': 0.0525, 'Q': -0.0154, 'R': -0.1286, 'S': -0.0354, 'T': 0.1446, 'V': 0.1647, 'W': -0.3788, 'Y': -0.2356}, 'H': {'A': -0.1472, 'C': -0.1831, 'D': -1.1931, 'E': -1.1415, 'F': -0.566, 'G': -0.1708, 'H': 0.8857, 'I': -0.1362, 'K': 1.3994, 'L': -0.1475, 'M': -0.178, 'N': -0.3183, 'P': -0.3451, 'Q': -0.3419, 'R': 1.289, 'S': -0.1641, 'T': -0.1492, 'V': -0.1313, 'W': -0.7715, 'Y': -0.6027}, 'I': {'A': 0.1184, 'C': 0.1859, 'D': 0.1469, 'E': 0.1344, 'F': -0.1716, 'G': 0.1667, 'H': -0.1362, 'I': 0.0416, 'K': 0.2281, 'L': 0.0644, 'M': 0.1023, 'N': 0.056, 'P': 0.149, 'Q': 0.0432, 'R': -0.0806, 'S': 0.1954, 'T': 0.2247, 'V': 0.0536, 'W': -0.3651, 'Y': -0.2054}, 'K': {'A': 0.1819, 'C': 0.1586, 'D': -2.5449, 'E': -2.4518, 'F': 0.0014, 'G': 0.1411, 'H': 1.3994, 'I': 0.2281, 'K': 2.2789, 'L': 0.2165, 'M': 0.1853, 'N': 0.0263, 'P': 0.1123, 'Q': 0.0126, 'R': 2.0644, 'S': 0.1688, 'T': 0.1977, 'V': 0.2233, 'W': 0.017, 'Y': 0.0275}, 'L': {'A': 0.1302, 'C': 0.1751, 'D': 0.136, 'E': 0.1232, 'F': -0.1832, 'G': 0.1568, 'H': -0.1475, 'I': 0.0644, 'K': 0.2165, 'L': 0.0794, 'M': 0.1153, 'N': 0.045, 'P': 0.1346, 'Q': 0.0319, 'R': -0.0924, 'S': 0.1849, 'T': 0.2138, 'V': 0.0761, 'W': -0.3771, 'Y': -0.2171}, 'M': {'A': 0.1617, 'C': 0.1461, 'D': 0.1068, 'E': 0.0931, 'F': -0.2144, 'G': 0.1302, 'H': -0.178, 'I': 0.1023, 'K': 0.1853, 'L': 0.1153, 'M': 0.1501, 'N': 0.0155, 'P': 0.0957, 'Q': 0.0016, 'R': -0.1241, 'S': 0.1566, 'T': 0.1844, 'V': 0.1118, 'W': -0.4093, 'Y': -0.2485}, 'N': {'A': 0.0295, 'C': 0.0009, 'D': -0.0382, 'E': -0.056, 'F': -0.3574, 'G': -0.0007, 'H': -0.3183, 'I': 0.056, 'K': 0.0263, 'L': 0.045, 'M': 0.0155, 'N': -0.127, 'P': -0.0983, 'Q': -0.1452, 'R': -0.2736, 'S': 0.0151, 'T': 0.0356, 'V': 0.0562, 'W': -0.5511, 'Y': -0.3917}, 'P': {'A': 0.0992, 'C': 0.0673, 'D': 0.0172, 'E': -0.0018, 'F': -0.393, 'G': 0.0525, 'H': -0.3451, 'I': 0.149, 'K': 0.1123, 'L': 0.1346, 'M': 0.0957, 'N': -0.0983, 'P': 0.0539, 'Q': -0.1179, 'R': -0.2801, 'S': 0.0821, 'T': 0.1148, 'V': 0.1451, 'W': -0.6428, 'Y': -0.4368}, 'Q': {'A': 0.0159, 'C': -0.0136, 'D': -0.0538, 'E': -0.0721, 'F': -0.3819, 'G': -0.0154, 'H': -0.3419, 'I': 0.0432, 'K': 0.0126, 'L': 0.0319, 'M': 0.0016, 'N': -0.1452, 'P': -0.1179, 'Q': -0.1638, 'R': -0.2956, 'S': 0.001, 'T': 0.0222, 'V': 0.0435, 'W': -0.5805, 'Y': -0.417}, 'R': {'A': -0.1, 'C': -0.1343, 'D': -2.4973, 'E': -2.3995, 'F': -0.2339, 'G': -0.1286, 'H': 1.289, 'I': -0.0806, 'K': 2.0644, 'L': -0.0924, 'M': -0.1241, 'N': -0.2736, 'P': -0.2801, 'Q': -0.2956, 'R': 2.08, 'S': -0.1167, 'T': -0.098, 'V': -0.0777, 'W': -0.3863, 'Y': -0.2948}, 'S': {'A': 0.1578, 'C': 0.1352, 'D': 0.0989, 'E': 0.0854, 'F': -0.199, 'G': -0.0354, 'H': -0.1641, 'I': 0.1954, 'K': 0.1688, 'L': 0.1849, 'M': 0.1566, 'N': 0.0151, 'P': 0.0821, 'Q': 0.001, 'R': -0.1167, 'S': 0.1455, 'T': 0.1698, 'V': 0.1921, 'W': -0.3809, 'Y': -0.2308}, 'T': {'A': 0.1822, 'C': 0.16, 'D': 0.1225, 'E': 0.1096, 'F': -0.1842, 'G': 0.1446, 'H': -0.1492, 'I': 0.2247, 'K': 0.1977, 'L': 0.2138, 'M': 0.1844, 'N': 0.0356, 'P': 0.1148, 'Q': 0.0222, 'R': -0.098, 'S': 0.1698, 'T': 0.1965, 'V': 0.2204, 'W': -0.371, 'Y': -0.2168}, 'V': {'A': 0.1273, 'C': 0.1827, 'D': 0.1447, 'E': 0.1323, 'F': -0.1662, 'G': 0.1647, 'H': -0.1313, 'I': 0.0536, 'K': 0.2233, 'L': 0.0761, 'M': 0.1118, 'N': 0.0562, 'P': 0.1451, 'Q': 0.0435, 'R': -0.0777, 'S': 0.1921, 'T': 0.2204, 'V': 0.0726, 'W': -0.3555, 'Y': -0.1992}, 'W': {'A': -0.3609, 'C': -0.4051, 'D': -0.0261, 'E': -0.0378, 'F': -0.8217, 'G': -0.3788, 'H': -0.7715, 'I': -0.3651, 'K': 0.017, 'L': -0.3771, 'M': -0.4093, 'N': -0.5511, 'P': -0.6428, 'Q': -0.5805, 'R': -0.3863, 'S': -0.3809, 'T': -0.371, 'V': -0.3555, 'W': -1.0436, 'Y': -0.8617}, 'Y': {'A': -0.2128, 'C': -0.2514, 'D': 0.0362, 'E': 0.0262, 'F': -0.6489, 'G': -0.2356, 'H': -0.6027, 'I': -0.2054, 'K': 0.0275, 'L': -0.2171, 'M': -0.2485, 'N': -0.3917, 'P': -0.4368, 'Q': -0.417, 'R': -0.2948, 'S': -0.2308, 'T': -0.2168, 'V': -0.1992, 'W': -0.8617, 'Y': -0.687}}
+    epsilon_aas=precomputed_epsilon[model]
     
     # list of all amino acids
     all_aas=['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
@@ -441,8 +506,11 @@ def create_seq_by_epsilon_vectors(sequence_of_interest, interacting_sequence=Non
     if interacting_sequence is None:
         interacting_sequence = sequence_of_interest
 
+    # load imc object
+    loaded_model = load_IMC_object(model)
+
     # calculate eps vectors
-    eps_vectors=get_epsilon_vectors(sequence_of_interest, interacting_sequence)
+    eps_vectors=get_epsilon_vectors(sequence_of_interest, interacting_sequence, loaded_model)
     # sum them to get overall interaction vectors
     interaction_vectors=eps_vectors[0]+eps_vectors[1]
 
@@ -482,7 +550,7 @@ def create_seq_by_epsilon_vectors(sequence_of_interest, interacting_sequence=Non
 
 
 def create_seq_by_epsilon(sequence_of_interest, interacting_sequence=None, 
-    exclude_aas=[]):
+    exclude_aas=[], model='Mpipi_GGv1'):
     '''
     Function that creates a sequence with the same total matching epsilon. Doesn't
     Care about linear space as much as previous function. 
@@ -490,21 +558,36 @@ def create_seq_by_epsilon(sequence_of_interest, interacting_sequence=None,
     Parameters
     -----------
     sequence_of_interest : str
-        The sequence that you want your generated sequence to
-        have an epsilon value relative to.
+        The sequence that you want your generated sequence to have an epsilon value relative to.
 
     interacting_sequence : str
-        The seqence that the sequence of interest is interacting with.
-        If None, then it will be the same as sequence of interest (
-        so will make something with the same homotypic interactions)
+        If you want to make a sequence that has an epsilon equal
+        to that between your sequence_of_interest and some interacting sequence,
+        set this equal to the interacting sequence. If None, then it will be the same as sequence of interest (
+        so will make something with the same homotypic interactions).
+        
+        ex. If you want to make a FUS variant that interacts with hnRNPA1 in a specific way, 
+        set sequence_of_interest=FUS and interacting_sequence=hnRNPA1.
+
+        Default = None
 
     exclude_aas : list
         A list of amino acids to exclude from the generated sequence. 
         Default = []        
+
+    model : str
+        The specific model parameters we are using
+        default = Mpipi_GGv1
+        options are 'Mpipi_GGv1', 'CALVADOS2'
+
     '''
+    # check the current implementations of forcefields.
+    if model not in lists.implimented_finches_models:
+        raise goose_exceptions.GooseInputError(f'Only {lists.implimented_finches_models} forcefields have been implemented.')
+
     # pairwise interaction values for each amino acid and U (RNA) against all
     # amino acids and U. Uses mPiPi-GGv1.
-    epsilon_aas={'A': {'A': 0.1729, 'C': 0.1479, 'D': 0.1122, 'E': 0.0991, 'F': -0.1814, 'G': 0.1355, 'H': -0.1472, 'I': 0.1184, 'K': 0.1819, 'L': 0.1302, 'M': 0.1617, 'N': 0.0295, 'P': 0.0992, 'Q': 0.0159, 'R': -0.1, 'S': 0.1578, 'T': 0.1822, 'V': 0.1273, 'W': -0.3609, 'Y': -0.2128}, 'C': {'A': 0.1479, 'C': 0.1244, 'D': 0.0871, 'E': 0.0731, 'F': -0.2188, 'G': 0.1127, 'H': -0.1831, 'I': 0.1859, 'K': 0.1586, 'L': 0.1751, 'M': 0.1461, 'N': 0.0009, 'P': 0.0673, 'Q': -0.0136, 'R': -0.1343, 'S': 0.1352, 'T': 0.16, 'V': 0.1827, 'W': -0.4051, 'Y': -0.2514}, 'D': {'A': 0.1122, 'C': 0.0871, 'D': 2.574, 'E': 2.4772, 'F': 0.0495, 'G': 0.0783, 'H': -1.1931, 'I': 0.1469, 'K': -2.5449, 'L': 0.136, 'M': 0.1068, 'N': -0.0382, 'P': 0.0172, 'Q': -0.0538, 'R': -2.4973, 'S': 0.0989, 'T': 0.1225, 'V': 0.1447, 'W': -0.0261, 'Y': 0.0362}, 'E': {'A': 0.0991, 'C': 0.0731, 'D': 2.4772, 'E': 2.3835, 'F': 0.0398, 'G': 0.0643, 'H': -1.1415, 'I': 0.1344, 'K': -2.4518, 'L': 0.1232, 'M': 0.0931, 'N': -0.056, 'P': -0.0018, 'Q': -0.0721, 'R': -2.3995, 'S': 0.0854, 'T': 0.1096, 'V': 0.1323, 'W': -0.0378, 'Y': 0.0262}, 'F': {'A': -0.1814, 'C': -0.2188, 'D': 0.0495, 'E': 0.0398, 'F': -0.6114, 'G': -0.2051, 'H': -0.566, 'I': -0.1716, 'K': 0.0014, 'L': -0.1832, 'M': -0.2144, 'N': -0.3574, 'P': -0.393, 'Q': -0.3819, 'R': -0.2339, 'S': -0.199, 'T': -0.1842, 'V': -0.1662, 'W': -0.8217, 'Y': -0.6489}, 'G': {'A': 0.1355, 'C': 0.1127, 'D': 0.0783, 'E': 0.0643, 'F': -0.2051, 'G': -0.0747, 'H': -0.1708, 'I': 0.1667, 'K': 0.1411, 'L': 0.1568, 'M': 0.1302, 'N': -0.0007, 'P': 0.0525, 'Q': -0.0154, 'R': -0.1286, 'S': -0.0354, 'T': 0.1446, 'V': 0.1647, 'W': -0.3788, 'Y': -0.2356}, 'H': {'A': -0.1472, 'C': -0.1831, 'D': -1.1931, 'E': -1.1415, 'F': -0.566, 'G': -0.1708, 'H': 0.8857, 'I': -0.1362, 'K': 1.3994, 'L': -0.1475, 'M': -0.178, 'N': -0.3183, 'P': -0.3451, 'Q': -0.3419, 'R': 1.289, 'S': -0.1641, 'T': -0.1492, 'V': -0.1313, 'W': -0.7715, 'Y': -0.6027}, 'I': {'A': 0.1184, 'C': 0.1859, 'D': 0.1469, 'E': 0.1344, 'F': -0.1716, 'G': 0.1667, 'H': -0.1362, 'I': 0.0416, 'K': 0.2281, 'L': 0.0644, 'M': 0.1023, 'N': 0.056, 'P': 0.149, 'Q': 0.0432, 'R': -0.0806, 'S': 0.1954, 'T': 0.2247, 'V': 0.0536, 'W': -0.3651, 'Y': -0.2054}, 'K': {'A': 0.1819, 'C': 0.1586, 'D': -2.5449, 'E': -2.4518, 'F': 0.0014, 'G': 0.1411, 'H': 1.3994, 'I': 0.2281, 'K': 2.2789, 'L': 0.2165, 'M': 0.1853, 'N': 0.0263, 'P': 0.1123, 'Q': 0.0126, 'R': 2.0644, 'S': 0.1688, 'T': 0.1977, 'V': 0.2233, 'W': 0.017, 'Y': 0.0275}, 'L': {'A': 0.1302, 'C': 0.1751, 'D': 0.136, 'E': 0.1232, 'F': -0.1832, 'G': 0.1568, 'H': -0.1475, 'I': 0.0644, 'K': 0.2165, 'L': 0.0794, 'M': 0.1153, 'N': 0.045, 'P': 0.1346, 'Q': 0.0319, 'R': -0.0924, 'S': 0.1849, 'T': 0.2138, 'V': 0.0761, 'W': -0.3771, 'Y': -0.2171}, 'M': {'A': 0.1617, 'C': 0.1461, 'D': 0.1068, 'E': 0.0931, 'F': -0.2144, 'G': 0.1302, 'H': -0.178, 'I': 0.1023, 'K': 0.1853, 'L': 0.1153, 'M': 0.1501, 'N': 0.0155, 'P': 0.0957, 'Q': 0.0016, 'R': -0.1241, 'S': 0.1566, 'T': 0.1844, 'V': 0.1118, 'W': -0.4093, 'Y': -0.2485}, 'N': {'A': 0.0295, 'C': 0.0009, 'D': -0.0382, 'E': -0.056, 'F': -0.3574, 'G': -0.0007, 'H': -0.3183, 'I': 0.056, 'K': 0.0263, 'L': 0.045, 'M': 0.0155, 'N': -0.127, 'P': -0.0983, 'Q': -0.1452, 'R': -0.2736, 'S': 0.0151, 'T': 0.0356, 'V': 0.0562, 'W': -0.5511, 'Y': -0.3917}, 'P': {'A': 0.0992, 'C': 0.0673, 'D': 0.0172, 'E': -0.0018, 'F': -0.393, 'G': 0.0525, 'H': -0.3451, 'I': 0.149, 'K': 0.1123, 'L': 0.1346, 'M': 0.0957, 'N': -0.0983, 'P': 0.0539, 'Q': -0.1179, 'R': -0.2801, 'S': 0.0821, 'T': 0.1148, 'V': 0.1451, 'W': -0.6428, 'Y': -0.4368}, 'Q': {'A': 0.0159, 'C': -0.0136, 'D': -0.0538, 'E': -0.0721, 'F': -0.3819, 'G': -0.0154, 'H': -0.3419, 'I': 0.0432, 'K': 0.0126, 'L': 0.0319, 'M': 0.0016, 'N': -0.1452, 'P': -0.1179, 'Q': -0.1638, 'R': -0.2956, 'S': 0.001, 'T': 0.0222, 'V': 0.0435, 'W': -0.5805, 'Y': -0.417}, 'R': {'A': -0.1, 'C': -0.1343, 'D': -2.4973, 'E': -2.3995, 'F': -0.2339, 'G': -0.1286, 'H': 1.289, 'I': -0.0806, 'K': 2.0644, 'L': -0.0924, 'M': -0.1241, 'N': -0.2736, 'P': -0.2801, 'Q': -0.2956, 'R': 2.08, 'S': -0.1167, 'T': -0.098, 'V': -0.0777, 'W': -0.3863, 'Y': -0.2948}, 'S': {'A': 0.1578, 'C': 0.1352, 'D': 0.0989, 'E': 0.0854, 'F': -0.199, 'G': -0.0354, 'H': -0.1641, 'I': 0.1954, 'K': 0.1688, 'L': 0.1849, 'M': 0.1566, 'N': 0.0151, 'P': 0.0821, 'Q': 0.001, 'R': -0.1167, 'S': 0.1455, 'T': 0.1698, 'V': 0.1921, 'W': -0.3809, 'Y': -0.2308}, 'T': {'A': 0.1822, 'C': 0.16, 'D': 0.1225, 'E': 0.1096, 'F': -0.1842, 'G': 0.1446, 'H': -0.1492, 'I': 0.2247, 'K': 0.1977, 'L': 0.2138, 'M': 0.1844, 'N': 0.0356, 'P': 0.1148, 'Q': 0.0222, 'R': -0.098, 'S': 0.1698, 'T': 0.1965, 'V': 0.2204, 'W': -0.371, 'Y': -0.2168}, 'V': {'A': 0.1273, 'C': 0.1827, 'D': 0.1447, 'E': 0.1323, 'F': -0.1662, 'G': 0.1647, 'H': -0.1313, 'I': 0.0536, 'K': 0.2233, 'L': 0.0761, 'M': 0.1118, 'N': 0.0562, 'P': 0.1451, 'Q': 0.0435, 'R': -0.0777, 'S': 0.1921, 'T': 0.2204, 'V': 0.0726, 'W': -0.3555, 'Y': -0.1992}, 'W': {'A': -0.3609, 'C': -0.4051, 'D': -0.0261, 'E': -0.0378, 'F': -0.8217, 'G': -0.3788, 'H': -0.7715, 'I': -0.3651, 'K': 0.017, 'L': -0.3771, 'M': -0.4093, 'N': -0.5511, 'P': -0.6428, 'Q': -0.5805, 'R': -0.3863, 'S': -0.3809, 'T': -0.371, 'V': -0.3555, 'W': -1.0436, 'Y': -0.8617}, 'Y': {'A': -0.2128, 'C': -0.2514, 'D': 0.0362, 'E': 0.0262, 'F': -0.6489, 'G': -0.2356, 'H': -0.6027, 'I': -0.2054, 'K': 0.0275, 'L': -0.2171, 'M': -0.2485, 'N': -0.3917, 'P': -0.4368, 'Q': -0.417, 'R': -0.2948, 'S': -0.2308, 'T': -0.2168, 'V': -0.1992, 'W': -0.8617, 'Y': -0.687}}
+    epsilon_aas=precomputed_epsilon[model]
     
     # list of all amino acids
     all_aas=['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
@@ -516,27 +599,32 @@ def create_seq_by_epsilon(sequence_of_interest, interacting_sequence=None,
     for aa in exclude_aas:
         all_aas.remove(aa)
 
-
     # make sequence interactor self if None is specified.
     if interacting_sequence==None:
-        interacting_sequence=squence_of_interest
+        interacting_sequence=sequence_of_interest
     
+    # load imc object
+    loaded_model = load_IMC_object(model)
+
     # get epsilon value between sequence and interacting_sequence
-    epsilon=get_epsilon_value(sequence_of_interest, interacting_sequence)
-    eps_vectors=get_epsilon_vectors(sequence_of_interest, interacting_sequence)
+    eps_vectors=get_epsilon_vectors(sequence_of_interest, interacting_sequence, loaded_model)
+    epsilon = np.sum(eps_vectors)
     # make a starting sequence equal to length of the starting sequence. 
     starting_sequence=create_starting_sequence(len(sequence_of_interest), exclude_aas=exclude_aas)
     # using the random sequence as a starting point, now optimize back to the epsilon value
     # we want
-    new_sequence=optimize_to_epsilon_value(starting_sequence, interacting_sequence, epsilon, exclude_aas=exclude_aas)
+    new_sequence=optimize_to_epsilon_value(starting_sequence, interacting_sequence, 
+        epsilon, exclude_aas=exclude_aas, model=model, preloaded_IMC_object=loaded_model)
     return new_sequence
 
 
 
 def create_attractive_or_repulsive_seq(objective_seq_length, interacting_sequence, 
-    attractive_or_repulsive, exclude_aas=[]):
+    attractive_or_repulsive, exclude_aas=[], model='Mpipi_GGv1'):
     '''
-    Function that creates a sequence that is attractive to the interacting sequence.
+    Function that creates a sequence that is attractive
+    or repulsive to the interacting sequence. You can also
+    specify the length of the sequence. 
     
     Parameters
     -----------
@@ -552,14 +640,26 @@ def create_attractive_or_repulsive_seq(objective_seq_length, interacting_sequenc
     exclude_aas : list
         A list of amino acids to exclude from the generated sequence. 
         Default = []
+
+    model : str
+        The specific model parameters we are using
+        default = Mpipi_GGv1
+        options are 'Mpipi_GGv1', 'CALVADOS2'
+
     '''
+    # check the current implementations of forcefields.
+    if model not in lists.implimented_finches_models:
+        raise goose_exceptions.GooseInputError(f'Only {lists.implimented_finches_models} forcefields have been implemented.')
+
+    # load the model
+    loaded_model = load_IMC_object(model)
 
     if attractive_or_repulsive not in ['attractive', 'repulsive']:
         raise goose_exceptions.GooseInputError("attractive_or_repulsive must be either 'attractive' or 'repulsive'.")
 
     # pairwise interaction values for each amino acid and U (RNA) against all
     # amino acids and U. Uses mPiPi-GGv1.
-    epsilon_aas={'A': {'A': 0.1729, 'C': 0.1479, 'D': 0.1122, 'E': 0.0991, 'F': -0.1814, 'G': 0.1355, 'H': -0.1472, 'I': 0.1184, 'K': 0.1819, 'L': 0.1302, 'M': 0.1617, 'N': 0.0295, 'P': 0.0992, 'Q': 0.0159, 'R': -0.1, 'S': 0.1578, 'T': 0.1822, 'V': 0.1273, 'W': -0.3609, 'Y': -0.2128}, 'C': {'A': 0.1479, 'C': 0.1244, 'D': 0.0871, 'E': 0.0731, 'F': -0.2188, 'G': 0.1127, 'H': -0.1831, 'I': 0.1859, 'K': 0.1586, 'L': 0.1751, 'M': 0.1461, 'N': 0.0009, 'P': 0.0673, 'Q': -0.0136, 'R': -0.1343, 'S': 0.1352, 'T': 0.16, 'V': 0.1827, 'W': -0.4051, 'Y': -0.2514}, 'D': {'A': 0.1122, 'C': 0.0871, 'D': 2.574, 'E': 2.4772, 'F': 0.0495, 'G': 0.0783, 'H': -1.1931, 'I': 0.1469, 'K': -2.5449, 'L': 0.136, 'M': 0.1068, 'N': -0.0382, 'P': 0.0172, 'Q': -0.0538, 'R': -2.4973, 'S': 0.0989, 'T': 0.1225, 'V': 0.1447, 'W': -0.0261, 'Y': 0.0362}, 'E': {'A': 0.0991, 'C': 0.0731, 'D': 2.4772, 'E': 2.3835, 'F': 0.0398, 'G': 0.0643, 'H': -1.1415, 'I': 0.1344, 'K': -2.4518, 'L': 0.1232, 'M': 0.0931, 'N': -0.056, 'P': -0.0018, 'Q': -0.0721, 'R': -2.3995, 'S': 0.0854, 'T': 0.1096, 'V': 0.1323, 'W': -0.0378, 'Y': 0.0262}, 'F': {'A': -0.1814, 'C': -0.2188, 'D': 0.0495, 'E': 0.0398, 'F': -0.6114, 'G': -0.2051, 'H': -0.566, 'I': -0.1716, 'K': 0.0014, 'L': -0.1832, 'M': -0.2144, 'N': -0.3574, 'P': -0.393, 'Q': -0.3819, 'R': -0.2339, 'S': -0.199, 'T': -0.1842, 'V': -0.1662, 'W': -0.8217, 'Y': -0.6489}, 'G': {'A': 0.1355, 'C': 0.1127, 'D': 0.0783, 'E': 0.0643, 'F': -0.2051, 'G': -0.0747, 'H': -0.1708, 'I': 0.1667, 'K': 0.1411, 'L': 0.1568, 'M': 0.1302, 'N': -0.0007, 'P': 0.0525, 'Q': -0.0154, 'R': -0.1286, 'S': -0.0354, 'T': 0.1446, 'V': 0.1647, 'W': -0.3788, 'Y': -0.2356}, 'H': {'A': -0.1472, 'C': -0.1831, 'D': -1.1931, 'E': -1.1415, 'F': -0.566, 'G': -0.1708, 'H': 0.8857, 'I': -0.1362, 'K': 1.3994, 'L': -0.1475, 'M': -0.178, 'N': -0.3183, 'P': -0.3451, 'Q': -0.3419, 'R': 1.289, 'S': -0.1641, 'T': -0.1492, 'V': -0.1313, 'W': -0.7715, 'Y': -0.6027}, 'I': {'A': 0.1184, 'C': 0.1859, 'D': 0.1469, 'E': 0.1344, 'F': -0.1716, 'G': 0.1667, 'H': -0.1362, 'I': 0.0416, 'K': 0.2281, 'L': 0.0644, 'M': 0.1023, 'N': 0.056, 'P': 0.149, 'Q': 0.0432, 'R': -0.0806, 'S': 0.1954, 'T': 0.2247, 'V': 0.0536, 'W': -0.3651, 'Y': -0.2054}, 'K': {'A': 0.1819, 'C': 0.1586, 'D': -2.5449, 'E': -2.4518, 'F': 0.0014, 'G': 0.1411, 'H': 1.3994, 'I': 0.2281, 'K': 2.2789, 'L': 0.2165, 'M': 0.1853, 'N': 0.0263, 'P': 0.1123, 'Q': 0.0126, 'R': 2.0644, 'S': 0.1688, 'T': 0.1977, 'V': 0.2233, 'W': 0.017, 'Y': 0.0275}, 'L': {'A': 0.1302, 'C': 0.1751, 'D': 0.136, 'E': 0.1232, 'F': -0.1832, 'G': 0.1568, 'H': -0.1475, 'I': 0.0644, 'K': 0.2165, 'L': 0.0794, 'M': 0.1153, 'N': 0.045, 'P': 0.1346, 'Q': 0.0319, 'R': -0.0924, 'S': 0.1849, 'T': 0.2138, 'V': 0.0761, 'W': -0.3771, 'Y': -0.2171}, 'M': {'A': 0.1617, 'C': 0.1461, 'D': 0.1068, 'E': 0.0931, 'F': -0.2144, 'G': 0.1302, 'H': -0.178, 'I': 0.1023, 'K': 0.1853, 'L': 0.1153, 'M': 0.1501, 'N': 0.0155, 'P': 0.0957, 'Q': 0.0016, 'R': -0.1241, 'S': 0.1566, 'T': 0.1844, 'V': 0.1118, 'W': -0.4093, 'Y': -0.2485}, 'N': {'A': 0.0295, 'C': 0.0009, 'D': -0.0382, 'E': -0.056, 'F': -0.3574, 'G': -0.0007, 'H': -0.3183, 'I': 0.056, 'K': 0.0263, 'L': 0.045, 'M': 0.0155, 'N': -0.127, 'P': -0.0983, 'Q': -0.1452, 'R': -0.2736, 'S': 0.0151, 'T': 0.0356, 'V': 0.0562, 'W': -0.5511, 'Y': -0.3917}, 'P': {'A': 0.0992, 'C': 0.0673, 'D': 0.0172, 'E': -0.0018, 'F': -0.393, 'G': 0.0525, 'H': -0.3451, 'I': 0.149, 'K': 0.1123, 'L': 0.1346, 'M': 0.0957, 'N': -0.0983, 'P': 0.0539, 'Q': -0.1179, 'R': -0.2801, 'S': 0.0821, 'T': 0.1148, 'V': 0.1451, 'W': -0.6428, 'Y': -0.4368}, 'Q': {'A': 0.0159, 'C': -0.0136, 'D': -0.0538, 'E': -0.0721, 'F': -0.3819, 'G': -0.0154, 'H': -0.3419, 'I': 0.0432, 'K': 0.0126, 'L': 0.0319, 'M': 0.0016, 'N': -0.1452, 'P': -0.1179, 'Q': -0.1638, 'R': -0.2956, 'S': 0.001, 'T': 0.0222, 'V': 0.0435, 'W': -0.5805, 'Y': -0.417}, 'R': {'A': -0.1, 'C': -0.1343, 'D': -2.4973, 'E': -2.3995, 'F': -0.2339, 'G': -0.1286, 'H': 1.289, 'I': -0.0806, 'K': 2.0644, 'L': -0.0924, 'M': -0.1241, 'N': -0.2736, 'P': -0.2801, 'Q': -0.2956, 'R': 2.08, 'S': -0.1167, 'T': -0.098, 'V': -0.0777, 'W': -0.3863, 'Y': -0.2948}, 'S': {'A': 0.1578, 'C': 0.1352, 'D': 0.0989, 'E': 0.0854, 'F': -0.199, 'G': -0.0354, 'H': -0.1641, 'I': 0.1954, 'K': 0.1688, 'L': 0.1849, 'M': 0.1566, 'N': 0.0151, 'P': 0.0821, 'Q': 0.001, 'R': -0.1167, 'S': 0.1455, 'T': 0.1698, 'V': 0.1921, 'W': -0.3809, 'Y': -0.2308}, 'T': {'A': 0.1822, 'C': 0.16, 'D': 0.1225, 'E': 0.1096, 'F': -0.1842, 'G': 0.1446, 'H': -0.1492, 'I': 0.2247, 'K': 0.1977, 'L': 0.2138, 'M': 0.1844, 'N': 0.0356, 'P': 0.1148, 'Q': 0.0222, 'R': -0.098, 'S': 0.1698, 'T': 0.1965, 'V': 0.2204, 'W': -0.371, 'Y': -0.2168}, 'V': {'A': 0.1273, 'C': 0.1827, 'D': 0.1447, 'E': 0.1323, 'F': -0.1662, 'G': 0.1647, 'H': -0.1313, 'I': 0.0536, 'K': 0.2233, 'L': 0.0761, 'M': 0.1118, 'N': 0.0562, 'P': 0.1451, 'Q': 0.0435, 'R': -0.0777, 'S': 0.1921, 'T': 0.2204, 'V': 0.0726, 'W': -0.3555, 'Y': -0.1992}, 'W': {'A': -0.3609, 'C': -0.4051, 'D': -0.0261, 'E': -0.0378, 'F': -0.8217, 'G': -0.3788, 'H': -0.7715, 'I': -0.3651, 'K': 0.017, 'L': -0.3771, 'M': -0.4093, 'N': -0.5511, 'P': -0.6428, 'Q': -0.5805, 'R': -0.3863, 'S': -0.3809, 'T': -0.371, 'V': -0.3555, 'W': -1.0436, 'Y': -0.8617}, 'Y': {'A': -0.2128, 'C': -0.2514, 'D': 0.0362, 'E': 0.0262, 'F': -0.6489, 'G': -0.2356, 'H': -0.6027, 'I': -0.2054, 'K': 0.0275, 'L': -0.2171, 'M': -0.2485, 'N': -0.3917, 'P': -0.4368, 'Q': -0.417, 'R': -0.2948, 'S': -0.2308, 'T': -0.2168, 'V': -0.1992, 'W': -0.8617, 'Y': -0.687}}
+    epsilon_aas=precomputed_epsilon[model]
 
     # list of all amino acids
     all_aas=['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
@@ -595,16 +695,16 @@ def create_attractive_or_repulsive_seq(objective_seq_length, interacting_sequenc
         else:
             use_these_aas={k:v for k,v in possible_aas.items() if v>0}
 
-        # if we don't have any amino acids that are attractive or repulsive, choose the most negative or positive
-        if use_these_aas=={}:
+        # if we have fewer than 3 amino acids...
+        if len(use_these_aas) < 3:
             if attractive_or_repulsive=='attractive':
                 # sort by most negative to positive
                 sorted_aas=sorted(possible_aas.items(), key=lambda x: x[1])
             else:
                 # sort by most negative to positive
                 sorted_aas=sorted(possible_aas.items(), key=lambda x: x[1], reverse=True)
-            # add the best aa we can
-            new_sequence+=sorted_aas[0][0]
+            # add from best 5
+            new_sequence+=random.choice(sorted_aas[:3])[0]
         else:
             if attractive_or_repulsive=='attractive':
                 sorted_aas=sorted(use_these_aas.items(), key=lambda x: x[1])
@@ -613,5 +713,136 @@ def create_attractive_or_repulsive_seq(objective_seq_length, interacting_sequenc
             if len(sorted_aas) > 8:
                 sorted_aas=sorted_aas[:8]
             new_sequence+=random.choice(sorted_aas)[0]
-    return new_sequence
+
+    # check to see if sequence is attractive or repulsive.
+    final_eps = get_epsilon_value(new_sequence, interacting_sequence, loaded_model)
+    if final_eps < 0 and attractive_or_repulsive=='repulsive':
+        # try optimizing the sequence to become positive
+        attempted_sequence=optimize_to_epsilon_value(new_sequence, interacting_sequence, 10,
+            exclude_aas=exclude_aas, model=model, preloaded_IMC_object=loaded_model, return_best_sequence=True)
+    elif final_eps > 0 and attractive_or_repulsive=='attractive':
+        # try optimizing the sequence to become positive
+        attempted_sequence=optimize_to_epsilon_value(new_sequence, interacting_sequence, -10,
+            exclude_aas=exclude_aas, model=model, preloaded_IMC_object=loaded_model, return_best_sequence=True)
+    else:
+        # if we wanted it to be attractive and it was, 
+        # or if we wanted it to be repulsive and it was, 
+        # return it.
+        return new_sequence
+
+    # now check the attempted sequence
+    attempted_eps = get_epsilon_value(attempted_sequence, interacting_sequence, loaded_model)
+    if attempted_eps > 0 and attractive_or_repulsive=='repulsive':
+        return attempted_sequence
+    elif attempted_eps < 0 and attractive_or_repulsive=='attractive':
+        return attempted_sequence
+    else:
+        # if we couldn't optimize it to be more attractive or repulsive,
+        # raise goose_exceptions.GooseFail
+        raise goose_exceptions.GooseFail(f'Failed to create {attractive_or_repulsive} sequence.')
+            
+
+def increase_epsilon(sequence_of_interest, interacting_sequence=None,
+                    num_iterations=None, exclude_aas=[], model='Mpipi_GGv1',
+                    maximal_optimization=False):
+    '''
+    Function to increase the epsilon value of a sequence relative to another sequence. 
+
+    Parameters
+    -----------
+    sequence_of_interest : str
+        The sequence that you want to increase or decrease the epsilon value of.
+
+    interacting_sequence : str
+        The sequence that the sequence of interest is interacting with.
+        If None, this will just do homotypic interactions (will do 
+        sequence_of_interest with itself)
+
+    num_iterations : int
+        The number of iterations to run the optimization. 
+        If none, default is length of sequence_of_interest/10
+
+    exclude_aas : list
+        A list of amino acids to exclude from the generated sequence. 
+        Default = []
+
+    model : str
+        The specific model parameters we are using
+        default = Mpipi_GGv1
+        options are 'Mpipi_GGv1', 'CALVADOS2'
+
+    maximal_optimization : bool
+        Whether to optimize to the maximal extent possible. 
+        Reduces the sequence space explored, so default is False
+
+    '''
+    # check the current implementations of forcefields.
+    if model not in lists.implimented_finches_models:
+        raise goose_exceptions.GooseInputError(f'Only {lists.implimented_finches_models} forcefields have been implemented.')
+
+    # load the model
+    loaded_model = load_IMC_object(model)
+
+    # if interacting sequence is None, set it to the sequence of interest
+    if num_iterations is None:
+        num_iterations=int(len(sequence_of_interest)/10)
+    if num_iterations==0:
+        num_iterations=1
+
+    return optimize_to_epsilon_value(sequence_of_interest, interacting_sequence, 1000,
+        allowed_error=0.1, optimization_iterations=num_iterations, exclude_aas=exclude_aas,
+        model=model, preloaded_IMC_object=loaded_model, return_best_sequence=True,
+        maximal_optimization=maximal_optimization)
+
+def decrease_epsilon(sequence_of_interest, interacting_sequence=None,
+                    num_iterations=None, exclude_aas=[], model='Mpipi_GGv1',
+                    maximal_optimization=False):
+    '''
+    Function to decrease the epsilon value of a sequence relative to another sequence. 
+
+    Parameters
+    -----------
+    sequence_of_interest : str
+        The sequence that you want to increase or decrease the epsilon value of.
+
+    interacting_sequence : str
+        The sequence that the sequence of interest is interacting with.
+        If None, this will just do homotypic interactions (will do 
+        sequence_of_interest with itself)
+
+    num_iterations : int
+        The number of iterations to run the optimization. 
+        If none, default is length of sequence_of_interest/10
+
+    exclude_aas : list
+        A list of amino acids to exclude from the generated sequence. 
+        Default = []
+
+    model : str
+        The specific model parameters we are using
+        default = Mpipi_GGv1
+        options are 'Mpipi_GGv1', 'CALVADOS2'
+
+    maximal_optimization : bool
+        Whether to optimize to the maximal extent possible. 
+        Reduces the sequence space explored, so default is False
+
+    '''
+    # check the current implementations of forcefields.
+    if model not in lists.implimented_finches_models:
+        raise goose_exceptions.GooseInputError(f'Only {lists.implimented_finches_models} forcefields have been implemented.')
+
+    # load the model
+    loaded_model = load_IMC_object(model)
+
+    # if interacting sequence is None, set it to the sequence of interest
+    if num_iterations is None:
+        num_iterations=int(len(sequence_of_interest)/10)
+    if num_iterations==0:
+        num_iterations=1
+
+    return optimize_to_epsilon_value(sequence_of_interest, interacting_sequence, -1000,
+        allowed_error=0.1, optimization_iterations=num_iterations, exclude_aas=exclude_aas,
+        model=model, preloaded_IMC_object=loaded_model, return_best_sequence=True,
+        maximal_optimization=maximal_optimization)
 
