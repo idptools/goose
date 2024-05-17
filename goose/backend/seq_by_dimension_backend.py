@@ -17,7 +17,9 @@ from sparrow import Protein as pr
 from sparrow.predictors import batch_predict
 
 from goose.backend.sequence_generation_backend import gen_sequence
+from goose.backend import parameters
 from goose.backend.parameters import re_error, rg_error, rg_re_attempt_num, get_min_re, get_max_re
+from goose.backend import lists
 from goose.backend.lists import disordered_list, disordered_list_reduced_charge
 from goose.goose_exceptions import GooseError, GooseException, GooseInputError, GooseFail
 from goose.backend.variant_generation_backend import create_asymmetry_variant
@@ -40,17 +42,18 @@ def batch_predict_re(sequences, show_progress_bar=False, return_seq2prediction=F
         return_seq2prediction=return_seq2prediction)
     return re
 
-def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='default_error',
+
+
+def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error='default_error',
     num_attempts=rg_re_attempt_num, reduce_pos_charged=True, exclude_aas=None):
     '''
-    Builds a sequence of a given length with a given radius of gyration
-    by randomly selecting amino acids until the re or rg is what the user wants.
-    Probably will optimize more for efficiency later but is pretty fast at first go.
+    Takes an input sequence and tries to optimize it such that it has the correct
+    objective Re or Rg.
 
     Parameters
     -----------
-    seq_length: int
-        Length of sequence to generate
+    input_sequence: str
+        the input sequence to optimzies
     rg_or_re: str
         'rg' or 're' depending on whether you want to specify radius of gyration or end to end distance
     objective_dim : float
@@ -85,8 +88,6 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
         dis_list_to_use=disordered_list
         bias_dim_dict={'collapse':['W','Y', 'G', 'F', 'Q', 'N'], 'expand':['D', 'E', 'K', 'P', 'S', 'T']}
 
-    # biased lists of residues to alter dims
-    
 
     # see if we need to get rid of anything. This makes a dict that counts 
     # the number of everything then removes from the dict so we don't have to
@@ -118,9 +119,8 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
         dis_list_to_use=nl
 
     # best seq
-    best_seq=''
-    # base sequence
-    start_seq=gen_sequence(seq_length, usedlist=dis_list_to_use)
+    start_seq=input_sequence
+    best_seq=start_seq
     # get the starting rg or re.
     if rg_or_re=='rg':
         start_dim = predict_rg(start_seq)
@@ -135,7 +135,7 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
     if abs(start_dim - objective_dim)<=allowed_error:
         return start_seq
     else:
-        starter=start_seq
+        starter=input_sequence
         best_error = abs(start_dim - objective_dim)
         for attempt in range(0,num_attempts):
             if start_dim > objective_dim:
@@ -144,20 +144,11 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
                 use_aas = bias_dim_dict['expand']
             # make 32 seq variants. 
             test_seqs=[]
-            # max_change_val defines the max number by fraction
-            # we can change the sequence. Over time, it reduces until
-            # 0.1, at which point it is equal to 0.05. 
-            max_change_val = (1-(1/best_error))
-            if max_change_val < 0.1:
-                max_change_val=0.05
-            target_fractions = np.linspace(0.01,max_change_val,seq_length)
+            # change one amino acid at a time. 
             for frac in range(0, 32):
-                cur_frac=random.choice(target_fractions)
-                num_from_dim_change = int(frac*seq_length)
-                if num_from_dim_change<=0:
+                num_from_dim_change = int(len(input_sequence)/80)
+                if num_from_dim_change <1:
                     num_from_dim_change=1
-                if num_from_dim_change > seq_length:
-                    num_from_dim_change = seq_length
                 temp=[]
                 for aa in range(0, num_from_dim_change):
                     temp.append(random.choice(use_aas))
@@ -184,6 +175,118 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
                     start_dim = cur_dims                    
     raise GooseFail(f'Could not generate sequence with specified {rg_or_re}. \nTry increasing number of attempts or with a different rg/re value or length value')
 
+
+
+def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='default_error',
+    num_attempts=rg_re_attempt_num, num_sub_attempts=5, reduce_pos_charged=True, exclude_aas=None):
+    '''
+    Builds a sequence of a given length with a given radius of gyration or Re
+    by starting with a sequence that is weighted to be disordered and
+    approximately the right dimensions and then subsequently optimizing 
+    that sequence.
+    
+    Parameters
+    -----------
+    seq_length: int
+        Length of sequence to generate
+    rg_or_re: str
+        'rg' or 're' depending on whether you want to specify radius of gyration or end to end distance
+    objective_dim : float
+        objective rg or re value
+    allowed_error: float
+        Allowed error between the specified radius of gyration and the actual radius of gyration
+        default is from the backend.parameters module, re_error or rg_error
+    num_attempts: int
+        Number of attempts to try to generate a sequence with the specified radius of gyration
+        default is from the backend.parameters module, rg_re_attempt_num
+    num_sub_attempts: int
+        Number of sub attempts
+        Default is 5
+    reduce_pos_charged : bool
+        Whether to reduce positively charged amino acids in the sequence. 
+        default is True
+        Reason for this is that in vivo data suggests that positively charged
+        residues may not drive sequence expansion as much as was predicted by
+        the model used here for predicted rg / re. Therefore, when set to True,
+        this function will largely avoid (+) charged residues. 
+    exclude_aas : list
+        list of amino acids to exclude from the sequence. 
+        default is None
+
+    Returns
+    --------
+    str
+        Sequence with specified radius of gyration or end to end distance
+    '''
+    # figure out disordered list to use. 
+    if rg_or_re.lower()=='re':
+        min_possible_value=parameters.get_min_re(seq_length)
+        max_possible_value=parameters.get_max_re(seq_length)
+    else:
+        min_possible_value=parameters.get_min_rg(seq_length)
+        max_possible_value=parameters.get_max_rg(seq_length)        
+    
+    #dis_list_to_use
+    dimensions_range = max_possible_value-min_possible_value
+    objective_scaled = (objective_dim-min_possible_value)/dimensions_range
+    if objective_scaled<=0.1:
+        dis_list_to_use=lists.dims_under_10
+    elif objective_scaled >0.1 and objective_scaled <=0.22:
+        dis_list_to_use=lists.dims_10_22
+    elif objective_scaled >0.22 and objective_scaled <=0.32:
+        dis_list_to_use=lists.dims_22_32
+    elif objective_scaled >0.32 and objective_scaled <=0.42:
+        dis_list_to_use=lists.dims_32_42
+    elif objective_scaled >0.42 and objective_scaled <=0.53:
+        dis_list_to_use=lists.dims_42_53
+    elif objective_scaled >0.53 and objective_scaled <=0.70:
+        dis_list_to_use=lists.dims_53_70
+    elif objective_scaled >0.7 and objective_scaled <=0.80:
+        dis_list_to_use=lists.dims_70_80
+    else:
+        dis_list_to_use=lists.dims_over_80
+
+
+    # see if we need to get rid of anything. This makes a dict that counts 
+    # the number of everything then removes from the dict so we don't have to
+    # check the list a ton of times. 
+    if exclude_aas is not None:
+        if isinstance(exclude_aas, list)==False:
+            raise Exception('exclude_aas must be a list')
+        tdict={}
+        for a in set(dis_list_to_use):
+            tdict[a]=dis_list_to_use.count(a)
+        # get rid of stuff in exclude_aas
+        for a in exclude_aas:
+            if a in tdict:
+                del tdict[a]
+            if a in bias_dim_dict['collapse']:
+                bias_dim_dict['collapse'].remove(a)
+            if a in bias_dim_dict['expand']:
+                bias_dim_dict['expand'].remove(a)
+            if bias_dim_dict['collapse']==[]:
+                raise Exception('Cannot specify W, Y, G, F, Q, and N in exclude_aas')
+            if bias_dim_dict['expand']==[]:
+                raise Exception('Cannot specify D, E, K, P, S, and T in exclude_aas')
+        # make new list
+        nl=[]
+        for a in tdict:
+            for i in range(0,tdict[a]):
+                nl.append(a)
+        # set dis_list_to_use equal to nl
+        dis_list_to_use=nl
+
+    # try to make the sequence. 
+    for i in range(0, num_sub_attempts):
+        # base sequence
+        start_seq=gen_sequence(seq_length, usedlist=dis_list_to_use)
+        try:
+            finseq=optimize_seq_dims(start_seq, rg_or_re, objective_dim, allowed_error=allowed_error,
+                num_attempts=num_attempts, reduce_pos_charged=reduce_pos_charged, exclude_aas=exclude_aas)
+            return finseq
+        except:
+            continue
+    raise GooseFail(f'Could not generate sequence with specified {rg_or_re}. \nTry increasing number of attempts or with a different rg/re value or length value')
 
 
 def make_rg_re_variant(sequence, increase_or_decrease, rg_or_re, 
