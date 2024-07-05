@@ -123,6 +123,13 @@ def get_optimal_residue(four_amino_acids, exclude_residues = [], cutoff_disorder
     if len(exclude_residues) >= 20:
         raise GooseInputError("You cannot exclude all amino acids.")
 
+    # if we are excluding everything except DE/KR, just return a random one
+    if sorted(exclude_residues)==['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'L', 'M', 'N', 'P', 'Q', 'S', 'T', 'V', 'W', 'Y']:
+        return random.choice(['K', 'R'])
+
+    if sorted(exclude_residues)==['A', 'C', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']:
+        return random.choice(['D', 'E'])
+
     # set order of amino acids for potential_AA_vals 
     # This order matches what was used for the input 5th
     # amino acid during generation of the aa_dis_val_4_V2 dict
@@ -756,7 +763,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
     # to change that will lower it
     if current_hydro > final_hydropathy:
         worst_value = -100
-        for aa, amino_acid_index in enumerate(sequence[3:]):
+        for amino_acid_index, aa in enumerate(sequence[3:]):
             if aa not in exclude_these_residues:
                 cur_hydro_value = AA_hydro[aa]
                 if cur_hydro_value > worst_value:
@@ -767,7 +774,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
     # to change that will raise it
     elif current_hydro < final_hydropathy:
         worst_value = 100
-        for aa, amino_acid_index in enumerate(sequence[3:]):
+        for amino_acid_index, aa in enumerate(sequence[3:]):
             if aa not in exclude_these_residues:
                 cur_hydro_value = AA_hydro[aa]
                 if cur_hydro_value < float(worst_value):
@@ -787,7 +794,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
         #figure out what residues need to be excluded
         exclude_vals = all_excluded_residues_hydro(sequence=sequence,
                     objective_hydropathy=final_hydropathy, no_charge=True,
-                     input_exclusion=excluded_residues)
+                     exclude_amino_acids=excluded_residues)
         exclude_vals.extend(excluded_residues)
         exclude_vals=list(set(exclude_vals))
 
@@ -1405,6 +1412,7 @@ def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = para
 
     optimizer=0
     best_sequence = sequence
+    best_hydro=Protein(sequence).hydropathy
     best_error = abs(best_hydro - objective_hydropathy)
     # set number of possible optimizations to legnth * 3 to limit how long it does this.
     # objective is to just get the sequence reasonably close here.

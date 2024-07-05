@@ -1312,57 +1312,85 @@ def gen_dimensions_variant(sequence, increase_or_decrease, rg_or_re, return_all=
     starting_disorder = meta.predict_disorder(sequence)
     
     if num_attempts==None:
-        num_attempts=len(sequence)*75
+        num_attempts=len(sequence)
     else:
         if num_attempts<1:
             raise GooseException('cannot have number of attempts be below 1.')
 
-    # get all the sequences. 
-    seqs_to_dims=make_rg_re_variant(sequence, increase_or_decrease,
-        rg_or_re, numseqs=num_attempts)
+    # iterate over attempts
+    for attempt in range(0, num_attempts):
+        
+        success=False
+        try:
+            # get all the sequences. 
+            seqs_to_dims=make_rg_re_variant(sequence, 
+                increase_or_decrease,
+                rg_or_re, numseqs=256)
+            success=True
+        except:
+            continue
 
-    # predict disorder
-    nest_seq_disorder_vals=meta.predict_disorder_batch(list(seqs_to_dims.keys()), 
-                                                        show_progress_bar=False)
+        # if se made sequences with varying Rg / Re, continue to check for disorder and increase or decrease
+        if success==True:
 
-    # get confirmed disordered seqs
-    confirmed_dims_to_seq = {}
-    for seq, disorder in nest_seq_disorder_vals:
-        if strict_disorder==False:
-            if sequence_variant_disorder(disorder, starting_disorder, 
-                                            cutoff_val=disorder_threshold, 
-                                            strict=False, input_disorder_val=True):
-                confirmed_dims_to_seq[seqs_to_dims[seq]]=seq
-        else:
-            if min(disorder) > disorder_threshold:
-                confirmed_dims_to_seq[seqs_to_dims[seq]]=seq
+            # predict disorder
+            nest_seq_disorder_vals=meta.predict_disorder_batch(list(seqs_to_dims.keys()), 
+                                                                show_progress_bar=False)
+            # get confirmed disordered seqs
+            confirmed_dims_to_seq = {}
+            for seq, disorder in nest_seq_disorder_vals:
+                if strict_disorder==False:
+                    if sequence_variant_disorder(disorder, starting_disorder, 
+                                                    cutoff_val=disorder_threshold, 
+                                                    strict=False, input_disorder_val=True):
+                        confirmed_dims_to_seq[seqs_to_dims[seq]]=seq
+                else:
+                    if min(disorder) > disorder_threshold:
+                        confirmed_dims_to_seq[seqs_to_dims[seq]]=seq
 
-    # get seqs to return. 
-    final_dim_vals_sorted = sorted(list(confirmed_dims_to_seq.keys()))
+            # make sure we have disordered sequences
+            if confirmed_dims_to_seq!={}:
 
-    # dict for final variants
-    final_seqs={}
-    if return_all==True:
-        final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[0]]]=final_dim_vals_sorted[0]
-        cur_val=final_dim_vals_sorted[0]
-        for dim_val in range(1, len(final_dim_vals_sorted)):
-            cur_dim = final_dim_vals_sorted[dim_val]
-            if abs(cur_dim-cur_val)> return_all_interval:
-                final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[dim_val]]]=final_dim_vals_sorted[dim_val]
-                cur_val=final_dim_vals_sorted[dim_val]
+                # get seqs to return. 
+                final_dim_vals_sorted = sorted(list(confirmed_dims_to_seq.keys()))
 
-        # make sure we get the whole range. 
-        if final_dim_vals_sorted[-1] not in final_seqs:
-            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[-1]]]=final_dim_vals_sorted[-1]
+                # set continue_to_return_seqs ==False
+                continue_to_return_seqs=False
 
-    else:
-        if increase_or_decrease=='increase':
-            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[-1]]]=final_dim_vals_sorted[-1]
-        else:
-            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[0]]]=final_dim_vals_sorted[0]
+                if increase_or_decrease=='increase':
+                    if final_dim_vals_sorted[-1]>starting_dimensions:
+                        continue_to_return_seqs=True
+                else:
+                    if final_dim_vals_sorted[0]<starting_dimensions:
+                        continue_to_return_seqs=True
 
-    # add original if needed. 
-    if include_original==True:
-        return{'original':{sequence:starting_dimensions}, 'variants':final_seqs}
-    else:
-        return final_seqs
+                if continue_to_return_seqs==True:
+
+                    # dict for final variants
+                    final_seqs={}
+                    if return_all==True:
+                        final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[0]]]=final_dim_vals_sorted[0]
+                        cur_val=final_dim_vals_sorted[0]
+                        for dim_val in range(1, len(final_dim_vals_sorted)):
+                            cur_dim = final_dim_vals_sorted[dim_val]
+                            if abs(cur_dim-cur_val)> return_all_interval:
+                                final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[dim_val]]]=final_dim_vals_sorted[dim_val]
+                                cur_val=final_dim_vals_sorted[dim_val]
+
+                        # make sure we get the whole range. 
+                        if final_dim_vals_sorted[-1] not in final_seqs:
+                            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[-1]]]=final_dim_vals_sorted[-1]
+
+                    else:
+                        if increase_or_decrease=='increase':
+                            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[-1]]]=final_dim_vals_sorted[-1]
+                        else:
+                            final_seqs[confirmed_dims_to_seq[final_dim_vals_sorted[0]]]=final_dim_vals_sorted[0]
+
+                    # add original if needed. 
+                    if include_original==True:
+                        return{'original':{sequence:starting_dimensions}, 'variants':final_seqs}
+                    else:
+                        return final_seqs
+
+    raise GooseFail('Unable to generate sequence.')
