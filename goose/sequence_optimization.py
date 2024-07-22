@@ -83,7 +83,8 @@ class SequenceOptimizer:
             num_shuffles=config['num_shuffles'],
             shuffle_interval=config['shuffle_interval']
         )
-        optimizer.set_initial_sequence(config['initial_sequence'])
+        if config['initial_sequence']:
+            optimizer.set_initial_sequence(config['initial_sequence'])
 
         # Load properties
         for prop_name, target_value, weight in config['properties']:
@@ -666,3 +667,11 @@ def build_sequence(kmer_dict: KmerDict, target_length: int) -> str:
             break
 
     return sequence
+
+
+if __name__ == "__main__":
+    optimizer = SequenceOptimizer(100,verbose=True)
+    optimizer.add_property(FCR, 0.25, 1.0)
+    optimizer.get_properties
+    optimizer2 = SequenceOptimizer.load_configuration("test.json")
+    embed()
