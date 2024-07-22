@@ -47,8 +47,9 @@ class SequenceOptimizer:
         self.shuffle_interval = 25
         self.initial_sequence = None
 
-        # Set up logging
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        # Set up logging if verbose is enabled
+        if self.verbose:
+            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
 
         # Load kmer_dict if file is provided
@@ -184,14 +185,14 @@ class SequenceOptimizer:
         ]
     
     @property
-    def propeties(self):
+    def get_properties(self):
         defined_properties = self.get_defined_properties()
         if not defined_properties:
-            print("No properties defined.")
+            self.logger.info("No properties defined.")
         else:
-            print("Defined properties:")
+            self.logger.info("Defined properties:")
             for prop in defined_properties:
-                print(f"  - {prop['name']}: target = {prop['target_value']}, weight = {prop['weight']}")
+                self.logger.info(f"  - {prop['name']}: target = {prop['target_value']}, weight = {prop['weight']}")
 
 class KmerDict:
     """
@@ -665,11 +666,3 @@ def build_sequence(kmer_dict: KmerDict, target_length: int) -> str:
             break
 
     return sequence
-
-
-if __name__ == "__main__":
-    optimizer = SequenceOptimizer(100)
-    optimizer.add_property(Hydrophobicity, 0.5, 1.0)
-    optimizer.add_property(ComputeIWD,("YFL",), 0.5, 1)
-    optimizer.run()
-   
