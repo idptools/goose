@@ -1,29 +1,163 @@
-from collections import defaultdict
-import numpy as np
-from typing import Dict, List, Tuple, Any
-from functools import lru_cache
-import random
-import pickle
+import json
+import logging
 import math
-import sparrow
-from tqdm import tqdm, trange
+import pickle
+import random
 import types
-from goose import get_data
+from collections import defaultdict
+from functools import lru_cache
+from typing import Any, Dict, List, Tuple
+
+import numpy as np
+import sparrow
 from IPython import embed
-from properties import (
-                Hydrophobicity,
-                NCPR, 
-                FCR, 
-                ComputeIWD, 
-                ProteinProperty, 
-                Kappa, 
-                EndToEndDistance,
-                RadiusOfGyration, 
-                TargetAminoAcidFractions, 
-                SCD, 
-                SHD, 
-                Complexity,
-                )
+
+from goose.properties import (
+    FCR,
+    NCPR,
+    SCD,
+    SHD,
+    Complexity,
+    ComputeIWD,
+    EndToEndDistance,
+    Hydrophobicity,
+    Kappa,
+    ProteinProperty,
+    RadiusOfGyration,
+    TargetAminoAcidFractions,
+)
+from tqdm import tqdm, trange
+
+from goose import get_data
+
+
+class SequenceOptimizer:
+    def __init__(self, target_length: int, kmer_dict_file: str = None, verbose=False):
+        self.target_length = target_length
+        self.kmer_dict_file = kmer_dict_file
+        self.verbose = verbose
+        self.kmer_dict = None 
+        self.properties: List[ProteinProperty] = []
+        self.fixed_ranges: List[Tuple[int, int]] = []
+        self.max_iterations = 1000
+        self.tolerance = 0.001
+        self.window_size = 50
+        self.num_shuffles = 5000
+        self.shuffle_interval = 25
+        self.initial_sequence = None
+
+        # Set up logging
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        self.logger = logging.getLogger(__name__)
+
+        # Load kmer_dict if file is provided
+        if self.kmer_dict_file:
+            self._load_kmer_dict()
+        else:
+            self.kmer_dict_file = get_data("kmer_properties.pickle")
+            self._load_kmer_dict()
+
+    def _load_kmer_dict(self):
+        try:
+            with open(self.kmer_dict_file, "rb") as f:
+                kmer_properties = pickle.load(f)
+            self.kmer_dict = build_kmer_dict(kmer_properties)
+            self.logger.info(f"Loaded kmer dictionary from {self.kmer_dict_file}")
+        except OSError as e:
+            self.logger.error(f"Error loading kmer dictionary: {e}")
+            raise
+
+    @classmethod
+    def load_configuration(cls, config_file: str, kmer_dict_file: str = None):
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        optimizer = cls(config['target_length'], kmer_dict_file)
+        optimizer.set_fixed_ranges(config['fixed_ranges'])
+        optimizer.set_optimization_params(
+            max_iterations=config['max_iterations'],
+            tolerance=config['tolerance'],
+            window_size=config['window_size'],
+            num_shuffles=config['num_shuffles'],
+            shuffle_interval=config['shuffle_interval']
+        )
+        optimizer.set_initial_sequence(config['initial_sequence'])
+
+        # Load properties
+        for prop_name, target_value, weight in config['properties']:
+            # properties being optimized must be in global namespace
+            property_class = globals()[prop_name]
+            optimizer.add_property(property_class, target_value, weight)
+
+        optimizer.logger.info(f"Configuration loaded from {config_file}")
+        return optimizer
+
+    def add_property(self, property_class: type, *args: Any, **kwargs: Any):
+        self.properties.append(property_class(*args, **kwargs))
+
+    def set_fixed_ranges(self, ranges: List[Tuple[int, int]]):
+        self.fixed_ranges = ranges
+
+    def set_optimization_params(self, max_iterations: int = None, tolerance: float = None, 
+                                window_size: int = None, num_shuffles: int = None, 
+                                shuffle_interval: int = None):
+        if max_iterations is not None:
+            self.max_iterations = max_iterations
+        if tolerance is not None:
+            self.tolerance = tolerance
+        if window_size is not None:
+            self.window_size = window_size
+        if num_shuffles is not None:
+            self.num_shuffles = num_shuffles
+        if shuffle_interval is not None:
+            self.shuffle_interval = shuffle_interval
+
+    def set_initial_sequence(self, sequence: str):
+        self.initial_sequence = sequence
+
+    def run(self) -> str:
+        self.logger.info("Starting sequence optimization")
+        optimized_sequence = optimize_sequence(
+            self.kmer_dict,
+            self.target_length,
+            self.properties,
+            max_iterations=self.max_iterations,
+            tolerance=self.tolerance,
+            verbose=self.verbose,
+            window_size=self.window_size,
+            num_shuffles=self.num_shuffles,
+            shuffle_interval=self.shuffle_interval,
+            fixed_residue_ranges=self.fixed_ranges,
+            initial_sequence=self.initial_sequence
+        )
+        self.logger.info("Sequence optimization completed")
+        self.log_results(optimized_sequence)
+        return optimized_sequence
+
+    def log_results(self, sequence: str):
+        if self.initial_sequence is not None:
+            self.logger.info("Initial Sequence: " + self.initial_sequence)
+        self.logger.info(f"Optimized Sequence: {sequence}")
+        protein = sparrow.Protein(sequence)
+        for prop in self.properties:
+            value = prop.calculate(protein)
+            self.logger.info(f"{prop.__class__.__name__}: {value:.2f} (Target: {prop.target_value:.2f})")
+
+    def save_configuration(self, filename: str):
+        config = {
+            "target_length": self.target_length,
+            "properties": [(prop.__class__.__name__, prop.target_value, prop.weight) for prop in self.properties],
+            "fixed_ranges": self.fixed_ranges,
+            "max_iterations": self.max_iterations,
+            "tolerance": self.tolerance,
+            "window_size": self.window_size,
+            "num_shuffles": self.num_shuffles,
+            "shuffle_interval": self.shuffle_interval,
+            "initial_sequence": self.initial_sequence
+        }
+        with open(filename, 'w') as f:
+            json.dump(config, f, indent=2)
+        self.logger.info(f"Configuration saved to {filename}")
 
 
 class KmerDict:
@@ -498,60 +632,3 @@ def build_sequence(kmer_dict: KmerDict, target_length: int) -> str:
             break
 
     return sequence
-
-
-if __name__ == "__main__":
-    kmer_dictionary = get_data("kmer_properties.pickle")
-
-    # Load kmer properties from file
-    with open(kmer_dictionary, "rb") as f:
-        kmer_properties = pickle.load(f)
-    
-    kmer_dict = build_kmer_dict(kmer_properties)
-    
-    # Define optimization parameters
-    target_length = 80
-    #target_fractions = {'A': 0.1,'G': 0.15,}
-    fixed_ranges = [(0, 79)]
-    #fixed_ranges = []
-
-    # note unnormalized weights, will be normalized in optimization
-    properties = [
-        ComputeIWD(("YF",), 1.1, 1),
-        #FCR(0.4, 1),
-        #NCPR(-0.2, 1),
-        #RadiusOfGyration(25., 0.05),
-    ]
-    
-    total_weight = sum(prop.weight for prop in properties)
-    
-    for prop in properties:
-        prop.weight = prop.weight / total_weight
-
-    max_iterations = 1000
-    tolerance = 0.05
-    #initial_sequence = "A" * target_length
-    initial_sequence = "YLGGLRFSASERQAQQSQYSFFSALEERYRNNEARFFQEYALYGNGQFARNQRSSNYEGYGALNQEGGFNEYSRNLLLAF"
-    
-    # Call the optimization function
-
-    titrate_yf = []
-    for clustering in tqdm([0.5,1.0,1.5,2.0,2.5,3.0,3.5,4.0,4.5,5.0]):
-        properties = [
-            ComputeIWD(("YFL",), clustering, 1),
-            ]
-
-        optimized_sequence = optimize_sequence(kmer_dict, target_length, properties,
-                                       max_iterations, tolerance, verbose=True,
-                                       window_size=50, num_shuffles=5000,
-                                       shuffle_interval=25, fixed_residue_ranges=fixed_ranges,
-                                       initial_sequence=initial_sequence)
-    
-        print("Optimized Sequence:", optimized_sequence)
-        titrate_yf.append(optimized_sequence)
-        protein = sparrow.Protein(optimized_sequence)
-        for prop in properties:
-            value = prop.calculate(protein)
-            print(f"{prop.__class__.__name__}: {value:.2f} (Target: {prop.target_value:.2f})") 
-
-    embed()
