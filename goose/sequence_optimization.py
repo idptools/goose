@@ -26,6 +26,7 @@ from goose.properties import (
     RadiusOfGyration,
     TargetAminoAcidFractions,
 )
+
 from tqdm import tqdm, trange
 
 from goose import get_data
@@ -93,7 +94,19 @@ class SequenceOptimizer:
         return optimizer
 
     def add_property(self, property_class: type, *args: Any, **kwargs: Any):
-        self.properties.append(property_class(*args, **kwargs))
+        new_property = property_class(*args, **kwargs)
+        
+        # Check if the property already exists
+        for i, prop in enumerate(self.properties):
+            if isinstance(prop, property_class):
+                # If it exists, replace it
+                self.properties[i] = new_property
+                self.logger.info(f"Replaced existing property {property_class.__name__}")
+                return
+        
+        # If it doesn't exist, append it
+        self.properties.append(new_property)
+        self.logger.info(f"Added new property {property_class.__name__}")
 
     def set_fixed_ranges(self, ranges: List[Tuple[int, int]]):
         self.fixed_ranges = ranges
@@ -113,6 +126,7 @@ class SequenceOptimizer:
             self.shuffle_interval = shuffle_interval
 
     def set_initial_sequence(self, sequence: str):
+        assert len(sequence) == self.target_length, f"Initial sequence length must match target length ({self.target_length})"
         self.initial_sequence = sequence
 
     def run(self) -> str:
@@ -159,6 +173,25 @@ class SequenceOptimizer:
             json.dump(config, f, indent=2)
         self.logger.info(f"Configuration saved to {filename}")
 
+    def get_defined_properties(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "name": prop.__class__.__name__,
+                "target_value": prop.target_value,
+                "weight": prop.weight
+            }
+            for prop in self.properties
+        ]
+    
+    @property
+    def propeties(self):
+        defined_properties = self.get_defined_properties()
+        if not defined_properties:
+            print("No properties defined.")
+        else:
+            print("Defined properties:")
+            for prop in defined_properties:
+                print(f"  - {prop['name']}: target = {prop['target_value']}, weight = {prop['weight']}")
 
 class KmerDict:
     """
@@ -632,3 +665,11 @@ def build_sequence(kmer_dict: KmerDict, target_length: int) -> str:
             break
 
     return sequence
+
+
+if __name__ == "__main__":
+    optimizer = SequenceOptimizer(100)
+    optimizer.add_property(Hydrophobicity, 0.5, 1.0)
+    optimizer.add_property(ComputeIWD,("YFL",), 0.5, 1)
+    optimizer.run()
+   
