@@ -31,12 +31,12 @@ Right now you can only install GOOSE through Github. It will be on PyPi to allow
 
 GOOSE has a few requirements **prior** to installation. Just follow the steps below to use GOOSE!  
 
-1. Install cython and numpy.  
+**First install cython and numpy.**  
 
 	$ pip install cython
 	$ pip install numpy
 
-2. Install GOOSE.  
+**Now you can install GOOSE.**  
 
 To install directly from the git repository simply run:
 
