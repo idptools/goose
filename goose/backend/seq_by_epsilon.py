@@ -352,6 +352,13 @@ def return_constrained_aa_list(input_sequence, exclude_aas=[]):
     # list all aas
     all_aas=['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
     
+    if input_sequence=='':
+        finaas=[]
+        for aa in all_aas:
+            if aa not in exclude_aas:
+                finaas.append(aa)
+        return finaas
+
     # lists we will watch out for 
     aro=['W', 'F', 'Y']
     ali=['I', 'L', 'V', 'A','M']
@@ -374,9 +381,10 @@ def return_constrained_aa_list(input_sequence, exclude_aas=[]):
     total_ali = sum([aa_counts[aa] for aa in ali])
     
     # make sure we don't get a weird amount of C
-    if 'C' in input_sequence:
-        if aa_counts['C']/len(input_sequence) > 0.15:
-            all_aas.remove('C')
+    if 'C' in all_aas:
+        if 'C' in input_sequence:
+            if aa_counts['C']/len(input_sequence) > 0.15:
+                all_aas.remove('C')
 
     # make sure we don't get too many aro
     if total_aro/len(input_sequence) > 0.2:
@@ -679,7 +687,11 @@ def create_attractive_or_repulsive_seq(objective_seq_length, interacting_sequenc
 
         # if seq over 8 amino acids, start constrainin all_aas
         if len(new_sequence) > 8:
-            all_aas=return_constrained_aa_list(new_sequence)
+            all_aas=return_constrained_aa_list(new_sequence, exclude_aas=exclude_aas)
+        else:
+            all_aas=return_constrained_aa_list('', exclude_aas=exclude_aas)
+
+
 
         # loop through all aas
         for aa in all_aas:
