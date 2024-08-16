@@ -691,8 +691,6 @@ def create_attractive_or_repulsive_seq(objective_seq_length, interacting_sequenc
         else:
             all_aas=return_constrained_aa_list('', exclude_aas=exclude_aas)
 
-
-
         # loop through all aas
         for aa in all_aas:
             total_interaction=0
