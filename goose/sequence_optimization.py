@@ -33,19 +33,23 @@ from goose import get_data
 
 
 class SequenceOptimizer:
-    def __init__(self, target_length: int, kmer_dict_file: str = None, verbose=False):
+    def __init__(self, target_length: int, kmer_dict_file: str = 'kmer_properties.pickle', 
+        verbose=False, gap_to_report=10,
+        num_shuffles=10):
         self.target_length = target_length
         self.kmer_dict_file = kmer_dict_file
         self.verbose = verbose
+        self.gap_to_report = gap_to_report
         self.kmer_dict = None 
         self.properties: List[ProteinProperty] = []
         self.fixed_ranges: List[Tuple[int, int]] = []
         self.max_iterations = 1000
         self.tolerance = 0.001
         self.window_size = 50
-        self.num_shuffles = 5000
+        self.num_shuffles = num_shuffles
         self.shuffle_interval = 25
         self.initial_sequence = None
+
 
         # Set up logging if verbose is enabled
         if self.verbose:
@@ -53,10 +57,10 @@ class SequenceOptimizer:
         self.logger = logging.getLogger(__name__)
 
         # Load kmer_dict if file is provided
-        if self.kmer_dict_file:
+        if self.kmer_dict_file in ["kmer_properties.pickle", "amino_acids.pkl"]:
+            self.kmer_dict_file = get_data(self.kmer_dict_file)
             self._load_kmer_dict()
         else:
-            self.kmer_dict_file = get_data("kmer_properties.pickle")
             self._load_kmer_dict()
 
     def _load_kmer_dict(self):
@@ -144,7 +148,8 @@ class SequenceOptimizer:
             num_shuffles=self.num_shuffles,
             shuffle_interval=self.shuffle_interval,
             fixed_residue_ranges=self.fixed_ranges,
-            initial_sequence=self.initial_sequence
+            initial_sequence=self.initial_sequence,
+            gap_to_report = self.gap_to_report
         )
         self.logger.info("Sequence optimization completed")
         self.log_results(optimized_sequence)
@@ -578,7 +583,8 @@ def combined_objective(sequence: str, method_args: List[Tuple[str, Tuple[Any]]],
 def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[ProteinProperty],
                       max_iterations: int = 100, tolerance: float = 1e-2, verbose=False,
                       window_size: int = 10, num_shuffles=100, shuffle_interval: int = 50,
-                      fixed_residue_ranges: List[Tuple[int, int]] = [], initial_sequence=None) -> str:
+                      fixed_residue_ranges: List[Tuple[int, int]] = [], initial_sequence=None,
+                      gap_to_report = 10) -> str:
     """
     Optimize a protein sequence to minimize the combined error between its computed properties and the target property values.
 
@@ -607,7 +613,8 @@ def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[
             break
 
         if verbose:
-            if i % 100 == 0:
+            if i % gap_to_report == 0:
+                #SequenceOptimizer.log_results()
                 print(f"Iteration {i}: Best Error = {best_error}")
                 print(f"Iteration {i}: Best Sequence = {best_sequence}")
                 for prop_name in directions:
@@ -668,10 +675,11 @@ def build_sequence(kmer_dict: KmerDict, target_length: int) -> str:
 
     return sequence
 
-
+'''
 if __name__ == "__main__":
     optimizer = SequenceOptimizer(100,verbose=True)
     optimizer.add_property(FCR, 0.25, 1.0)
     optimizer.get_properties
     optimizer2 = SequenceOptimizer.load_configuration("test.json")
     embed()
+'''
