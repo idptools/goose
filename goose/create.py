@@ -458,7 +458,7 @@ def seq_re(length, objective_re, allowed_error=parameters.re_error, attempts=20,
 
 
 
-def seq_rg(length, objective_rg, allowed_error=parameters.re_error, attempts=20, 
+def seq_rg(length, objective_rg, allowed_error=parameters.rg_error, attempts=20, 
     cutoff=parameters.DISORDER_THRESHOLD, strict_disorder=False,
     individual_rg_re_attempts=parameters.rg_re_attempt_num,
     reduce_pos_charged=True, exclude_aas=None):

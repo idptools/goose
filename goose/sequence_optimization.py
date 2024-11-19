@@ -1,17 +1,14 @@
+import random
+import math
+from collections import defaultdict
+from typing import Any, Dict, List, Tuple
+from tqdm import tqdm
 import json
 import logging
-import math
 import pickle
-import random
-import types
-from collections import defaultdict
-from functools import lru_cache
-from typing import Any, Dict, List, Tuple
 
-import numpy as np
 import sparrow
-from IPython import embed
-
+from goose import get_data
 from goose.properties import (
     FCR,
     NCPR,
@@ -27,185 +24,13 @@ from goose.properties import (
     TargetAminoAcidFractions,
 )
 
-from tqdm import tqdm, trange
-
-from goose import get_data
-
-
-class SequenceOptimizer:
-    def __init__(self, target_length: int, kmer_dict_file: str = 'kmer_properties.pickle', 
-        verbose=False, gap_to_report=10,
-        num_shuffles=10):
-        self.target_length = target_length
-        self.kmer_dict_file = kmer_dict_file
-        self.verbose = verbose
-        self.gap_to_report = gap_to_report
-        self.kmer_dict = None 
-        self.properties: List[ProteinProperty] = []
-        self.fixed_ranges: List[Tuple[int, int]] = []
-        self.max_iterations = 1000
-        self.tolerance = 0.001
-        self.window_size = 50
-        self.num_shuffles = num_shuffles
-        self.shuffle_interval = 25
-        self.initial_sequence = None
-
-
-        # Set up logging if verbose is enabled
-        if self.verbose:
-            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-        self.logger = logging.getLogger(__name__)
-
-        # Load kmer_dict if file is provided
-        if self.kmer_dict_file in ["kmer_properties.pickle", "amino_acids.pkl"]:
-            self.kmer_dict_file = get_data(self.kmer_dict_file)
-            self._load_kmer_dict()
-        else:
-            self._load_kmer_dict()
-
-    def _load_kmer_dict(self):
-        try:
-            with open(self.kmer_dict_file, "rb") as f:
-                kmer_properties = pickle.load(f)
-            self.kmer_dict = build_kmer_dict(kmer_properties)
-            self.logger.info(f"Loaded kmer dictionary from {self.kmer_dict_file}")
-        except OSError as e:
-            self.logger.error(f"Error loading kmer dictionary: {e}")
-            raise
-
-    @classmethod
-    def load_configuration(cls, config_file: str, kmer_dict_file: str = None):
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-
-        optimizer = cls(config['target_length'], kmer_dict_file)
-        optimizer.set_fixed_ranges(config['fixed_ranges'])
-        optimizer.set_optimization_params(
-            max_iterations=config['max_iterations'],
-            tolerance=config['tolerance'],
-            window_size=config['window_size'],
-            num_shuffles=config['num_shuffles'],
-            shuffle_interval=config['shuffle_interval']
-        )
-        if config['initial_sequence']:
-            optimizer.set_initial_sequence(config['initial_sequence'])
-
-        # Load properties
-        for prop_name, target_value, weight in config['properties']:
-            # properties being optimized must be in global namespace
-            property_class = globals()[prop_name]
-            optimizer.add_property(property_class, target_value, weight)
-
-        optimizer.logger.info(f"Configuration loaded from {config_file}")
-        return optimizer
-
-    def add_property(self, property_class: type, *args: Any, **kwargs: Any):
-        new_property = property_class(*args, **kwargs)
-        
-        # Check if the property already exists
-        for i, prop in enumerate(self.properties):
-            if isinstance(prop, property_class):
-                # If it exists, replace it
-                self.properties[i] = new_property
-                self.logger.info(f"Replaced existing property {property_class.__name__}")
-                return
-        
-        # If it doesn't exist, append it
-        self.properties.append(new_property)
-        self.logger.info(f"Added new property {property_class.__name__}")
-
-    def set_fixed_ranges(self, ranges: List[Tuple[int, int]]):
-        self.fixed_ranges = ranges
-
-    def set_optimization_params(self, max_iterations: int = None, tolerance: float = None, 
-                                window_size: int = None, num_shuffles: int = None, 
-                                shuffle_interval: int = None):
-        if max_iterations is not None:
-            self.max_iterations = max_iterations
-        if tolerance is not None:
-            self.tolerance = tolerance
-        if window_size is not None:
-            self.window_size = window_size
-        if num_shuffles is not None:
-            self.num_shuffles = num_shuffles
-        if shuffle_interval is not None:
-            self.shuffle_interval = shuffle_interval
-
-    def set_initial_sequence(self, sequence: str):
-        assert len(sequence) == self.target_length, f"Initial sequence length must match target length ({self.target_length})"
-        self.initial_sequence = sequence
-
-    def run(self) -> str:
-        self.logger.info("Starting sequence optimization")
-        optimized_sequence = optimize_sequence(
-            self.kmer_dict,
-            self.target_length,
-            self.properties,
-            max_iterations=self.max_iterations,
-            tolerance=self.tolerance,
-            verbose=self.verbose,
-            window_size=self.window_size,
-            num_shuffles=self.num_shuffles,
-            shuffle_interval=self.shuffle_interval,
-            fixed_residue_ranges=self.fixed_ranges,
-            initial_sequence=self.initial_sequence,
-            gap_to_report = self.gap_to_report
-        )
-        self.logger.info("Sequence optimization completed")
-        self.log_results(optimized_sequence)
-        return optimized_sequence
-
-    def log_results(self, sequence: str):
-        if self.initial_sequence is not None:
-            self.logger.info("Initial Sequence: " + self.initial_sequence)
-        self.logger.info(f"Optimized Sequence: {sequence}")
-        protein = sparrow.Protein(sequence)
-        for prop in self.properties:
-            value = prop.calculate(protein)
-            self.logger.info(f"{prop.__class__.__name__}: {value:.2f} (Target: {prop.target_value:.2f})")
-
-    def save_configuration(self, filename: str):
-        config = {
-            "target_length": self.target_length,
-            "properties": [(prop.__class__.__name__, prop.target_value, prop.weight) for prop in self.properties],
-            "fixed_ranges": self.fixed_ranges,
-            "max_iterations": self.max_iterations,
-            "tolerance": self.tolerance,
-            "window_size": self.window_size,
-            "num_shuffles": self.num_shuffles,
-            "shuffle_interval": self.shuffle_interval,
-            "initial_sequence": self.initial_sequence
-        }
-        with open(filename, 'w') as f:
-            json.dump(config, f, indent=2)
-        self.logger.info(f"Configuration saved to {filename}")
-
-    def get_defined_properties(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "name": prop.__class__.__name__,
-                "target_value": prop.target_value,
-                "weight": prop.weight
-            }
-            for prop in self.properties
-        ]
-    
-    @property
-    def get_properties(self):
-        defined_properties = self.get_defined_properties()
-        if not defined_properties:
-            self.logger.info("No properties defined.")
-        else:
-            self.logger.info("Defined properties:")
-            for prop in defined_properties:
-                self.logger.info(f"  - {prop['name']}: target = {prop['target_value']}, weight = {prop['weight']}")
 
 class KmerDict:
     """
     A dictionary-based implementation for storing k-mers and their associated properties.
     """
-    def __init__(self):
-        self.kmer_properties = {}  # Dictionary to store properties for each k-mer
+    def __init__(self) -> None:
+        self.kmer_properties: Dict[str, dict] = {}  # Dictionary to store properties for each k-mer
 
     def insert(self, kmer: str, properties: dict):
         """
@@ -247,20 +72,217 @@ class KmerDict:
         List[str]
             A list of valid k-mers with lengths between k and max_length.
         """
-        valid_kmers = []
-        for kmer in self.kmer_properties:
-            if k <= len(kmer) <= max_length:
-                valid_kmers.append(kmer)
-        return valid_kmers
+        return [kmer for kmer in self.kmer_properties if k <= len(kmer) <= max_length]
 
-def build_kmer_dict(kmer_properties: Dict[str, float]) -> KmerDict:
+
+class SequenceOptimizer:
+    # Add class-level cache dictionary
+    _kmer_dict_cache: Dict[str, KmerDict] = {}
+
+    def __init__(self, target_length: int, kmer_dict_file: str = 'amino_acids.pkl', 
+                 verbose=False, gap_to_report=10, num_shuffles=0, just_shuffle=False):
+        self.target_length = target_length
+        self.kmer_dict_file = kmer_dict_file
+        self.verbose = verbose
+        self.gap_to_report = gap_to_report
+        self.kmer_dict = None 
+        self.fixed_ranges: List[Tuple[int, int]] = []
+        self.max_iterations = 1000
+        self.tolerance = 0.001
+        self.window_size = 50
+        self.num_shuffles = num_shuffles
+        self.shuffle_interval = 25
+        self.initial_sequence = None
+        self.just_shuffle = just_shuffle
+        # Set up logging if verbose
+        self._configure_logger()
+        # Load kmer_dict if file is provided
+        self._load_kmer_dict()
+        self.properties_dict = {}  # Dictionary to store properties for faster lookup
+
+    def _configure_logger(self):
+        if self.verbose and not getattr(self, '_logger_configured', False):
+            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+            self._logger_configured = True
+        self.logger = logging.getLogger(__name__)
+
+    def _load_kmer_dict(self):
+        """
+        Load and cache the kmer dictionary from file.
+        """
+        # Check if the kmer_dict for this file is already cached
+        if self.kmer_dict_file in SequenceOptimizer._kmer_dict_cache:
+            self.kmer_dict = SequenceOptimizer._kmer_dict_cache[self.kmer_dict_file]
+            self.logger.info(f"Using cached kmer dictionary for {self.kmer_dict_file}")
+        else:
+            try:
+                if self.kmer_dict_file in ["kmer_properties.pickle", "amino_acids.pkl"]:
+                    self.kmer_dict_file = get_data(self.kmer_dict_file)
+
+                with open(self.kmer_dict_file, "rb") as f:
+                    kmer_properties = pickle.load(f)
+                self.kmer_dict = build_kmer_dict(kmer_properties)
+
+                # Cache the kmer_dict for future use
+                SequenceOptimizer._kmer_dict_cache[self.kmer_dict_file] = self.kmer_dict
+                self.logger.info(f"Loaded and cached kmer dictionary from {self.kmer_dict_file}")
+            except OSError as e:
+                self.logger.error(f"Error loading kmer dictionary: {e}")
+                raise
+
+    @classmethod
+    def load_configuration(cls, config_file: str, kmer_dict_file: str = None):
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        optimizer = cls(config['target_length'], kmer_dict_file)
+        optimizer.set_fixed_ranges(config['fixed_ranges'])
+        optimizer.set_optimization_params(
+            max_iterations=config['max_iterations'],
+            tolerance=config['tolerance'],
+            window_size=config['window_size'],
+            num_shuffles=config['num_shuffles'],
+            shuffle_interval=config['shuffle_interval']
+        )
+        if config['initial_sequence']:
+            optimizer.set_initial_sequence(config['initial_sequence'])
+
+        # Load properties
+        for prop_name, target_value, weight in config['properties']:
+            try:
+                # properties being optimized must be in global namespace
+                property_class = globals()[prop_name]
+            except KeyError:
+                raise ValueError(f"property class {prop_name} not found.")
+
+            optimizer.add_property(property_class, target_value, weight)
+
+        optimizer.logger.info(f"Configuration loaded from {config_file}")
+        return optimizer
+
+    def add_property(self, property_class: type, *args: Any, **kwargs: Any):
+        new_property = property_class(*args, **kwargs)
+        property_name = property_class.__name__
+
+        # Replace if property already exists
+        if property_name in self.properties_dict:
+            self.properties_dict[property_name] = new_property
+            self.logger.info(f"Replaced existing property {property_name}")
+        else:
+            self.properties_dict[property_name] = new_property
+            self.logger.info(f"Added new property {property_name}")
+
+    def set_fixed_ranges(self, ranges: List[Tuple[int, int]]):
+        if not all(isinstance(r, tuple) and len(r) == 2 for r in ranges):
+            raise ValueError("Each range must be a tuple of two integers.")
+        self.fixed_ranges = ranges
+
+    def set_optimization_params(self, max_iterations: int = None, tolerance: float = None, 
+                                window_size: int = None, num_shuffles: int = None, 
+                                shuffle_interval: int = None):
+        if max_iterations is not None:
+            self.max_iterations = max_iterations
+        if tolerance is not None:
+            self.tolerance = tolerance
+        if window_size is not None:
+            self.window_size = window_size
+        if num_shuffles is not None:
+            self.num_shuffles = num_shuffles
+        if shuffle_interval is not None:
+            self.shuffle_interval = shuffle_interval
+
+    def set_initial_sequence(self, sequence: str):
+        assert len(sequence) == self.target_length, f"Initial sequence length must match target length ({self.target_length})"
+        self.initial_sequence = sequence
+
+    def run(self) -> str:
+        self.logger.info("Starting sequence optimization")
+        optimized_sequence = optimize_sequence(
+            self.kmer_dict,
+            self.target_length,
+            list(self.properties_dict.values()),  # Pass the list of properties
+            **self.get_optimization_params()
+        )
+        self.logger.info("Sequence optimization completed")
+        self.log_results(optimized_sequence)
+        return optimized_sequence
+
+    def get_optimization_params(self):
+        return {
+            'max_iterations': self.max_iterations,
+            'tolerance': self.tolerance,
+            'verbose': self.verbose,
+            'window_size': self.window_size,
+            'num_shuffles': self.num_shuffles,
+            'shuffle_interval': self.shuffle_interval,
+            'fixed_residue_ranges': self.fixed_ranges,
+            'initial_sequence': self.initial_sequence,
+            'gap_to_report': self.gap_to_report,
+            'just_shuffle': self.just_shuffle
+        }
+
+    def log_results(self, sequence: str):
+        if self.initial_sequence is not None:
+            self.logger.info("Initial Sequence: " + self.initial_sequence)
+        self.logger.info(f"Optimized Sequence: {sequence}")
+        protein = sparrow.Protein(sequence)
+        for prop in self.properties_dict.values():
+            value = prop.calculate(protein)
+            self.logger.info(f"{prop.__class__.__name__}: {value:.2f} (Target: {prop.target_value:.2f})")
+    
+    def save_configuration(self, filename: str):
+        config = {
+            "target_length": self.target_length,
+            "properties": [(prop.__class__.__name__, prop.target_value, prop.weight) for prop in self.properties_dict.values()],
+            "fixed_ranges": self.fixed_ranges,
+            "max_iterations": self.max_iterations,
+            "tolerance": self.tolerance,
+            "window_size": self.window_size,
+            "num_shuffles": self.num_shuffles,
+            "shuffle_interval": self.shuffle_interval,
+            "initial_sequence": self.initial_sequence
+        }
+        with open(filename, 'w') as f:
+            json.dump(config, f, indent=2)
+        self.logger.info(f"Configuration saved to {filename}")
+
+    def get_defined_properties(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "name": prop.__class__.__name__,
+                "target_value": prop.target_value,
+                "weight": prop.weight
+            }
+            for prop in self.properties_dict.values()
+        ]
+    
+    @property
+    def properties(self) -> List[ProteinProperty]:
+        """
+        Returns the defined properties.
+        """
+        return list(self.properties_dict.values())
+
+    def log_defined_properties(self) -> None:
+        """
+        Logs the defined properties.
+        """
+        defined_properties = self.get_defined_properties()
+        if not defined_properties:
+            self.logger.info("No properties defined.")
+        else:
+            self.logger.info("Defined properties:")
+            [self.logger.info(f"  - {prop['name']}: target = {prop['target_value']}, weight = {prop['weight']}") for prop in defined_properties]
+
+
+def build_kmer_dict(kmer_properties: Dict[str, dict]) -> KmerDict:
     """
     Build a KmerDict from a dictionary of k-mer properties.
 
     Parameters
     ----------
-    kmer_properties : Dict[str, float]
-        A dictionary mapping k-mers to their associated property values.
+    kmer_properties : Dict[str, dict]
+        A dictionary mapping k-mers to their associated property dictionaries.
 
     Returns
     -------
@@ -268,8 +290,8 @@ def build_kmer_dict(kmer_properties: Dict[str, float]) -> KmerDict:
         The constructed KmerDict instance.
     """
     kmer_dict = KmerDict()
-    for kmer, prop_value in kmer_properties.items():
-        kmer_dict.insert(kmer, prop_value)
+    for kmer, kmer_property in kmer_properties.items():
+        kmer_dict.insert(kmer, kmer_property)
     return kmer_dict
 
 def get_fixed_residue_ranges(sequence: str, fixed_ranges: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
@@ -334,6 +356,8 @@ def get_global_and_window_shuffles(sequence: str, num_shuffles: int, window_size
 
     return shuffled_sequences
 
+
+
 def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[str, Dict[str, Any]], min_k: int, max_k: int, fixed_residue_ranges: List[Tuple[int, int]]) -> Dict[int, List[str]]:
     """
     Filter candidate k-mers based on their property values, directionality, and fixed residue ranges.
@@ -358,7 +382,6 @@ def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[
     Dict[int, List[str]]
         A dictionary mapping k-mer lengths to lists of valid candidate k-mers.
     """
-    protein = sparrow.Protein(sequence)
     current_properties = {method_name: info["current_value"] for method_name, info in directions.items()}
 
     # Filter candidate kmers based on their property values, directionality, and fixed residue ranges
@@ -388,6 +411,7 @@ def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[
         candidate_kmers = None
 
     return candidate_kmers
+
 
 def select_kmer_to_replace(sequence: str, min_k: int, max_k: int, fixed_residue_ranges: List[Tuple[int, int]]) -> str:
     """
@@ -486,47 +510,106 @@ def replace_kmer(sequence: str, kmer_to_replace: str, new_kmer: str, fixed_resid
 
     return new_sequence
 
+def shuffle_random_subset(s: str) -> str:
+    '''
+    randomly shuffles a subset of a sequence 
+    The frequency that a substring is shuffled is inversely proportional to its length.
+    This means shorter shuffles are more common than longer ones. 
 
-def mutate_sequence(sequence: str, kmer_dict: KmerDict, target_length: int, directions: Dict[str, Dict[str, Any]], properties: List[ProteinProperty], num_shuffles: int = 0, window_size: int = 10, fixed_residue_ranges: List[Tuple[int, int]] = []) -> Tuple[str, float, Dict[str, Dict[str, Any]]]:
+    Parameters
+    ----------
+    s : str
+        The input sequence to shuffle.
+
+    Returns
+    -------
+    str
+        The shuffled sequence.
+
+    '''
+    length = len(s)
+    
+    # Define a weighting system where shorter shuffles are more likely.
+    # This ensures that shuffling small parts of the string is more frequent than shuffling the entire string.
+    # Weights are inversely proportional to the length of the shuffled substring.
+    weights = [1 / (i + 1) for i in range(1, length + 1)]
+    
+    # Randomly select the length of the substring to shuffle, weighted towards shorter lengths.
+    shuffle_length = random.choices(range(1, length + 1), weights)[0]
+    
+    # Randomly pick a starting index for the substring to shuffle
+    start_index = random.randint(0, length - shuffle_length)
+    
+    # Extract the part to shuffle and the rest of the string
+    substring = s[start_index:start_index + shuffle_length]
+    shuffled_substring = ''.join(random.sample(substring, len(substring)))
+    
+    # Reconstruct the string with the shuffled part
+    shuffled_string = s[:start_index] + shuffled_substring + s[start_index + shuffle_length:]
+    
+    return shuffled_string
+
+
+
+def mutate_sequence(sequence: str, kmer_dict: KmerDict, 
+                    target_length: int, directions: Dict[str, Dict[str, Any]], 
+                    properties: List[ProteinProperty], num_shuffles: int = 0, 
+                    window_size: int = 10, 
+                    fixed_residue_ranges: List[Tuple[int, int]] = [],
+                    just_shuffle: bool = False) -> Tuple[str, float, Dict[str, Dict[str, Any]]]:
     """
     Mutate a sequence by replacing a k-mer with a new k-mer and generate shuffled sequences.
 
     Parameters
     ----------
-    ...
+    sequence : str
+        The input sequence.
+    kmer_dict : KmerDict
+        The KmerDict instance containing k-mer properties.
+    target_length : int
+        The target length of the sequence.
+    directions : Dict[str, Dict[str, Any]]
+        A dictionary containing the direction information for each property.
+    properties : List[ProteinProperty]
+        A list of protein properties.
+    num_shuffles : int, optional
+        The number of shuffles to perform, by default 0.
+    window_size : int, optional
+        The window size for shuffling, by default 10.
     fixed_residue_ranges : List[Tuple[int, int]], optional
         A list of tuples representing the start and end indices (inclusive) of the fixed residue ranges, by default [].
+    just_shuffle : bool, optional
+        Whether to just shuffle the sequence, by default False.
 
     Returns
     -------
     Tuple[str, float, Dict[str, Dict[str, Any]]]
         A tuple containing the new sequence, the combined error, and the updated directions dictionary.
     """
+ 
     min_k = 1
     max_k = 5
 
-    candidate_kmers = filter_candidate_kmers(sequence, kmer_dict, directions, min_k, max_k,fixed_residue_ranges)
+    if not just_shuffle:
+        candidate_kmers = filter_candidate_kmers(sequence, kmer_dict, directions, min_k, max_k,fixed_residue_ranges)
+        kmer_to_replace = select_kmer_to_replace(sequence, min_k, max_k, fixed_residue_ranges)
 
-    kmer_to_replace = select_kmer_to_replace(sequence, min_k, max_k, fixed_residue_ranges)
-
-    if kmer_to_replace is None:
-        # If no k-mer is available for replacement, keep the sequence unchanged
-        new_sequence = sequence
-    else:
-        valid_kmers = candidate_kmers[len(kmer_to_replace)]
-
-        if valid_kmers:
-            # Replace a k-mer in the sequence with a new k-mer
-            new_kmer = random.choice(valid_kmers)
-            new_sequence = replace_kmer(sequence, kmer_to_replace, new_kmer, fixed_residue_ranges)     
+        if kmer_to_replace and candidate_kmers:
+            valid_kmers = candidate_kmers.get(len(kmer_to_replace), [])
+            if valid_kmers:
+                new_kmer = random.choice(valid_kmers)
+                new_sequence = replace_kmer(sequence, kmer_to_replace, new_kmer, fixed_residue_ranges)     
+            else:
+                new_sequence = sequence
         else:
-            # If no valid k-mers are found, keep the sequence unchanged
             new_sequence = sequence
+        
+        sequences = [new_sequence] + get_global_and_window_shuffles(new_sequence, num_shuffles, window_size) if num_shuffles > 0 else [new_sequence]
 
-    if num_shuffles > 0:
-        sequences = [new_sequence] + get_global_and_window_shuffles(new_sequence, num_shuffles, window_size)
     else:
-        sequences = [new_sequence]
+        if num_shuffles==0:
+            num_shuffles=1
+        sequences = [shuffle_random_subset(sequence) for _ in range(num_shuffles)]
 
     min_combined_error = float('inf')
     best_sequence = None
@@ -540,6 +623,7 @@ def mutate_sequence(sequence: str, kmer_dict: KmerDict, target_length: int, dire
             min_combined_error = combined_err
             best_sequence = seq
             best_directions = directions
+
 
     return best_sequence, min_combined_error, best_directions
 
@@ -570,9 +654,8 @@ def combined_objective(sequence: str, method_args: List[Tuple[str, Tuple[Any]]],
     """
     if weights is None:
         weights = [1.0 / len(method_args)] * len(method_args)
-    else:
-        if len(weights) != len(method_args):
-            raise ValueError(f"Length of weights should match the number of target methods. Recieved: {len(weights)} weights and {len(method_args)} args")
+    elif len(weights) != len(method_args):
+        raise ValueError(f"Length of weights should match the number of target methods. Received: {len(weights)} weights and {len(method_args)} args")
 
     protein = sparrow.Protein(sequence)
     combined_err, directions = calculate_errors(protein, method_args, target_values, weights)
@@ -582,29 +665,66 @@ def combined_objective(sequence: str, method_args: List[Tuple[str, Tuple[Any]]],
 
 def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[ProteinProperty],
                       max_iterations: int = 100, tolerance: float = 1e-2, verbose=False,
-                      window_size: int = 10, num_shuffles=100, shuffle_interval: int = 50,
-                      fixed_residue_ranges: List[Tuple[int, int]] = [], initial_sequence=None,
-                      gap_to_report = 10) -> str:
+                      window_size: int = 10, num_shuffles: int = 0, shuffle_interval: int = 50,
+                      fixed_residue_ranges: List[Tuple[int, int]] = [], initial_sequence : str = None,
+                      gap_to_report: int = 10, just_shuffle : bool =False) -> str:
     """
     Optimize a protein sequence to minimize the combined error between its computed properties and the target property values.
 
-    Parameters:
-
+    Parameters
+    ----------
+    kmer_dict : KmerDict
+        The KmerDict instance containing k-mer properties.
+    target_length : int
+        The target length of the sequence.
+    properties : List[ProteinProperty]
+        A list of protein properties.
+    max_iterations : int, optional
+        The maximum number of iterations, by default 100.
+    tolerance : float, optional
+        The error tolerance for stopping the optimization, by default 1e-2.
+    verbose : bool, optional
+        Whether to print verbose output, by default False.
+    window_size : int, optional
+        The window size for shuffling, by default 10.
+    num_shuffles : int, optional
+        The number of shuffles to perform, by default 100.
+    shuffle_interval : int, optional
+        The interval at which to perform shuffles, by default 50.
     fixed_residue_ranges : List[Tuple[int, int]], optional
         A list of tuples representing the start and end indices (inclusive) of the fixed residue ranges, by default [].
+    initial_sequence : str, optional
+        The initial sequence to start the optimization, by default None.
+    gap_to_report : int, optional
+        The interval at which to report progress, by default 10.
+    just_shuffle : bool, optional
+        Whether to just shuffle the sequence, by default False.
+
+    Returns
+    -------
+    str
+        The optimized sequence.
     """
     if initial_sequence is not None:
         best_sequence = initial_sequence
-        print(best_sequence)
     else:
         best_sequence = build_sequence(kmer_dict, target_length)
     
     best_error, directions = calculate_errors(sparrow.Protein(best_sequence), properties)
 
-    for i in trange(max_iterations):
-        num_shuffles = num_shuffles if i % shuffle_interval == 0 else 0
-        new_sequence, new_error, directions = mutate_sequence(best_sequence, kmer_dict, target_length, directions, properties, num_shuffles, window_size, fixed_residue_ranges)
+    # Start progress bar
+    pbar = tqdm(total=max_iterations)
 
+    # Iterate
+    for i in range(max_iterations):
+        current_num_shuffles = num_shuffles if i % shuffle_interval == 0 else 0
+        new_sequence, new_error, directions = mutate_sequence(best_sequence, kmer_dict, 
+                                                              target_length, directions, properties, 
+                                                              current_num_shuffles, window_size, 
+                                                              fixed_residue_ranges, 
+                                                              just_shuffle=just_shuffle)
+
+    
         if new_error < best_error:
             best_sequence = new_sequence
             best_error = new_error
@@ -612,23 +732,39 @@ def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[
         if best_error < tolerance:
             break
 
-        if verbose:
-            if i % gap_to_report == 0:
-                #SequenceOptimizer.log_results()
-                print(f"Iteration {i}: Best Error = {best_error}")
-                print(f"Iteration {i}: Best Sequence = {best_sequence}")
-                for prop_name in directions:
-                    print(f"Iteration {i}: Target {prop_name}= {directions[prop_name]['target_value']:.3f}")
-                    print(f"Iteration {i}: current {prop_name}= {directions[prop_name]['current_value']:.3f}")
+        # Update progress bar
+        if i % gap_to_report == 0:
+            pbar.update(gap_to_report)
+            pbar.set_description(f"Best Error = {best_error:.2f}")
+
+        if verbose and i % gap_to_report == 0:
+            print(f"Iteration {i}: Best Error = {best_error}")
+            print(f"Iteration {i}: Best Sequence = {best_sequence}")
+            for prop_name in directions:
+                print(f"Iteration {i}: Target {prop_name} = {directions[prop_name]['target_value']:.3f}")
+                print(f"Iteration {i}: Current {prop_name} = {directions[prop_name]['current_value']:.3f}")
+
+    # Close progress bar
+    pbar.close()
 
     return best_sequence
+
 
 def calculate_errors(protein: 'sparrow.Protein', properties: List[ProteinProperty]) -> Tuple[float, Dict[str, Dict[str, Any]]]:
     """
     Calculate the errors between the computed property values and the target values for a given protein sequence.
 
-    Parameters:
-    ...
+    Parameters
+    ----------
+    protein : sparrow.Protein
+        The protein sequence to evaluate.
+    properties : List[ProteinProperty]
+        A list of protein properties to evaluate.
+
+    Returns
+    -------
+    Tuple[float, Dict[str, Dict[str, Any]]]
+        A tuple containing the combined error and a dictionary of direction information for each property.
     """
     errors = []
     directions = {}
@@ -667,19 +803,10 @@ def build_sequence(kmer_dict: KmerDict, target_length: int) -> str:
     while len(sequence) < target_length:
         valid_kmers = kmer_dict.get_valid_kmers(1, target_length - len(sequence))
 
-        if valid_kmers:
-            new_kmer = random.choice(valid_kmers)
-            sequence += new_kmer
-        else:
+        if not valid_kmers:
             break
 
-    return sequence
+        new_kmer = random.choice(valid_kmers)
+        sequence += new_kmer
 
-'''
-if __name__ == "__main__":
-    optimizer = SequenceOptimizer(100,verbose=True)
-    optimizer.add_property(FCR, 0.25, 1.0)
-    optimizer.get_properties
-    optimizer2 = SequenceOptimizer.load_configuration("test.json")
-    embed()
-'''
+    return sequence
