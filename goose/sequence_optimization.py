@@ -22,6 +22,7 @@ from goose.properties import (
     ProteinProperty,
     RadiusOfGyration,
     TargetAminoAcidFractions,
+    epsilon_vector_diff
 )
 
 
@@ -94,9 +95,7 @@ class SequenceOptimizer:
         self.shuffle_interval = 25
         self.initial_sequence = None
         self.just_shuffle = just_shuffle
-        # Set up logging if verbose
         self._configure_logger()
-        # Load kmer_dict if file is provided
         self._load_kmer_dict()
         self.properties_dict = {}  # Dictionary to store properties for faster lookup
 
@@ -624,44 +623,8 @@ def mutate_sequence(sequence: str, kmer_dict: KmerDict,
             best_sequence = seq
             best_directions = directions
 
-
     return best_sequence, min_combined_error, best_directions
 
-def combined_objective(sequence: str, method_args: List[Tuple[str, Tuple[Any]]], target_values: List[float],
-                       weights: List[float] = None, num_shuffles: int = 0, window_size: int = 10) -> Tuple[float, str, Dict[str, Dict[str, Any]]]:
-    """
-    Compute the combined objective function for a sequence by mutating it and generating shuffled sequences.
-
-    Parameters
-    ----------
-    sequence : str
-        The current sequence.
-    method_args : List[Tuple[str, Tuple[Any]]]
-        A list of tuples containing the method name and arguments for each property.
-    target_values : List[float]
-        A list of target values for each property.
-    weights : List[float], optional
-        A list of weights for each property, by default None (equal weights).
-    num_shuffles : int, optional
-        The number of shuffled sequences to generate, by default 0.
-    window_size : int, optional
-        The size of the window to be shuffled, by default 10.
-
-    Returns
-    -------
-    Tuple[float, str, Dict[str, Dict[str, Any]]]
-        A tuple containing the minimum combined error, the best sequence, and the updated directions dictionary.
-    """
-    if weights is None:
-        weights = [1.0 / len(method_args)] * len(method_args)
-    elif len(weights) != len(method_args):
-        raise ValueError(f"Length of weights should match the number of target methods. Received: {len(weights)} weights and {len(method_args)} args")
-
-    protein = sparrow.Protein(sequence)
-    combined_err, directions = calculate_errors(protein, method_args, target_values, weights)
-    best_sequence, min_combined_error, best_directions = mutate_sequence(sequence, kmer_dict, target_length, directions, num_shuffles, window_size)
-
-    return min_combined_error, best_sequence, best_directions
 
 def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[ProteinProperty],
                       max_iterations: int = 100, tolerance: float = 1e-2, verbose=False,

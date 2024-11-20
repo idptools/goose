@@ -49,12 +49,17 @@ setup(
     # url='http://www.my_package.com',  # Website
     install_requires=[
                 'cython', 
+                'scipy',
+                'matplotlib', 
+                'jupyter',
                 'numpy',
                 'metapredict>=2.6.2',
                 'PredictDSSP',
                 'torch',
                 'PredictDSSP',
-                'sparrow @ git+https://git@github.com/idptools/sparrow.git'],              # Required packages, pulls from pip if needed; do not use for Conda deployment
+                'mdtraj',
+                'sparrow @ git+https://git@github.com/idptools/sparrow.git',
+                'finches @ git+https://git@github.com/idptools/finches.git'],              # Required packages, pulls from pip if needed; do not use for Conda deployment
     # platforms=['Linux',
     #            'Mac OS-X',
     #            'Unix',

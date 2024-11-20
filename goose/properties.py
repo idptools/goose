@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Tuple, Dict
-
+import sparrow
+import numpy as np
+import finches
 
 class ProteinProperty(ABC):
     """
@@ -18,7 +20,7 @@ class ProteinProperty(ABC):
 
     @target_value.setter
     def target_value(self, value: float):
-        assert isinstance(target_value, (int,float)), f"target_value must be numerical. Received {type(value)}"
+        assert isinstance(value, (int,float)), f"target_value must be numerical. Received {type(value)}"
         self._target_value = value
 
     @property
@@ -204,4 +206,76 @@ class Complexity(ProteinProperty):
     def calculate(self, protein: 'sparrow.Protein') -> float:
         return protein.complexity
 
+# initialize mpipi frontend
+mpipi_frontend=finches.frontend.mpipi_frontend.Mpipi_frontend()
 
+
+class epsilon_vector_diff(ProteinProperty):
+    """
+    Calculate the difference in the epsilon attractive and repulsive matrices,
+    returns the diff.
+
+    Usage example:
+    seq='NGDNFNRTPASSSEMDDGPSRRDHFMKSGFASGRNFGNRDAGECNKRDNTSTMG'
+    target='ATQSYGAYPTQPGQGYSQQSSQPYGQQSYSGYSQSTDTSGYGQSSYSSYGQSQNTGYGT'
+    original_vectors = mpipi_frontend.epsilon_vectors(seq, target)
+    optimizer = sequence_optimization.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
+    optimizer.add_property(epsilon_vector_diff, target_value=0.0, weight=1.0, target_interacting_sequence=target, 
+                            original_epsilon_vectors=original_vectors, loaded_frontend=mpipi_frontend)
+    optimizer.set_optimization_params(max_iterations=10000)
+    opt=optimizer.run()
+
+
+    """
+    def __init__(self, 
+                 target_value: float, 
+                 weight: float = 1.0,
+                 target_interacting_sequence: str = None,
+                 original_epsilon_vectors: tuple = None,
+                 loaded_frontend: finches.frontend.mpipi_frontend.Mpipi_frontend = mpipi_frontend):
+        super().__init__(target_value, weight)
+        self.target_interacting_sequence = target_interacting_sequence
+        self.original_epsilon_vectors = original_epsilon_vectors
+        self.mpipi_frontend = mpipi_frontend
+
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        current_vectors = self.mpipi_frontend.epsilon_vectors(protein.sequence, self.target_interacting_sequence)
+        attractive_vectors=current_vectors[0]
+        repulsive_vectors=current_vectors[1]
+        # calculate the difference between the original and current matrix
+        attractive_diff = np.abs(self.original_epsilon_vectors[0] - attractive_vectors).sum()
+        repulsive_diff = np.abs(self.original_epsilon_vectors[1] - repulsive_vectors).sum()
+        return attractive_diff + repulsive_diff
+
+
+class epsilon_total(ProteinProperty):
+    """
+    Calculate the difference in total epsilon value between 2 sequences. 
+
+    Usage example:
+    seq='MGDEDWEAEINPHMSSYVPIFEKDRYSGENGDNFNRTPASSSEMDDGPSRRDHFMKSGFASGRNFGNRDAGECNKRDNTSTMGGFGVGKSFGNRGFSNSR'
+    target='MASNDYTQQATQSYGAYPTQPGQGYSQQSSQPYGQQSYSGYSQSTDTSGYGQSSYSSYGQSQNTGYGTQSTPQGYGSTGGYGSSQSSQSSYGQQSSYPGY'
+    original_epsilon = mpipi_frontend.epsilon(seq, target)
+    optimizer = sequence_optimization.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
+    optimizer.add_property(epsilon_total, target_value=0.0, weight=1.0, target_interacting_sequence=target, 
+                            original_epsilon_value=original_epsilon, loaded_frontend=mpipi_frontend)
+    optimizer.set_optimization_params(max_iterations=1000, tolerance=1e-3)
+    opt=optimizer.run()
+
+
+    """
+    def __init__(self, 
+                 target_value: float, 
+                 weight: float = 1.0,
+                 target_interacting_sequence: str = None,
+                 original_epsilon_value: float = None,
+                 loaded_frontend: finches.frontend.mpipi_frontend.Mpipi_frontend = mpipi_frontend):
+        super().__init__(target_value, weight)
+        self.target_interacting_sequence = target_interacting_sequence
+        self.original_epsilon_value = original_epsilon_value
+        self.mpipi_frontend = mpipi_frontend
+
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        current_epsilon = self.mpipi_frontend.epsilon(protein.sequence, self.target_interacting_sequence)
+        # calculate the difference between the original and current matrix
+        return np.abs(self.original_epsilon_value-current_epsilon)
