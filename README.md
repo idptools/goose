@@ -72,7 +72,10 @@ The section below logs changes to GOOSE.
 
 #### Version unchaged  - continued work on sequence_optimization functionality and a small bug fix (November 2024)
 
-Continued work on adding the ability to optimized sequences based on any user-defined parameter including ones not hardcoded into GOOSE. In line documentation was completed and additional testing of the code was completed. Multiple bugs were fixed. A bug where the error allowed when using the create.seq_rg() function was equal to the error for create.seq_re, which was incorrect. I'm hoping to release documentation on this and one other in progress feature soon. Stay tuned!
+* Continued work on adding the ability to optimized sequences based on any user-defined parameter including ones not hardcoded into GOOSE. 
+* In line documentation was completed and additional testing of the code was completed. Multiple bugs were fixed. 
+* A bug where the error allowed when using the create.seq_rg() function was equal to the error for create.seq_re, which was incorrect. 
+* Added functionality for sequence optimization by total epsilon and epsilon attractive / repulsive vectors
 
 #### V0.1.4 - More bug fixes and more tests. (December 2023)
 
