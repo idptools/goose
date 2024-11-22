@@ -511,7 +511,8 @@ def replace_kmer(sequence: str, kmer_to_replace: str, new_kmer: str, fixed_resid
 
     return new_sequence
 
-def shuffle_random_subset(s: str) -> str:
+
+def shuffle_random_subset(s: str, min_num_shuffle=0.1, max_num_shuffle=0.5) -> str:
     '''
     randomly shuffles a subset of a sequence 
     The frequency that a substring is shuffled is inversely proportional to its length.
@@ -521,6 +522,14 @@ def shuffle_random_subset(s: str) -> str:
     ----------
     s : str
         The input sequence to shuffle.
+
+    min_num_shuffle : float
+        The minimum number of shuffles to perform. 
+        Default is 10% (0.1).
+
+    max_num_shuffle : float
+        The maximum number of shuffles to perform.
+        Default is 50% (0.5).
 
     Returns
     -------
@@ -533,14 +542,13 @@ def shuffle_random_subset(s: str) -> str:
     # Define a weighting system where shorter shuffles are more likely.
     # This ensures that shuffling small parts of the string is more frequent than shuffling the entire string.
     # Weights are inversely proportional to the length of the shuffled substring.
-    weights = [1 / (i + 1) for i in range(1, length + 1)]
+    weights = [1 / i for i in range(int(length*min_num_shuffle), length + 1) if i <= int(length*max_num_shuffle)]
     
     # Randomly select the length of the substring to shuffle, weighted towards shorter lengths.
-    shuffle_length = random.choices(range(1, length + 1), weights)[0]
+    shuffle_length = random.choices(range(int(length*min_num_shuffle), int(length*max_num_shuffle) + 1), weights)[0]
     
     # Randomly pick a starting index for the substring to shuffle
     start_index = random.randint(0, length - shuffle_length)
-    
     # Extract the part to shuffle and the rest of the string
     substring = s[start_index:start_index + shuffle_length]
     shuffled_substring = ''.join(random.sample(substring, len(substring)))
@@ -549,6 +557,8 @@ def shuffle_random_subset(s: str) -> str:
     shuffled_string = s[:start_index] + shuffled_substring + s[start_index + shuffle_length:]
     
     return shuffled_string
+
+
 
 
 
