@@ -178,7 +178,7 @@ class SequenceOptimizer:
 
     def set_optimization_params(self, max_iterations: int = None, tolerance: float = None, 
                                 window_size: int = None, num_shuffles: int = None, 
-                                shuffle_interval: int = None):
+                                shuffle_interval: int = None, just_shuffle: bool = None):
         if max_iterations is not None:
             self.max_iterations = max_iterations
         if tolerance is not None:
@@ -189,6 +189,8 @@ class SequenceOptimizer:
             self.num_shuffles = num_shuffles
         if shuffle_interval is not None:
             self.shuffle_interval = shuffle_interval
+        if just_shuffle is not None:
+            self.just_shuffle = just_shuffle
 
     def set_initial_sequence(self, sequence: str):
         assert len(sequence) == self.target_length, f"Initial sequence length must match target length ({self.target_length})"
