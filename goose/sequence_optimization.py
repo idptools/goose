@@ -512,52 +512,51 @@ def replace_kmer(sequence: str, kmer_to_replace: str, new_kmer: str, fixed_resid
     return new_sequence
 
 
-def shuffle_random_subset(s: str, min_num_shuffle=0.1, max_num_shuffle=0.5) -> str:
-    '''
-    randomly shuffles a subset of a sequence 
-    The frequency that a substring is shuffled is inversely proportional to its length.
-    This means shorter shuffles are more common than longer ones. 
-
+def shuffle_random_subset(s: str) -> str:
+    """
+    Shuffle a sequence with:
+    - 10% chance to shuffle entire string
+    - 90% chance to shuffle a random window of 10-50% of the string
+    
     Parameters
     ----------
     s : str
-        The input sequence to shuffle.
-
-    min_num_shuffle : float
-        The minimum number of shuffles to perform. 
-        Default is 10% (0.1).
-
-    max_num_shuffle : float
-        The maximum number of shuffles to perform.
-        Default is 50% (0.5).
-
+        The input sequence to shuffle
+    
     Returns
     -------
     str
-        The shuffled sequence.
-
-    '''
+        The shuffled sequence
+    """
+    if not s:
+        return s
+        
     length = len(s)
     
-    # Define a weighting system where shorter shuffles are more likely.
-    # This ensures that shuffling small parts of the string is more frequent than shuffling the entire string.
-    # Weights are inversely proportional to the length of the shuffled substring.
-    weights = [1 / i for i in range(int(length*min_num_shuffle), length + 1) if i <= int(length*max_num_shuffle)]
+    # 10% chance to shuffle entire string
+    if random.random() < 0.2:
+        return ''.join(random.sample(s, length))
     
-    # Randomly select the length of the substring to shuffle, weighted towards shorter lengths.
-    shuffle_length = random.choices(range(int(length*min_num_shuffle), int(length*max_num_shuffle) + 1), weights)[0]
+    # Otherwise shuffle a subregion
+    # Calculate window size between 10-50% of string length
+    min_window = max(1, int(length * 0.1))
+    max_window = max(min_window, int(length * 0.5))
+    window_size = random.randint(min_window, max_window)
     
-    # Randomly pick a starting index for the substring to shuffle
-    start_index = random.randint(0, length - shuffle_length)
-    # Extract the part to shuffle and the rest of the string
-    substring = s[start_index:start_index + shuffle_length]
+    # Calculate valid start positions that allow for window_size
+    max_start = length - window_size
+    if max_start < 0:
+        return s
+        
+    # Select random start position
+    start_pos = random.randint(0, max_start)
+    
+    # Extract and shuffle the substring
+    substring = s[start_pos:start_pos + window_size]
     shuffled_substring = ''.join(random.sample(substring, len(substring)))
     
-    # Reconstruct the string with the shuffled part
-    shuffled_string = s[:start_index] + shuffled_substring + s[start_index + shuffle_length:]
-    
-    return shuffled_string
-
+    # Reconstruct string with shuffled portion
+    return s[:start_pos] + shuffled_substring + s[start_pos + window_size:]
 
 
 
