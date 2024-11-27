@@ -22,7 +22,9 @@ from goose.properties import (
     ProteinProperty,
     RadiusOfGyration,
     TargetAminoAcidFractions,
-    epsilon_vector_diff
+    epsilon_vector_diff,
+    epsilon_total,
+    chemical_fingerprint
 )
 
 
@@ -32,6 +34,7 @@ class KmerDict:
     """
     def __init__(self) -> None:
         self.kmer_properties: Dict[str, dict] = {}  # Dictionary to store properties for each k-mer
+        self.longest_kmer: int = None
 
     def insert(self, kmer: str, properties: dict):
         """
@@ -74,6 +77,18 @@ class KmerDict:
             A list of valid k-mers with lengths between k and max_length.
         """
         return [kmer for kmer in self.kmer_properties if k <= len(kmer) <= max_length]
+    
+    def get_longest_kmer_lenght(self) -> int:
+        """
+        Retrieve the lenth of the longest kmer in the dictionary.
+        Returns
+        -------
+        int
+            The length of the longest kmer.
+        """
+        if self.longest_kmer is None:
+            self.longest_kmer =  max([len(kmer) for kmer in self.kmer_properties])
+        return self.longest_kmer
 
 
 class SequenceOptimizer:
@@ -495,10 +510,7 @@ def replace_kmer(sequence: str, kmer_to_replace: str, new_kmer: str, fixed_resid
         start_idx = kmer_pos + kmer_len
 
     if occurrences:
-        # Randomly select 25% of the occurrences of the k-mers to flip
-        # minimum = 1
         num_to_replace = math.ceil(len(occurrences)//4+1)
-        
         selected_occurrences = random.sample(occurrences, num_to_replace)
         
         # Replace the selected occurrences with the new k-mer
@@ -598,7 +610,14 @@ def mutate_sequence(sequence: str, kmer_dict: KmerDict,
     """
  
     min_k = 1
-    max_k = 5
+    # figure out max k
+    if kmer_dict.get_longest_kmer_lenght() == 1:
+        # make max k 1 if we just have amino acids.
+        max_k = 1
+    else:
+        # this was set by jeff, leaving for now. 
+        max_k = 5
+
 
     if not just_shuffle:
         candidate_kmers = filter_candidate_kmers(sequence, kmer_dict, directions, min_k, max_k,fixed_residue_ranges)

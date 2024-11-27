@@ -206,9 +206,6 @@ class Complexity(ProteinProperty):
     def calculate(self, protein: 'sparrow.Protein') -> float:
         return protein.complexity
 
-# initialize mpipi frontend
-mpipi_frontend=finches.frontend.mpipi_frontend.Mpipi_frontend()
-
 
 class epsilon_vector_diff(ProteinProperty):
     """
@@ -221,7 +218,7 @@ class epsilon_vector_diff(ProteinProperty):
     original_vectors = mpipi_frontend.epsilon_vectors(seq, target)
     optimizer = sequence_optimization.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
     optimizer.add_property(epsilon_vector_diff, target_value=0.0, weight=1.0, target_interacting_sequence=target, 
-                            original_epsilon_vectors=original_vectors, loaded_frontend=mpipi_frontend)
+                            original_epsilon_vectors=original_vectors, finces_frontend=mpipi_frontend)
     optimizer.set_optimization_params(max_iterations=10000)
     opt=optimizer.run()
 
@@ -232,14 +229,35 @@ class epsilon_vector_diff(ProteinProperty):
                  weight: float = 1.0,
                  target_interacting_sequence: str = None,
                  original_epsilon_vectors: tuple = None,
-                 loaded_frontend: finches.frontend.mpipi_frontend.Mpipi_frontend = mpipi_frontend):
+                 model: str = 'mpipi'):
         super().__init__(target_value, weight)
+        self.model = model
         self.target_interacting_sequence = target_interacting_sequence
         self.original_epsilon_vectors = original_epsilon_vectors
-        self.mpipi_frontend = mpipi_frontend
+        self.loaded_model = None
+
+    def load_model(self, model: str = None):
+        """
+        Load the model to be used for the calculation.
+
+        Parameters:
+        model (str): The model to be used for the calculation.
+        """
+        if model is None:
+            model = self.model.lower()
+        
+        if self.loaded_model==None:
+            if model == 'mpipi':
+                self.loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
+            elif model == 'calvados':
+                self.loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
+            else:
+                raise ValueError(f"Model {model} not supported.")
+        return self.loaded_model
 
     def calculate(self, protein: 'sparrow.Protein') -> float:
-        current_vectors = self.mpipi_frontend.epsilon_vectors(protein.sequence, self.target_interacting_sequence)
+        self.loaded_model = self.load_model()
+        current_vectors = self.loaded_model.epsilon_vectors(protein.sequence, self.target_interacting_sequence)
         attractive_vectors=current_vectors[0]
         repulsive_vectors=current_vectors[1]
         # calculate the difference between the original and current matrix
@@ -258,7 +276,7 @@ class epsilon_total(ProteinProperty):
     original_epsilon = mpipi_frontend.epsilon(seq, target)
     optimizer = sequence_optimization.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
     optimizer.add_property(epsilon_total, target_value=0.0, weight=1.0, target_interacting_sequence=target, 
-                            original_epsilon_value=original_epsilon, loaded_frontend=mpipi_frontend)
+                            original_epsilon_value=original_epsilon, finces_frontend=mpipi_frontend)
     optimizer.set_optimization_params(max_iterations=1000, tolerance=1e-3)
     opt=optimizer.run()
 
@@ -267,15 +285,179 @@ class epsilon_total(ProteinProperty):
     def __init__(self, 
                  target_value: float, 
                  weight: float = 1.0,
+                 original_sequence: str = None,
                  target_interacting_sequence: str = None,
-                 original_epsilon_value: float = None,
-                 loaded_frontend: finches.frontend.mpipi_frontend.Mpipi_frontend = mpipi_frontend):
+                 model = 'mpipi'):
         super().__init__(target_value, weight)
-        self.target_interacting_sequence = target_interacting_sequence
-        self.original_epsilon_value = original_epsilon_value
-        self.mpipi_frontend = mpipi_frontend
+        self.target_interacting_sequence : str = target_interacting_sequence
+        self.original_sequence : str = original_sequence
+        self.original_epsilon = None
+        self.loaded_model = None
+        self.model = model
+
+    def load_model(self, model: str = None):
+        """
+        Load the model to be used for the calculation.
+
+        Parameters:
+        model (str): The model to be used for the calculation.
+        """
+        if model is None:
+            model = self.model.lower()
+        
+        if self.loaded_model==None:
+            if model == 'mpipi':
+                self.loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
+            elif model == 'calvados':
+                self.loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
+            else:
+                raise ValueError(f"Model {model} not supported.")
+        return self.loaded_model
+    
+    def get_original_epsilon(self, original_sequence: str = None, target_sequence: str = None):  
+        """
+        Calculate the original epsilon value of the target sequence.
+
+        Parameters:
+        sequence (str): The sequence.
+        target_sequence (str): The target sequence.
+
+        Returns:
+        float: The original epsilon value of the target sequence.
+        """
+        if self.original_epsilon is not None:
+            return self.original_epsilon
+        
+        if original_sequence is None:
+            original_sequence = self.original_sequence
+        if target_sequence is None:
+            target_sequence = self.target_interacting_sequence
+        self.loaded_model = self.load_model()
+        self.original_epsilon = self.loaded_model.epsilon(original_sequence, target_sequence)
+        return self.original_epsilon
 
     def calculate(self, protein: 'sparrow.Protein') -> float:
-        current_epsilon = self.mpipi_frontend.epsilon(protein.sequence, self.target_interacting_sequence)
+        self.original_epsilon_value = self.get_original_epsilon()
+        self.loaded_model = self.load_model()
+        current_epsilon = self.loaded_model.epsilon(protein.sequence, self.target_interacting_sequence)
         # calculate the difference between the original and current matrix
         return np.abs(self.original_epsilon_value-current_epsilon)
+    
+
+class chemical_fingerprint(ProteinProperty):
+    """
+    Uses the chemical foot print from the FINCHES manuscript to generate a sequence with
+    a similar chemical fingerprint to the target sequence.
+
+    The chemical fingerprint is calculated by taking the difference between the target
+    and the current sequence and summing the differences in the epsilon matrix.
+    """
+    def __init__(self, 
+                 target_value: float, 
+                 weight: float = 1.0,
+                 target_sequence: str = None,
+                 model = 'mpipi'):
+        super().__init__(target_value, weight)
+        self.target_sequence = target_sequence
+        self.loaded_model  = None
+        self.target_sequence_fingerprint = None
+        self.model = model
+        self.chemistries = None
+
+    def set_chemistries(self, model: str=None):
+        """
+        Set the chemistries to be used for the calculation.
+
+        Parameters:
+        model (str): The model to be used for the calculation.
+        """
+        if self.chemistries is not None:
+            return self.chemistries
+        if model is None:
+            model = self.model.lower()
+        if model == 'mpipi':
+            self.chemistries = {'c1': 'KRKRKRKRKRKRKRKRKRKR', 'c2': 'RRRRRRRRRRRRRRRRRRRR', 'c3': 'KKKKKKKKKKKKKKKKKKKK', 'c4': 'HRHRHRHRHRHRHRHRHRHR', 'c5': 'HKHKHKHKHKHKHKHKHKHK', 'c6': 'AKAKAKAKAKAKAKAKAKAK', 'c7': 'KQKQKQKQKQKQKQKQKQKQ', 'c8': 'QRQRQRQRQRQRQRQRQRQR', 'c9': 'GRGRGRGRGRGRGRGRGRGR', 'c10': 'MRMRMRMRMRMRMRMRMRMR', 'c11': 'RWRWRWRWRWRWRWRWRWRW', 'c12': 'HHHHHHHHHHHHHHHHHHHH', 'c13': 'HYHYHYHYHYHYHYHYHYHY', 'c14': 'HQHQHQHQHQHQHQHQHQHQ', 'c15': 'HLHLHLHLHLHLHLHLHLHL', 'c16': 'AIAIAIAIAIAIAIAIAIAI', 'c17': 'AGAGAGAGAGAGAGAGAGAG', 'c18': 'ININININININININININ', 'c19': 'GQGQGQGQGQGQGQGQGQGQ', 'c20': 'GSGSGSGSGSGSGSGSGSGS', 'c21': 'DKDKDKDKDKDKDKDKDKDK', 'c22': 'ERERERERERERERERERER', 'c23': 'DHDHDHDHDHDHDHDHDHDH', 'c24': 'QQQQQQQQQQQQQQQQQQQQ', 'c25': 'FGFGFGFGFGFGFGFGFGFG', 'c26': 'QYQYQYQYQYQYQYQYQYQY', 'c27': 'AFAFAFAFAFAFAFAFAFAF', 'c28': 'LWLWLWLWLWLWLWLWLWLW', 'c29': 'FYFYFYFYFYFYFYFYFYFY', 'c30': 'WWWWWWWWWWWWWWWWWWWW', 'c31': 'DWDWDWDWDWDWDWDWDWDW', 'c32': 'EYEYEYEYEYEYEYEYEYEY', 'c33': 'EGEGEGEGEGEGEGEGEGEG', 'c34': 'EPEPEPEPEPEPEPEPEPEP', 'c35': 'AEAEAEAEAEAEAEAEAEAE', 'c36': 'DEDEDEDEDEDEDEDEDEDE'}
+        elif model == 'calvados':
+            self.chemistries = {'c1': 'DEDEDEDEDEDEDEDEDEDE', 'c2': 'EGEGEGEGEGEGEGEGEGEG', 'c3': 'DSDSDSDSDSDSDSDSDSDS', 'c4': 'EVEVEVEVEVEVEVEVEVEV', 'c5': 'DMDMDMDMDMDMDMDMDMDM', 'c6': 'EWEWEWEWEWEWEWEWEWEW', 'c7': 'AVAVAVAVAVAVAVAVAVAV', 'c8': 'APAPAPAPAPAPAPAPAPAP', 'c9': 'AQAQAQAQAQAQAQAQAQAQ', 'c10': 'GQGQGQGQGQGQGQGQGQGQ', 'c11': 'HQHQHQHQHQHQHQHQHQHQ', 'c12': 'QQQQQQQQQQQQQQQQQQQQ', 'c13': 'DRDRDRDRDRDRDRDRDRDR', 'c14': 'DKDKDKDKDKDKDKDKDKDK', 'c15': 'LMLMLMLMLMLMLMLMLMLM', 'c16': 'IMIMIMIMIMIMIMIMIMIM', 'c17': 'LWLWLWLWLWLWLWLWLWLW', 'c18': 'FMFMFMFMFMFMFMFMFMFM', 'c19': 'AWAWAWAWAWAWAWAWAWAW', 'c20': 'IQIQIQIQIQIQIQIQIQIQ', 'c21': 'LQLQLQLQLQLQLQLQLQLQ', 'c22': 'HLHLHLHLHLHLHLHLHLHL', 'c23': 'AMAMAMAMAMAMAMAMAMAM', 'c24': 'FQFQFQFQFQFQFQFQFQFQ', 'c25': 'HWHWHWHWHWHWHWHWHWHW', 'c26': 'FWFWFWFWFWFWFWFWFWFW', 'c27': 'MRMRMRMRMRMRMRMRMRMR', 'c28': 'RWRWRWRWRWRWRWRWRWRW', 'c29': 'KYKYKYKYKYKYKYKYKYKY', 'c30': 'ARARARARARARARARARAR', 'c31': 'KLKLKLKLKLKLKLKLKLKL', 'c32': 'AKAKAKAKAKAKAKAKAKAK', 'c33': 'KSKSKSKSKSKSKSKSKSKS', 'c34': 'KKKKKKKKKKKKKKKKKKKK', 'c35': 'KRKRKRKRKRKRKRKRKRKR', 'c36': 'RRRRRRRRRRRRRRRRRRRR'}
+        else:
+            raise ValueError(f"Model {model} not supported.")
+        return self.chemistries
+        
+    
+    def load_model(self, model: str = None):
+        """
+        Load the model to be used for the calculation.
+
+        Parameters:
+        model (str): The model to be used for the calculation.
+        """
+        if model is None:
+            model = self.model.lower()
+        
+        if self.loaded_model==None:
+            if model == 'mpipi':
+                self.loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
+            elif model == 'calvados':
+                self.loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
+            else:
+                raise ValueError(f"Model {model} not supported.")
+        return self.loaded_model
+    
+    def calculate_fingerprint(self, sequence: str = None, chemistries: dict = None):
+        """
+        Calculate the chemical fingerprint of the target sequence.
+
+        Parameters:
+        sequence (str): The sequence.
+        chemistries (dict): The chemistries to use for the calculation.
+
+        Returns:
+        dict: The chemical fingerprint of the target sequence
+        """
+        if chemistries is None:    
+            chemistries = self.set_chemistries()
+        
+        # make sure the model is loaded
+        self.loaded_model = self.load_model()
+
+        # now for each chemistry, we calculate the epsilon vectors.
+        sequence_fingerprint = {}
+        for chemistry, chemistry_sequence in chemistries.items():
+            cur_vec = self.loaded_model.epsilon_vectors(sequence, chemistry_sequence)
+            sequence_fingerprint[chemistry] = {'attractive':cur_vec[0], 'repulsive':cur_vec[1]}
+        return sequence_fingerprint
+
+
+
+    def get_target_fingerprint(self, target_sequence: str = None, chemistries: dict = None):
+        """
+        Calculate the chemical fingerprint of the target sequence.
+
+        Parameters:
+        target_sequence (str): The target sequence.
+        chemistries (dict): The chemistries to use for the calculation.
+
+        Returns:
+        dict: The chemical fingerprint of the target sequence
+        """
+        if self.target_sequence_fingerprint is not None:
+            return self.target_sequence_fingerprint
+        if target_sequence is None:
+            target_sequence = self.target_sequence
+        if chemistries is None:
+            if self.chemistries is None:
+                self.chemistries = self.set_chemistries()
+            chemistries = self.chemistries
+        self.target_sequence_fingerprint = self.calculate_fingerprint(target_sequence, chemistries)
+        return self.target_sequence_fingerprint
+    
+    
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        current_fingerprint = self.calculate_fingerprint(protein.sequence)
+        target_fingerprint = self.get_target_fingerprint()
+        # calculate the difference between the original and current matrix
+        diff = 0
+        for key in target_fingerprint.keys():
+            diff += np.abs(target_fingerprint[key]['attractive'] - current_fingerprint[key]['attractive']).sum()
+            diff += np.abs(target_fingerprint[key]['repulsive'] - current_fingerprint[key]['repulsive']).sum()
+        return diff
