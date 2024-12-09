@@ -207,7 +207,7 @@ class Complexity(ProteinProperty):
         return protein.complexity
 
 
-class epsilon_vector_diff(ProteinProperty):
+class DeltaEpsilonVector(ProteinProperty):
     """
     Calculate the difference in the epsilon attractive and repulsive matrices,
     returns the diff.
@@ -217,7 +217,7 @@ class epsilon_vector_diff(ProteinProperty):
     target='ATQSYGAYPTQPGQGYSQQSSQPYGQQSYSGYSQSTDTSGYGQSSYSSYGQSQNTGYGT'
     original_vectors = mpipi_frontend.epsilon_vectors(seq, target)
     optimizer = sequence_optimization.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
-    optimizer.add_property(epsilon_vector_diff, target_value=0.0, weight=1.0, target_interacting_sequence=target, 
+    optimizer.add_property(DeltaEpsilonVector, target_value=0.0, weight=1.0, target_interacting_sequence=target, 
                             original_epsilon_vectors=original_vectors, finces_frontend=mpipi_frontend)
     optimizer.set_optimization_params(max_iterations=10000)
     opt=optimizer.run()
@@ -266,7 +266,7 @@ class epsilon_vector_diff(ProteinProperty):
         return attractive_diff + repulsive_diff
 
 
-class epsilon_total(ProteinProperty):
+class DeltaEpsilon(ProteinProperty):
     """
     Calculate the difference in total epsilon value between 2 sequences. 
 
@@ -275,7 +275,7 @@ class epsilon_total(ProteinProperty):
     target='MASNDYTQQATQSYGAYPTQPGQGYSQQSSQPYGQQSYSGYSQSTDTSGYGQSSYSSYGQSQNTGYGTQSTPQGYGSTGGYGSSQSSQSSYGQQSSYPGY'
     original_epsilon = mpipi_frontend.epsilon(seq, target)
     optimizer = sequence_optimization.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
-    optimizer.add_property(epsilon_total, target_value=0.0, weight=1.0, target_interacting_sequence=target, 
+    optimizer.add_property(DeltaEpsilon, target_value=0.0, weight=1.0, target_interacting_sequence=target, 
                             original_epsilon_value=original_epsilon, finces_frontend=mpipi_frontend)
     optimizer.set_optimization_params(max_iterations=1000, tolerance=1e-3)
     opt=optimizer.run()
@@ -344,7 +344,7 @@ class epsilon_total(ProteinProperty):
         return np.abs(self.original_epsilon_value-current_epsilon)
     
 
-class chemical_fingerprint(ProteinProperty):
+class ChemicalFingerprint(ProteinProperty):
     """
     Uses the chemical foot print from the FINCHES manuscript to generate a sequence with
     a similar chemical fingerprint to the target sequence.

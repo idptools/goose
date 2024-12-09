@@ -22,9 +22,9 @@ from goose.properties import (
     ProteinProperty,
     RadiusOfGyration,
     TargetAminoAcidFractions,
-    epsilon_vector_diff,
-    epsilon_total,
-    chemical_fingerprint
+    DeltaEpsilonVector,
+    DeltaEpsilon,
+    ChemicalFingerprint
 )
 
 
@@ -424,7 +424,7 @@ def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[
     if not candidate_kmers:
         # If no candidate kmers are found in the desired direction, choose from all kmers
         # this maybe bad, but might encourage mixing
-        candidate_kmers = None
+        candidate_kmers = {len(kmer): [kmer for kmer in kmer_dict.kmer_properties if len(kmer) == len(kmer)]}
 
     return candidate_kmers
 
