@@ -92,32 +92,72 @@ class KmerDict:
 
 
 class SequenceOptimizer:
+    '''This object is aimed to minimize the distance between a generated IDR sequence and a target value stocastically.
+
+    This is the object that will actually try to find a sequence that matches
+    your property of interest. It does this via a stocastic mutation of a starting
+    reference protein sequence.
+    
+    Note: this is being commented by Nick when Jeff wrote this code.
+    Take my explanations of his code with a grain of salt.
+
+    '''
     # Add class-level cache dictionary
     _kmer_dict_cache: Dict[str, KmerDict] = {}
 
     def __init__(self, target_length: int, kmer_dict_file: str = 'amino_acids.pkl', 
-                 verbose=False, gap_to_report=10, num_shuffles=0, just_shuffle=False):
+                 verbose : bool = False, 
+                 gap_to_report : int = 10, num_shuffles : int = 0, 
+                 just_shuffle : bool = False):
+        '''Intializes the sequence optimizer
+        
+        Parameters
+        ----------
+        target_length : int
+            This is the target sequence length that you wish to create a new seuqence with a
+            property match for.
+        kmer_dict_file : str
+            This is an optional file location that can be passed to reference what kind of
+            bias you will introduce in the random pull of your starting sequence.
+        verbose : bool
+            This is bool determines whether the user want to log actions and data that
+            the optimizer performs
+        gap_to_report : int
+            IDK
+        num_shuffles : int
+            IDK
+        just_shuffle : bool
+            IDk
+        '''
+        #set some of the values passed in initialization of the seuqence optimizer
         self.target_length = target_length
         self.kmer_dict_file = kmer_dict_file
         self.verbose = verbose
         self.gap_to_report = gap_to_report
+
+        #Initialize the kmer_dict as None
         self.kmer_dict = None 
         self.fixed_ranges: List[Tuple[int, int]] = []
+        #These are properties that are not passed at initialization
+        #These default are set unless the user changes them manually
         self.max_iterations = 1000
         self.tolerance = 0.001
         self.window_size = 50
         self.num_shuffles = num_shuffles
         self.shuffle_interval = 25
-        self.initial_sequence = None
+        self.initial_sequence = None #initialization of the sequence will occur later
         self.just_shuffle = just_shuffle
-        self._configure_logger()
+        self._configure_logger() #this configures a data logger to ensure that the process is recordered
         self._load_kmer_dict()
         self.properties_dict = {}  # Dictionary to store properties for faster lookup
 
     def _configure_logger(self):
+        '''Initializes a data logger than will store data and ensure the sequence optimization is captured well'''
+        #check that the user want to log runtime data and that a previous logger was not made prior
         if self.verbose and not getattr(self, '_logger_configured', False):
             logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-            self._logger_configured = True
+            self._logger_configured = True #ENSURE that any future calls to this function will not start a new logger
+        #set the logger name
         self.logger = logging.getLogger(__name__)
 
     def _load_kmer_dict(self):
@@ -146,6 +186,21 @@ class SequenceOptimizer:
 
     @classmethod
     def load_configuration(cls, config_file: str, kmer_dict_file: str = None):
+        '''This allows you to preload a SequenceOptimizer object from a previous run where you saved the configation in a file.
+        
+        Parameters
+        ----------
+        config_file : str
+            The path to config file from the previous run that you want to reproduce
+        kmer_dict_file : str
+            This is the path to the kmer dictionary to used for amino acid frequencies.
+            You do not need to load a kmer dictionary as this will go to the default value if you do not specify it.
+
+        Returns
+        -------
+        SequenceOptimizer
+            This is the sequence optimizer with the parameters loaded from the config file and the kmer dictionary that were chosen.
+        '''
         with open(config_file, 'r') as f:
             config = json.load(f)
 
@@ -174,7 +229,27 @@ class SequenceOptimizer:
         optimizer.logger.info(f"Configuration loaded from {config_file}")
         return optimizer
 
-    def add_property(self, property_class: type, *args: Any, **kwargs: Any):
+    def add_property(self, property_class: type, *args: Any, **kwargs: Any) -> None:
+        '''Updates the optimizer with a new property to try to match on.
+        
+        This function takes in all the potential arguements and keyword arguments
+        you will need passed at initialization for the property class of interest.
+
+        Parameters
+        ----------
+        property_class : type
+            This is the UNinitialized class that you are trying to add a target value for
+        *args : Any
+            These are any arguments that your class may take in order to initialize it
+        **kwargs : Any
+            These are any keyword arguments that your class may take to initialize it
+
+        Returns
+        -------
+        None
+            This function returns nothing. It similar adds the property to the stochastic
+            minimization function
+        '''
         new_property = property_class(*args, **kwargs)
         property_name = property_class.__name__
 
@@ -208,10 +283,26 @@ class SequenceOptimizer:
             self.just_shuffle = just_shuffle
 
     def set_initial_sequence(self, sequence: str):
+        '''This allows you  to initialize the optimization form a seed sequence that you specify.
+        
+        Parameters
+        ----------
+        sequence : str
+            This is the seed sequence you want to start from. It MUST be the same length as the 
+            target sequence in order to work.
+        '''
         assert len(sequence) == self.target_length, f"Initial sequence length must match target length ({self.target_length})"
         self.initial_sequence = sequence
 
     def run(self) -> str:
+        '''This performs the stocastic optimization on the properties you have added to this optimizer object.
+        
+        Returns
+        -------
+        str
+            This is the sequence that the optimizer found that suits the needs you specified in the 
+            protein properties you passed
+        '''
         self.logger.info("Starting sequence optimization")
         optimized_sequence = optimize_sequence(
             self.kmer_dict,
@@ -223,7 +314,14 @@ class SequenceOptimizer:
         self.log_results(optimized_sequence)
         return optimized_sequence
 
-    def get_optimization_params(self):
+    def get_optimization_params(self) -> dict:
+        '''Returns a dictionary of the parameters this object has to find a sequence that matches specifiications.
+        
+        Returns
+        -------
+        dict
+            This has the object properties as keywords and their values as the value in the dictionary.
+        '''
         return {
             'max_iterations': self.max_iterations,
             'tolerance': self.tolerance,
@@ -238,6 +336,7 @@ class SequenceOptimizer:
         }
 
     def log_results(self, sequence: str):
+        '''Logs each property value for a sequence'''
         if self.initial_sequence is not None:
             self.logger.info("Initial Sequence: " + self.initial_sequence)
         self.logger.info(f"Optimized Sequence: {sequence}")
@@ -247,6 +346,13 @@ class SequenceOptimizer:
             self.logger.info(f"{prop.__class__.__name__}: {value:.2f} (Target: {prop.target_value:.2f})")
     
     def save_configuration(self, filename: str):
+        '''Saves the current configurations for the optimizer to a json file.
+        
+        Parameters
+        ----------
+        filename : str
+            This is the json filename where you want to store the parameters for this optimization.
+        '''
         config = {
             "target_length": self.target_length,
             "properties": [(prop.__class__.__name__, prop.target_value, prop.weight) for prop in self.properties_dict.values()],
@@ -263,6 +369,16 @@ class SequenceOptimizer:
         self.logger.info(f"Configuration saved to {filename}")
 
     def get_defined_properties(self) -> List[Dict[str, Any]]:
+        '''This returns a list of the properties you are trying to optimize for during sequence generation.
+        
+        Returns
+        -------
+        List[Dict[str,Any]]
+            The elements of the list represent each object.
+            The keywords in each dictionary are the "name", "target_value", "weight" for each property added.
+            The values in each keyword correspond to each of these values.
+            No other information is returned.
+        '''
         return [
             {
                 "name": prop.__class__.__name__,
