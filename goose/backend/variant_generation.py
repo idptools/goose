@@ -1149,6 +1149,105 @@ def gen_targeted_shuffle_variant(sequence, target_aas, attempts=10,
 
     # if it doesn't work, raise an error
     raise GooseFail('Unable to generate sequence.')
+    
+    
+def gen_targeted_reposition_variant(sequence, target_aas, attempts=10, 
+    disorder_threshold=parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function that will let you alter a sequence by specifying residues
+    or classes of residues to reposition. This will change the positions
+    of the specified residues without changing the order of non-specified
+    residues within the sequence.
+
+    parameters
+    ----------
+    sequence : str
+        the amino acid sequence as a string
+
+    target_aas : str or list
+        a list of amino acids to target for shuffling
+        or a class of amino acids to target for shuffling
+        Possible target classes:
+            charged : DEKR
+            polar : QNST
+            aromatic : FYW
+            aliphatic : IVLAM
+            negative: DE
+            positive : KR
+
+    attempts : int
+        the number of times to try to make the sequence
+
+    disorder_threshold : float
+        the threshold value required for an amino acid
+        to be considered disordered
+
+    strict_disorder : Bool
+        whether or not to require all disorder values to be 
+        over threshold or if it is okay to use the values
+        from the input sequence
+    '''
+    # dict of classes that are possible to choose
+    classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
+    ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+    
+    # possible amino acids
+    amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+
+    # verify target aas
+    if type(target_aas)==str:
+        if target_aas in classdict.keys():
+            target_aas = classdict[target_aas]
+        else:
+            raise GooseInputError('The specified target_aas is not a valid amino acid or class of amino acids.')
+    elif type(target_aas)==list:
+        for i in target_aas:
+            if i not in amino_acids:
+                raise GooseInputError('The specified target_aas is not a valid amino acid.')
+    else:
+        raise GooseInputError('The specified target_aas must be type list or string.')
+
+    # get original sequence disorder
+    starting_disorder = meta.predict_disorder(sequence)    
+    
+    # identify target aas, nontarget aas, and positions.
+    target_aa_list=[]
+    nontarget_aa_list=[]
+    target_aa_positions=[]
+    all_positions=[]
+    for i, aa in enumerate(sequence):
+        if aa in target_aas:
+            target_aa_list.append(aa)
+            target_aa_positions.append(i)
+        else:
+            nontarget_aa_list.append(aa)
+        all_positions.append(i)
+
+    # attempt to build sequence
+    for attempt_num in range(0, attempts):
+        # # copy lists
+        cur_attempt_target_aas = target_aa_list.copy()
+        cur_attempt_nontarget_aas = nontarget_aa_list.copy()
+        
+        # randomly generate new positions
+        new_positions=random.sample(all_positions, k=len(target_aa_list))
+
+        # build final seq
+        final_seq=''
+        for i in range(len(sequence)):
+            if i in new_positions:
+                final_seq+=cur_attempt_target_aas.pop(0)
+            else:
+                final_seq+=cur_attempt_nontarget_aas.pop(0)
+
+        # check disorder.
+        if sequence_variant_disorder(final_seq, starting_disorder, 
+            cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+            # if passes the 'disorder test', return the seq
+            return final_seq
+
+    # if it doesn't work, raise an error
+    raise GooseFail('Unable to generate sequence.')
 
 
 def gen_excluded_shuffle_variant(sequence, exclude_aas, attempts=10, 
