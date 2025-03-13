@@ -1165,8 +1165,8 @@ def gen_targeted_reposition_variant(sequence, target_aas, attempts=10,
         the amino acid sequence as a string
 
     target_aas : str or list
-        a list of amino acids to target for shuffling
-        or a class of amino acids to target for shuffling
+        a list of amino acids to target for repositioning
+        or a class of amino acids to target for repositioning
         Possible target classes:
             charged : DEKR
             polar : QNST
