@@ -1078,7 +1078,7 @@ def gen_targeted_shuffle_variant(sequence, target_aas, attempts=10,
             positive : KR
 
     attempts : int
-        the number of times ot try to make the sequence
+        the number of times to try to make the sequence
 
     disorder_threshold : float
         the threshold value required for an amino acid
@@ -1086,7 +1086,7 @@ def gen_targeted_shuffle_variant(sequence, target_aas, attempts=10,
 
     strict_disorder : Bool
         whether or not to require all disorder values to be 
-        over threshold or if it si okay to use the values
+        over threshold or if it is okay to use the values
         from the input sequence
     '''
     # dict of classes that are possible to choose
