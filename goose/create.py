@@ -8,7 +8,7 @@
 ##Handles the primary functions
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var']
+__all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var', 'targeted_reposition_var']
 
 import os
 import sys
@@ -44,6 +44,7 @@ from goose.backend.variant_generation import gen_fcr_class_variant as _gen_fcr_c
 from goose.backend.variant_generation import gen_ncpr_class_variant as _gen_ncpr_class_variant
 from goose.backend.variant_generation import gen_all_props_class_variant as _gen_all_props_class_variant
 from goose.backend.variant_generation import gen_targeted_shuffle_variant as _gen_targeted_shuffle_variant
+from goose.backend.variant_generation import gen_targeted_reposition_variant as _gen_targeted_reposition_variant
 from goose.backend.variant_generation import gen_excluded_shuffle_variant as _gen_excluded_shuffle_variant
 from goose.backend.variant_generation import gen_dimensions_variant as _gen_dimensions_variant
 
@@ -1278,6 +1279,69 @@ def targeted_shuffle_var(sequence, target_aas, attempts=10,
     # make sequence.
     try:
         final_sequence = _gen_targeted_shuffle_variant(sequence, target_aas, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
+    return final_sequence
+    
+def targeted_reposition_var(sequence, target_aas, attempts=10,
+    cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    User facing funcitonality to generate variants where
+    you can specify residues or classes of residues to reposition.
+
+    parameters
+    ----------
+    sequence : str
+        The amino acid sequence as a string.
+
+    target_aas : str or list
+        A list of amino acids to reposition
+        or a class of amino acids to reposition
+        Possible target classes:
+        charged : DEKR
+        polar : QNST
+        aromatic : FYW
+        aliphatic : IVLAM
+        negative: DE
+        positive : KR
+
+        If a list is specified, format should be (for example): 
+        target_aas['K', 'W', 'R', 'Y']
+
+
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence. (Optional)
+
+    cutoff : float
+        the cutoff value for disorder between 0 and 1. 
+        Higher values have a higher likelihood of being disordered. (Optional)
+
+    strict : bool
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
+    
+    Returns
+    -------
+    Returns the amino acid sequence as a string. 
+    '''
+
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+    if len(sequence) < 6:
+        raise GooseInputError('Cannot have sequence with a length less than 6')
+
+    # make sequence.
+    try:
+        final_sequence = _gen_targeted_reposition_variant(sequence, target_aas, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence
