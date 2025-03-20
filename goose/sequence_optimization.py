@@ -22,9 +22,9 @@ from goose.properties import (
     ProteinProperty,
     RadiusOfGyration,
     TargetAminoAcidFractions,
-    DeltaEpsilonVector,
-    DeltaEpsilon,
-    ChemicalFingerprint
+    FractionDisorder,
+    MatchingResidues,
+    MaxMatchingResidues
 )
 
 
