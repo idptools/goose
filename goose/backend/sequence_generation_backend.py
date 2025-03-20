@@ -9,6 +9,8 @@ from goose.backend.amino_acids import AminoAcid
 from goose.goose_exceptions import GooseError, GooseInputError
 from goose.backend import parameters
 
+import numpy as np
+
 
 
 def optimal_residue_key(four_amino_acids):
@@ -2386,8 +2388,4 @@ def create_seq_by_fracs(length, max_aa_fractions={}, choose_optimized_residue=Tr
             sequence = sequence + chosen_residue
         # return the sequence
         return sequence
-
-
-
-
 
