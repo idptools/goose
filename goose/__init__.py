@@ -3,6 +3,8 @@
 # Add imports here
 from .create import *
 from .analyze import *
+from .optimize import *
+from .backend.optimizer_properties import *
 import os 
 
 # Handle versioneer

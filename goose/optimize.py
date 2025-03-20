@@ -1,5 +1,6 @@
 import random
 import math
+import os
 from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 from tqdm import tqdm
@@ -9,33 +10,21 @@ import pickle
 
 import sparrow
 
-from goose import get_data
-from goose.properties import (
-    FCR,
-    NCPR,
-    SCD,
-    SHD,
-    Complexity,
-    ComputeIWD,
-    EndToEndDistance,
-    Hydrophobicity,
-    Kappa,
-    ProteinProperty,
-    RadiusOfGyration,
-    TargetAminoAcidFractions,
-    FractionDisorder,
-    MatchingResidues,
-    MaxMatchingResidues
-)
+from goose.data import amino_acids
+from goose.backend.optimizer_properties import ProteinProperty
 
+# code that allows access to the data directory
+_ROOT = os.path.abspath(os.path.dirname(__file__))
+def get_data(path):
+    return os.path.join(_ROOT, 'data', path)
 
+# define kmer dict. 
 class KmerDict:
     """
     A dictionary-based implementation for storing k-mers and their associated properties.
     """
     def __init__(self) -> None:
         self.kmer_properties: Dict[str, dict] = {}  # Dictionary to store properties for each k-mer
-        self.longest_kmer: int = None
 
     def insert(self, kmer: str, properties: dict):
         """
@@ -79,17 +68,7 @@ class KmerDict:
         """
         return [kmer for kmer in self.kmer_properties if k <= len(kmer) <= max_length]
     
-    def get_longest_kmer_lenght(self) -> int:
-        """
-        Retrieve the lenth of the longest kmer in the dictionary.
-        Returns
-        -------
-        int
-            The length of the longest kmer.
-        """
-        if self.longest_kmer is None:
-            self.longest_kmer =  max([len(kmer) for kmer in self.kmer_properties])
-        return self.longest_kmer
+
 
 
 class SequenceOptimizer:
@@ -106,9 +85,10 @@ class SequenceOptimizer:
     # Add class-level cache dictionary
     _kmer_dict_cache: Dict[str, KmerDict] = {}
 
-    def __init__(self, target_length: int, kmer_dict_file: str = 'amino_acids.pkl', 
+    def __init__(self, target_length: int, kmer_dict_file: str = None, 
                  verbose : bool = False, 
-                 gap_to_report : int = 10, num_shuffles : int = 0, 
+                 gap_to_report : int = 10, 
+                 num_shuffles : int = 0, 
                  just_shuffle : bool = False):
         '''Intializes the sequence optimizer
         
@@ -139,13 +119,14 @@ class SequenceOptimizer:
         #Initialize the kmer_dict as None
         self.kmer_dict = None 
         self.fixed_ranges: List[Tuple[int, int]] = []
+        
         #These are properties that are not passed at initialization
         #These default are set unless the user changes them manually
         self.max_iterations = 1000
         self.tolerance = 0.001
-        self.window_size = 50
+        self.window_size = 10
         self.num_shuffles = num_shuffles
-        self.shuffle_interval = 25
+        self.shuffle_interval = 1
         self.initial_sequence = None #initialization of the sequence will occur later
         self.just_shuffle = just_shuffle
         self._configure_logger() #this configures a data logger to ensure that the process is recordered
@@ -170,20 +151,27 @@ class SequenceOptimizer:
             self.kmer_dict = SequenceOptimizer._kmer_dict_cache[self.kmer_dict_file]
             self.logger.info(f"Using cached kmer dictionary for {self.kmer_dict_file}")
         else:
-            try:
-                if self.kmer_dict_file in ["kmer_properties.pickle", "amino_acids.pkl"]:
-                    self.kmer_dict_file = get_data(self.kmer_dict_file)
+            # if set to None, just using amino_acids.py. This is defualt because I'm going
+            # to remove the use of a .pickle file as default due to the fact that it's slowly
+            # becoming less commone due to perceived security risks.
+            if self.kmer_dict_file is not None:
+                try:
+                    if self.kmer_dict_file in ["kmer_properties.pickle", "amino_acids.pkl"]:
+                        self.kmer_dict_file = get_data(self.kmer_dict_file)
 
-                with open(self.kmer_dict_file, "rb") as f:
-                    kmer_properties = pickle.load(f)
-                self.kmer_dict = build_kmer_dict(kmer_properties)
+                    with open(self.kmer_dict_file, "rb") as f:
+                        kmer_properties = pickle.load(f)
+                    self.kmer_dict = build_kmer_dict(kmer_properties)
 
-                # Cache the kmer_dict for future use
-                SequenceOptimizer._kmer_dict_cache[self.kmer_dict_file] = self.kmer_dict
-                self.logger.info(f"Loaded and cached kmer dictionary from {self.kmer_dict_file}")
-            except OSError as e:
-                self.logger.error(f"Error loading kmer dictionary: {e}")
-                raise
+                    # Cache the kmer_dict for future use
+                    SequenceOptimizer._kmer_dict_cache[self.kmer_dict_file] = self.kmer_dict
+                    self.logger.info(f"Loaded and cached kmer dictionary from {self.kmer_dict_file}")
+                except OSError as e:
+                    self.logger.error(f"Error loading kmer dictionary: {e}")
+                    raise
+            else:
+                self.logger.info("Using amino_acids.py for kmer properties")
+                self.kmer_dict = build_kmer_dict(amino_acids.amino_acid_dat)
 
     @classmethod
     def load_configuration(cls, config_file: str, kmer_dict_file: str = None):
@@ -491,7 +479,7 @@ def get_global_and_window_shuffles(sequence: str, num_shuffles: int, window_size
 
 
 
-def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[str, Dict[str, Any]], min_k: int, max_k: int, fixed_residue_ranges: List[Tuple[int, int]]) -> Dict[int, List[str]]:
+def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[str, Dict[str, Any]], fixed_residue_ranges: List[Tuple[int, int]]) -> Dict[int, List[str]]:
     """
     Filter candidate k-mers based on their property values, directionality, and fixed residue ranges.
 
@@ -503,10 +491,6 @@ def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[
         The KmerDict instance containing k-mer properties.
     directions : Dict[str, Dict[str, Any]]
         A dictionary containing the direction information for each property.
-    min_k : int
-        The minimum length of k-mers to consider.
-    max_k : int
-        The maximum length of k-mers to consider.
     fixed_residue_ranges : List[Tuple[int, int]]
         A list of tuples representing the start and end indices (inclusive) of the fixed residue ranges.
 
@@ -726,19 +710,24 @@ def mutate_sequence(sequence: str, kmer_dict: KmerDict,
         A tuple containing the new sequence, the combined error, and the updated directions dictionary.
     """
  
+ 
+    # set min and max length for kmer, default is 1 because 
+    # default usage is the amino_acids.py file. 
     min_k = 1
-    # figure out max k
-    if kmer_dict.get_longest_kmer_lenght() == 1:
-        # make max k 1 if we just have amino acids.
-        max_k = 1
-    else:
-        # this was set by jeff, leaving for now. 
-        max_k = 5
+    max_k = 1
 
-
+    # if we aren't just shuffling the sequence, we need to get the candidate kmers
     if not just_shuffle:
-        candidate_kmers = filter_candidate_kmers(sequence, kmer_dict, directions, min_k, max_k,fixed_residue_ranges)
-        kmer_to_replace = select_kmer_to_replace(sequence, min_k, max_k, fixed_residue_ranges)
+        candidate_kmers = filter_candidate_kmers(sequence=sequence, 
+                                                 kmer_dict=kmer_dict, 
+                                                 directions=directions,
+                                                 fixed_residue_ranges = fixed_residue_ranges)
+
+        kmer_to_replace = select_kmer_to_replace(sequence=sequence, 
+                                                 min_k=min_k, 
+                                                 max_k=max_k, 
+                                                 fixed_residue_ranges=fixed_residue_ranges)
+
 
         if kmer_to_replace and candidate_kmers:
             valid_kmers = candidate_kmers.get(len(kmer_to_replace), [])
@@ -828,12 +817,14 @@ def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[
     # Iterate
     for i in range(max_iterations):
         current_num_shuffles = num_shuffles if i % shuffle_interval == 0 else 0
-        new_sequence, new_error, directions = mutate_sequence(best_sequence, kmer_dict, 
-                                                              target_length, directions, properties, 
-                                                              current_num_shuffles, window_size, 
-                                                              fixed_residue_ranges, 
+        new_sequence, new_error, directions = mutate_sequence(sequence=best_sequence, 
+                                                              kmer_dict=kmer_dict, 
+                                                              directions=directions, 
+                                                              properties=properties, 
+                                                              num_shuffles=current_num_shuffles, 
+                                                              window_size=window_size, 
+                                                              fixed_residue_ranges=fixed_residue_ranges, 
                                                               just_shuffle=just_shuffle)
-
     
         if new_error < best_error:
             best_sequence = new_sequence
@@ -843,10 +834,16 @@ def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[
             break
 
         # Update progress bar
-        if i % gap_to_report == 0:
+        if i!=0 and i % gap_to_report == 0:
+            pbar.update(gap_to_report)
+            pbar.set_description(f"Best Error = {best_error:.2f}")
+        
+        # make sure we update at last step
+        if i == max_iterations - 1:
             pbar.update(gap_to_report)
             pbar.set_description(f"Best Error = {best_error:.2f}")
 
+        # of verbose..
         if verbose and i % gap_to_report == 0:
             print(f"Iteration {i}: Best Error = {best_error}")
             print(f"Iteration {i}: Best Sequence = {best_sequence}")

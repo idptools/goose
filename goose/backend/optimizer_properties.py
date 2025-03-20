@@ -49,6 +49,25 @@ class ProteinProperty(ABC):
 class ComputeIWD(ProteinProperty):
     """
     Compute the Inversed Weighted Distance (IWD) property for the target residues in the sequence.
+
+    Example usage:
+    import goose
+    from sparrow.protein import Protein as pr
+    # initialize optimizer
+    optimizer=goose.SequenceOptimizer(target_length=50, 
+                                gap_to_report=1000, num_shuffles=1)
+
+    # set optimization parameters
+    optimizer.set_optimization_params(max_iterations=50000, 
+                                    tolerance=1e-2,
+                                    shuffle_interval=5)
+    # add IWD as a property to optimize
+    optimizer.add_property(goose.IWD, residues=('S'), target_value=3)
+    # set best_seq to the optimized sequence
+    best_seq=optimizer.run()
+    # print the IWD for S for the best_seq and then print it. 
+    print(pr(best_seq).compute_iwd('S'))
+    print(best_seq)
     """
     def __init__(self, residues: Tuple[str, ...], target_value: float, weight: float = 1.0):
         super().__init__(target_value, weight)
@@ -160,6 +179,117 @@ class TargetAminoAcidFractions(ProteinProperty):
             diff_sum += abs(target_frac - current_frac)
 
         return diff_sum
+
+class MaxFractions(ProteinProperty):
+    """
+    Compute the difference between the max amino acid fractions and the current amino acid fractions.
+
+    Example usage:
+    import goose
+    from sparrow.protein import Protein as pr
+
+    # initialize optimizer
+    optimizer=goose.SequenceOptimizer(target_length=100, 
+                                gap_to_report=1000, num_shuffles=1)
+
+    # set optimization params
+    optimizer.set_optimization_params(max_iterations=10000, 
+                                    tolerance=1e-2,
+                                    shuffle_interval=5)
+
+    # add property
+    optimizer.add_property(goose.MaxFractions, {'A':0.1, 'S':0.1, 'G':0.1})
+    best_seq=optimizer.run()
+
+    print(pr(best_seq).amino_acid_fractions)
+    print(best_seq)    
+    """
+    def __init__(self, max_fractions: Dict[str, float], weight: float = 1.0):
+        """
+        Parameters:
+        max_fractions (Dict[str, float]): A dictionary where keys are single-letter amino acid codes,
+            and values are the max fractions for each amino acid.
+        weight (float): The weight of this property in the combined objective function.
+        
+        """
+        super().__init__(0.0, weight)  # Target value is set to 0.0 since we want to minimize the difference
+        self.max_fractions = max_fractions
+
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        """
+        Calculate the difference between the max amino acid fractions and the current amino acid fractions.
+
+        Parameters:
+        protein (sparrow.Protein): The protein instance.
+
+        Returns:
+        float: The difference between the max and current amino acid fractions.
+        """
+        current_fractions = protein.amino_acid_fractions
+
+        diff_sum = 0.0
+        for aa, target_frac in self.max_fractions.items():
+            current_frac = current_fractions.get(aa, 0.0)
+            if current_frac > target_frac:
+                diff_sum += abs(target_frac - current_frac)
+
+        return diff_sum
+
+class MinFractions(ProteinProperty):
+    """
+    Compute the difference between the max amino acid fractions and the current amino acid fractions.
+
+    Example usage:
+    import goose
+    from sparrow.protein import Protein as pr
+
+    # initialize optimizer
+    optimizer=goose.SequenceOptimizer(target_length=100, 
+                                gap_to_report=1000, num_shuffles=1)
+
+    # set optimization params
+    optimizer.set_optimization_params(max_iterations=10000, 
+                                    tolerance=1e-2,
+                                    shuffle_interval=5)
+
+    # add property
+    optimizer.add_property(goose.MinFractions, {'A':0.1, 'S':0.1, 'G':0.1})
+    best_seq=optimizer.run()
+
+    print(pr(best_seq).amino_acid_fractions)
+    print(best_seq)    
+    """
+    def __init__(self, min_fractions: Dict[str, float], weight: float = 1.0):
+        """
+        Parameters:
+        min_fractions (Dict[str, float]): A dictionary where keys are single-letter amino acid codes,
+            and values are the min fractions for each amino acid.
+        weight (float): The weight of this property in the combined objective function.
+        
+        """
+        super().__init__(0.0, weight)  # Target value is set to 0.0 since we want to minimize the difference
+        self.min_fractions = min_fractions
+
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        """
+        Calculate the difference between the min amino acid fractions and the current amino acid fractions.
+
+        Parameters:
+        protein (sparrow.Protein): The protein instance.
+
+        Returns:
+        float: The difference between the min and current amino acid fractions.
+        """
+        current_fractions = protein.amino_acid_fractions
+
+        diff_sum = 0.0
+        for aa, target_frac in self.max_fractions.items():
+            current_frac = current_fractions.get(aa, 0.0)
+            if current_frac < target_frac:
+                diff_sum += abs(target_frac - current_frac)
+
+        return diff_sum
+
 
 class SCD(ProteinProperty):
     """
