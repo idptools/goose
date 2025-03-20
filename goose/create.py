@@ -8,7 +8,7 @@
 ##Handles the primary functions
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var', 'targeted_reposition_var']
+__all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var', 'targeted_reposition_var',  'weighted_shuffle_var']
 
 import os
 import sys
@@ -45,6 +45,7 @@ from goose.backend.variant_generation import gen_ncpr_class_variant as _gen_ncpr
 from goose.backend.variant_generation import gen_all_props_class_variant as _gen_all_props_class_variant
 from goose.backend.variant_generation import gen_targeted_shuffle_variant as _gen_targeted_shuffle_variant
 from goose.backend.variant_generation import gen_targeted_reposition_variant as _gen_targeted_reposition_variant
+from goose.backend.variant_generation import gen_weighted_shuffle_variant as _gen_weighted_shuffle_variant
 from goose.backend.variant_generation import gen_excluded_shuffle_variant as _gen_excluded_shuffle_variant
 from goose.backend.variant_generation import gen_dimensions_variant as _gen_dimensions_variant
 
@@ -954,9 +955,9 @@ def kappa_var(sequence, kappa, kappa_error=parameters.MAXIMUM_KAPPA_ERROR,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     if len(sequence) < 6:
-        raise GooseInputError('Cannot have sequence with a length less than 6')
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
     if kappa > 1 or kappa < 0:
-        raise GooseInputError('Kappa values must be between 0 and 1')
+        raise goose_exceptions.GooseInputError('Kappa values must be between 0 and 1')
 
     try:
         final_sequence = _gen_kappa_variant(sequence, kappa=kappa, allowed_kappa_error = kappa_error, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
@@ -1025,7 +1026,7 @@ def asymmetry_var(sequence, increase_decrease, aa_class, number_changes=None,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     if len(sequence) < 6:
-        raise GooseInputError('Cannot have sequence with a length less than 6')
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
 
     try:
         final_sequence = _gen_asymmetry_variant(sequence, increase_decrease, aa_class, num_change=number_changes, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
@@ -1076,7 +1077,7 @@ def fcr_class_var(sequence, FCR, attempts=10, cutoff=parameters.DISORDER_THRESHO
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     if len(sequence) < 6:
-        raise GooseInputError('Cannot have sequence with a length less than 6')
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
 
     if FCR > 1 or FCR < 0:
         raise goose_exceptions.GooseInputError('fcr values must be between 0 and 1.')
@@ -1130,7 +1131,7 @@ def ncpr_class_var(sequence, NCPR, attempts=10, cutoff=parameters.DISORDER_THRES
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     if len(sequence) < 6:
-        raise GooseInputError('Cannot have sequence with a length less than 6')
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
 
     if NCPR > 1 or NCPR < -1:
         raise goose_exceptions.GooseInputError('NCPR values must be between -1 and 1.')
@@ -1193,7 +1194,7 @@ def all_props_class_var(sequence, hydropathy=None, FCR=None, NCPR=None, kappa=No
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     if len(sequence) < 6:
-        raise GooseInputError('Cannot have sequence with a length less than 6')
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
 
     if NCPR != None:
         if NCPR > 1 or NCPR < -1:
@@ -1274,7 +1275,7 @@ def targeted_shuffle_var(sequence, target_aas, attempts=10,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     if len(sequence) < 6:
-        raise GooseInputError('Cannot have sequence with a length less than 6')
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
 
     # make sequence.
     try:
@@ -1282,7 +1283,70 @@ def targeted_shuffle_var(sequence, target_aas, attempts=10,
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence
+
+def weighted_shuffle_var(sequence, target_aas, shuffle_weight=1.0, attempts=10,
+    cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    '''
+    User facing funcitonality to generate variants where
+    you can specify residues or classes of residues to shuffle 
+    along with a weight to dictate how severely to shuffle
+    the sequence.
+    parameters
+    ----------
+    sequence : str
+        The amino acid sequence as a string.
+    target_aas : str or list
+        A list of amino acids to shuffle
+        or a class of amino acids to shuffle
+        Possible target classes:
+        charged : DEKR
+        polar : QNST
+        aromatic : FYW
+        aliphatic : IVLAM
+        negative: DE
+        positive : KR
+        If a list is specified, format should be (for example): 
+        target_aas['K', 'W', 'R', 'Y']
+        
+    shuffle_weight : float
+        a weight between 0.0-1.0 representing the probability of 
+        moving a residue during shuffling
+    attempts : int
+        Specify the number of times to make the sequence. Default is 10. Greater numbers
+        of attempts increase the odds that a sequence will be generated but will increase
+        the duration of attempting to make the sequence. (Optional)
+    cutoff : float
+        the cutoff value for disorder between 0 and 1. 
+        Higher values have a higher likelihood of being disordered. (Optional)
+    strict : bool
+        Whether to use a strict disorder calculation. By default, variants are allowed
+        to have regions below the disorder threshold *for regions where the input sequence
+        is also below the threshold*. (Optional)
     
+    Returns
+    -------
+    Returns the amino acid sequence as a string. 
+    '''
+
+    # make sure that the input sequence is all caps
+    sequence = sequence.upper()
+
+    # check length
+    _length_check(sequence)
+
+    if cutoff > 1 or cutoff < 0:
+        raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
+    if len(sequence) < 6:
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
+
+    # make sequence.
+    try:
+        final_sequence = _gen_weighted_shuffle_variant(sequence, target_aas, shuffle_weight, attempts=attempts, disorder_threshold=cutoff, strict_disorder=strict)
+    except:
+        raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
+    return final_sequence
+
+
 def targeted_reposition_var(sequence, target_aas, attempts=10,
     cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
@@ -1337,7 +1401,7 @@ def targeted_reposition_var(sequence, target_aas, attempts=10,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     if len(sequence) < 6:
-        raise GooseInputError('Cannot have sequence with a length less than 6')
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
 
     # make sequence.
     try:
@@ -1399,7 +1463,7 @@ def excluded_shuffle_var(sequence, exclude_aas, attempts=10,
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     if len(sequence) < 6:
-        raise GooseInputError('Cannot have sequence with a length less than 6')
+        raise goose_exceptions.GooseInputError('Cannot have sequence with a length less than 6')
 
     # make sequence.
     try:

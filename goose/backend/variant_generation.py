@@ -1249,6 +1249,108 @@ def gen_targeted_reposition_variant(sequence, target_aas, attempts=10,
     # if it doesn't work, raise an error
     raise GooseFail('Unable to generate sequence.')
 
+def gen_weighted_shuffle_variant(sequence, target_aas, shuffle_weight, attempts=10, 
+    disorder_threshold=parameters.DISORDER_THRESHOLD, strict_disorder=False):
+    '''
+    function that will let you perform a weighted shuffle a sequence by 
+    specifying residues or classes of residues to shuffle and a weight that
+    corresponds to the degree of shuffling that you want to perform. 
+    The weight is a number between 0.0-1.0 and corresponds to the probability
+    of moving a residue during shuffling. If you specify target amino acids, only
+    those amino acids are included in the shuffling and weighting can still be 
+    applied to only those target amino acids.
+    parameters
+    ----------
+    sequence : str
+        the amino acid sequence as a string
+    target_aas : str or list
+        a list of amino acids to target for shuffling
+        or a class of amino acids to target for shuffling
+        Possible target classes:
+            charged : DEKR
+            polar : QNST
+            aromatic : FYW
+            aliphatic : IVLAM
+            negative: DE
+            positive : KR
+            
+    shuffle_weight : float
+        a weight between 0.0-1.0 representing the probability of 
+        moving a residue during shuffling
+    attempts : int
+        the number of times to try to make the sequence
+    disorder_threshold : float
+        the threshold value required for an amino acid
+        to be considered disordered
+    strict_disorder : Bool
+        whether or not to require all disorder values to be 
+        over threshold or if it is okay to use the values
+        from the input sequence
+    '''
+    # dict of classes that are possible to choose
+    classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
+    ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+
+    # possible amino acids
+    amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+
+    # verify target aas
+    if type(target_aas)==str:
+        if target_aas in amino_acids:
+            raise GooseInputError('You only specified a single amino acid. This will not change your sequence because the amino acids will just change places with itself.')
+        elif target_aas in classdict.keys():
+            target_aas = classdict[target_aas]
+        else:
+            raise GooseInputError('The specified target_aas is not a valid amino acid or class of amino acids.')
+    elif type(target_aas)==list:
+        for i in target_aas:
+            if i not in amino_acids:
+                raise GooseInputError('The specified target_aas is not a valid amino acid.')
+    else:
+        raise GooseInputError('The specified target_aas must be type list or string.')
+
+    # get original sequence disorder
+    starting_disorder = meta.predict_disorder(sequence)    
+
+    # define probabilities of not relocating a residue and relocating a residue, respectively
+    shuffle_weights=[1-shuffle_weight, shuffle_weight]
+
+    # get list of target amino acids from the sequence
+    target_aa_list = [aa for aa in sequence if aa in target_aas]
+
+    # attempt to build sequence
+    for attempt_num in range(0, attempts):
+        # perform weighted sample to determine residues to shuffle
+        target_mask = random.choices([False, True], weights=shuffle_weights, k=len(target_aa_list))
+        mask = [target_mask.pop(0) if aa in target_aas else False for aa in sequence]
+
+        # gather positions and identities of residues to shuffle
+        orig_scramble_positions = [i for i, val in enumerate(mask) if val == True]
+        orig_aas = [sequence[i] for i in orig_scramble_positions]
+
+        # perform Fisher-Yates shuffle only with target_aas marked for shuffling
+        for i in range(len(orig_aas) - 1, 0, -1):
+            remaining_reposition_sites = orig_scramble_positions[:i]
+
+            # randomly select new position for relocation of the target aa
+            new_position = random.choice(remaining_reposition_sites)
+            new_position_index = remaining_reposition_sites.index(new_position)
+
+            # swap positions with another target aa marked for shuffling
+            orig_aas[i], orig_aas[new_position_index] = orig_aas[new_position_index], orig_aas[i]
+
+        # build final seq. Uses shuffled residues at sites marked for repositioning. Otherwise, uses the original residue at that site
+        final_seq = ''.join( [orig_aas.pop(0) if i in orig_scramble_positions else aa for i, aa in enumerate(sequence)] )
+
+        # check disorder
+        if sequence_variant_disorder(final_seq, starting_disorder, 
+            cutoff_val=disorder_threshold, strict=strict_disorder) == True:
+            # if passes the 'disorder test', return the seq
+            return final_seq
+
+    # if it doesn't work, raise an error
+    raise GooseFail('Unable to generate sequence.')
+
 
 def gen_excluded_shuffle_variant(sequence, exclude_aas, attempts=10, 
     disorder_threshold=parameters.DISORDER_THRESHOLD, strict_disorder=False):

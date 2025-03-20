@@ -8,6 +8,7 @@ import logging
 import pickle
 
 import sparrow
+
 from goose import get_data
 from goose.properties import (
     FCR,

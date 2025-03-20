@@ -573,15 +573,11 @@ class Comparison(ProteinProperty):
         object
             This the type of the first parameter of the function passed
         '''
-        # Get type hints for both functions
-        func_hints = get_type_hints(func)
 
         # Ensure the function haa annotations for input
         # if "return" not in func_hints:
         #     raise ValueError(f"The function '{func.__name__}' is missing a return type annotation. Please add typing to your function.")
-        if not func_hints:
-            raise ValueError(f"The function '{func.__name__}' is missing parameter type annotations. Please add typing to your function.")
-        
+
         #obtain the types parameters and types for the output
         func_input_params, a = self._get_function_details(func=func)
 
@@ -608,12 +604,7 @@ class Comparison(ProteinProperty):
         object
             This the type of the return parameter
         '''
-        # Get type hints for both functions
-        func_hints = get_type_hints(func)
 
-        # Ensure the function haa annotations for output
-        if "return" not in func_hints:
-            raise ValueError(f"The function '{func.__name__}' is missing a return type annotation. Please add typing to your function.")
         # if not func_hints:
         #     raise ValueError(f"The function '{func.__name__}' is missing parameter type annotations. Please add typing to your function.")
         
