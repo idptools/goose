@@ -11,13 +11,8 @@ import metapredict as meta
 from goose.backend.sequence_generation_backend import create_seq_by_props, sigma_FCR_NCPR, create_seq_by_fracs
 from goose.backend.seq_by_dimension_backend import build_seq_by_dimensions
 from goose.backend import parameters
-from goose.goose_exceptions import GooseFail, GooseError, GooseInputError
-#from goose.goose_exceptions import GooseError
-from typing import Callable
-import numpy as np
+from goose.goose_exceptions import GooseFail, GooseError
 
-# can probably delete this line
-#from goose.backend.protein import Protein
 
 
 def check_disorder(sequence, disorder_threshold=parameters.DISORDER_THRESHOLD, strict=False):

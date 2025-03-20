@@ -1,6 +1,5 @@
 import random
 import math
-from random import randint
 
 from goose.backend import lists
 from goose.backend.lists import aa_dis_val_4_v3
@@ -8,8 +7,6 @@ from goose.backend.protein import Protein
 from goose.backend.amino_acids import AminoAcid
 from goose.goose_exceptions import GooseError, GooseInputError
 from goose.backend import parameters
-
-import numpy as np
 
 
 
