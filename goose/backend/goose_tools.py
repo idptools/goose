@@ -209,26 +209,6 @@ def check_props_parameters(**kwargs):
             error_message = f'The hydropathy value {curval} is less than the allowed value of {parameters.MINIMUM_HYDRO}'
             raise GooseInputError(error_message)
 
-    # check sigma bounds
-    if kwargs['sigma'] != None:
-        curval = kwargs['sigma']
-        if curval > parameters.MAXIMUM_SIGMA:
-            error_message = f'The sigma value {curval} is greater than the allowed value of {parameters.MAXIMUM_SIGMA}'
-            raise GooseInputError(error_message)
-        if curval < parameters.MINIMUM_SIGMA:
-            error_message = f'The sigma value {curval} is less than the allowed value of {parameters.MINIMUM_SIGMA}'
-            raise GooseInputError(error_message)
-
-        ## Also, make sure if sigma is specified, only sigma is specified
-
-        # make list of other kwargs that can't be additionally specified.
-        forbidden_sigma_kwargs = ['hydropathy', 'FCR', 'NCPR']
-        
-        # iterate through forbiddine kwargs
-        for forbidden_kwarg in forbidden_sigma_kwargs:
-            if kwargs[forbidden_kwarg] != None:
-                error_message = f'If you specify sigma, you cannot specific FCR, hydropathy, or NCPR. You specified {kwargs[forbidden_kwarg]} in addition to sigma.'
-                raise GooseInputError(error_message)
 
     # check FCR and NPCR error
     if kwargs['NCPR'] != None and kwargs['FCR'] != None:
@@ -301,9 +281,11 @@ def check_and_correct_props_kwargs(**kwargs):
     # from the kwargs dict.
     kwargs = remove_None(**kwargs)
 
-    
     # make sure the six essential keywords have been initialized to their default values if they were not provided
-    essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'sigma': None, 'kappa': None, 'attempts':parameters.DEFAULT_ATTEMPTS}
+    essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'kappa': None, 
+                        'attempts':parameters.DEFAULT_ATTEMPTS, 'exclude':None, 'strict_disorder': False,
+                        'metapredict_version': parameters.METAPREDICT_DEFAULT_VERSION, 'return_all_sequences': False, 
+                        'use_weighted_probabilities': False, 'custom_probabilities':None}
     
     for kw in essential_kwargs:
         if kw not in kwargs:

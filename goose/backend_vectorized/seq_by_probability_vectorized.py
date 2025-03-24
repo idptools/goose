@@ -28,7 +28,6 @@ class SequenceParameters:
     target_fcr: Optional[float] = None
     target_ncpr: Optional[float] = None
     num_iterations: int = 1000
-    probabilities: Dict[str, float] = field(default_factory=lambda: DEFAULT_PROBABILITIES.copy())
 
     def __post_init__(self):
         """Initialize parameter ranges and set defaults."""
@@ -104,7 +103,8 @@ class SequenceGenerator:
                  num_iterations=1000,
                  num_sequences: int = 1,
                  use_weighted_probabilities: bool = True,
-                 chosen_probabilities: Dict[str, float] = None):
+                 chosen_probabilities: Dict[str, float] = None,
+                 exclude_residues: List[str] = None):
         """Initialize the sequence generator with specified parameters."""
         self.length = length
         self.fcr = fcr
@@ -119,6 +119,8 @@ class SequenceGenerator:
             self.chosen_probabilities = DEFAULT_PROBABILITIES
         else:
             self.use_weighted_probabilities = False
+
+
 
         # Initialize the amino acid to integer and integer to amino acid mappings
         self.aa_to_int={'A': 0, 'C': 1, 'D': 2, 'E': 3, 'F': 4, 'G': 5, 'H': 6, 'I': 7, 'K': 8, 'L': 9, 'M': 10, 'N': 11, 'P': 12, 'Q': 13, 'R': 14, 'S': 15, 'T': 16, 'V': 17, 'W': 18, 'Y': 19}
@@ -137,7 +139,8 @@ class SequenceGenerator:
                                   ncpr=None,
                                   hydropathy=None,
                                   num_sequences=None,
-                                  num_iterations=None):
+                                  num_iterations=None,
+                                  exclude_residues=None):
         """Generate a batch of parameters, randomizing unspecified values."""
         # Use specified values if provided
         if length is None:
@@ -152,6 +155,12 @@ class SequenceGenerator:
             num_sequences = self.num_sequences
         if num_iterations is None:
             num_iterations = self.num_iterations
+        
+        # get excluded residues as numbers. 
+        if exclude_residues is not None:
+            exclude_residues = [self.aa_to_int[aa] for aa in exclude_residues]
+        else:    
+            exclude_residues = []
         
         # Initialize lists for parameters
         num_negative = []
@@ -223,9 +232,9 @@ class SequenceGenerator:
                     target_ncpr=ncpr,
                     length=length
                 )
-                probs_list = [probs[aa] for aa in range(0,20)]
+                probs_list = [(probs[aa] if aa not in exclude_residues else 0.0) for aa in range(0,20)]
             else:
-                probs_list = [self.chosen_probabilities[aa] for aa in range(0,20)]
+                probs_list = [(self.chosen_probabilities[aa] if aa not in exclude_residues else 0.0) for aa in range(0,20)]
             
             # Get charged residues counts
             pos, neg = SequenceParameters._calculate_charged_residues(fcr, ncpr, length)
@@ -376,7 +385,8 @@ class SequenceGenerator:
                                      hydropathy=None,
                                      num_sequences=None,
                                      num_iterations=None,
-                                     specific_probabilities=None):
+                                     specific_probabilities=None,
+                                     exclude_residues=None):
         """
         Generate amino acid sequences using fully vectorized numpy operations.
         Uses a fixed sequence length for all generated sequences to enable better vectorization.
@@ -397,6 +407,8 @@ class SequenceGenerator:
             Number of iterations for optimization
         specific_probabilities : dict, optional
             Specific probabilities for amino acids (if not using default)
+        exclude_residues : list, optional
+            List of residues to exclude from generation
         Returns:
         --------
         list
@@ -412,6 +424,9 @@ class SequenceGenerator:
         if num_sequences is None:
             num_sequences = self.num_sequences if self.num_sequences is not None else 1
         
+        # if exclude_residues is None, make it an empty list. 
+        if exclude_residues is None:
+            exclude_residues = []
 
         # set sequence_indices to None
         sequences_array=None
@@ -424,16 +439,22 @@ class SequenceGenerator:
             # check if the specific probabilities are in the aa_to_int dictionary
             if list(specific_probabilities.keys())[0] in list(aa_to_int.keys()):
                 for aa in aa_to_int:
-                    if aa in specific_probabilities.keys():
-                        final_probs[aa_to_int[aa]] = specific_probabilities[aa]
-                    # otherwise set to 0
+                    if aa not in exclude_residues:
+                        if aa in specific_probabilities.keys():
+                            final_probs[aa_to_int[aa]] = specific_probabilities[aa]    
+                        # otherwise set to 0
+                        else:
+                            final_probs[aa_to_int[aa]] = 0.0
                     else:
                         final_probs[aa_to_int[aa]] = 0.0
             else:
                 for aa in int_to_aa:
-                    if aa in specific_probabilities.keys():
-                        final_probs[aa] = specific_probabilities[aa]
-                    # otherwise set to 0
+                    if int_to_aa[aa] not in exclude_residues:
+                        if aa in specific_probabilities.keys():
+                            final_probs[aa] = specific_probabilities[aa]
+                        # otherwise set to 0
+                        else:
+                            final_probs[aa] = 0.0
                     else:
                         final_probs[aa] = 0.0
             # now set specific_probabilities to final_probs
@@ -471,14 +492,16 @@ class SequenceGenerator:
             if specific_probabilities is None:
                 num_positive, num_negative, _, probabilities = self._generate_parameter_batch(
                     length=length, fcr=fcr, ncpr=ncpr, hydropathy=hydropathy,
-                    num_sequences=num_sequences, num_iterations=num_iterations
+                    num_sequences=num_sequences, num_iterations=num_iterations,
+                    exclude_residues=exclude_residues
                 )
             else:
                 num_positive, num_negative, _, _ = self._generate_parameter_batch(
                     length=length, fcr=fcr, ncpr=ncpr, hydropathy=hydropathy,
-                    num_sequences=num_sequences, num_iterations=num_iterations
+                    num_sequences=num_sequences, num_iterations=num_iterations,
+                    exclude_residues=exclude_residues
                 )
-        
+
             # Create 2D array where rows are sequences and columns are positions
             sequences_array = np.zeros((num_sequences, length), dtype=int)
             
@@ -504,12 +527,24 @@ class SequenceGenerator:
                 
                 sequences_array[i] = seq
 
+            self.int_to_aa={0: 'A', 1: 'C', 2: 'D', 3: 'E', 4: 'F', 5: 'G', 6: 'H', 7: 'I', 8: 'K', 9: 'L', 10: 'M', 11: 'N', 12: 'P', 13: 'Q', 14: 'R', 15: 'S', 16: 'T', 17: 'V', 18: 'W', 19: 'Y'}
+            if 'E' in exclude_residues:
+                self.negative_indices = np.array([2])
+            if 'D' in exclude_residues:
+                self.negative_indices = np.array([3])
+            if 'R' in exclude_residues:
+                self.positive_indices = np.array([8])
+            if 'K' in exclude_residues:
+                self.positive_indices = np.array([14])
+
             # Now fill in the actual amino acids based on charge patterns
             for i in range(num_sequences):
                 # Get masks for different charge types
                 pos_mask = sequences_array[i] == 1
                 neg_mask = sequences_array[i] == -1
                 neutral_mask = sequences_array[i] == 0
+
+                
                 
                 # Fill positive positions with positive amino acids
                 pos_count = np.sum(pos_mask)

@@ -116,6 +116,7 @@ def generate_seq_by_props(length,
                            ncpr=None, 
                            hydropathy=None, 
                            kappa=None, 
+                           exclude_residues=None,
                            num_attempts=100,
                            strict_disorder=False,
                            hydropathy_tolerance = 0.05,
@@ -143,6 +144,8 @@ def generate_seq_by_props(length,
         Hydropathy value to generate sequences with
     kappa : float
         Kappa value to generate sequences with
+    exclude_residues : list
+        List of residues to exclude from the sequence
     num_attempts : int
         Number of attempts to make a sequence
     strict_disorder : bool
@@ -185,14 +188,14 @@ def generate_seq_by_props(length,
 
     # initialize the sequence generators
     seq_gen = SequenceGenerator( 
-                 use_weighted_probabilities=use_weighted_probabilities,
-                 chosen_probabilities = chosen_probabilities)
+                 use_weighted_probabilities=use_weighted_probabilities)
     
     # iterate over the number of attempts
     for _ in range(num_attempts):
         # generate starter sequences with specified properties
         seqs = seq_gen.generate_sequences_vectorized(length, fcr=fcr, ncpr=ncpr, hydropathy=hydropathy, num_sequences=batch_size,
-                                                     specific_probabilities=chosen_probabilities)
+                                                     specific_probabilities=chosen_probabilities,
+                                                     exclude_residues=exclude_residues)
 
         # if hydropathy is not None, we need to optimize hydropathy. This will only return seqs within tolerance.
         if hydropathy is not None:
@@ -206,7 +209,8 @@ def generate_seq_by_props(length,
                                                 preserve_charged=preserve_charge, 
                                                 tolerance=hydropathy_tolerance,
                                                 return_when_num_hit=250,
-                                                only_return_within_tolernace=True)
+                                                only_return_within_tolernace=True,
+                                                exclude_residues=exclude_residues)
         # make sure we still have sequences
         if len(seqs) == 0:
             continue

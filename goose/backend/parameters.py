@@ -5,6 +5,8 @@ Can change parameters here and it will change paramters in GOOSE globally
 # need this for the min and max Rg / Re functions
 import statistics as stat
 
+METAPREDICT_DEFAULT_VERSION = 3
+
 MINIMUM_LENGTH = 10
 MAXIMUM_LENGTH = 10000
 MINIMUM_FCR = 0

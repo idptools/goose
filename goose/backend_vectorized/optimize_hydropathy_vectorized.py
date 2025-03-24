@@ -38,7 +38,8 @@ def optimize_hydropathy_vectorized(
     tolerance: float = 0.05,
     batch_size: int = 10, 
     only_return_within_tolernace: bool = False,
-    return_when_num_hit=None) -> List[str]:
+    return_when_num_hit=None,
+    exclude_residues=None) -> List[str]:
     """
     Fully vectorized approach to optimize protein sequences to match a target hydropathy.
     Processes all sequences in parallel and modifies them in batches.
@@ -62,6 +63,8 @@ def optimize_hydropathy_vectorized(
         default is False
     return_when_num_hit : int
         If specified, return when this number of sequences are within tolerance
+    exclude_residues : list
+        List of residues to exclude from optimization
         
     Returns:
     --------
@@ -86,6 +89,11 @@ def optimize_hydropathy_vectorized(
                 'K': 8, 'L': 9, 'M': 10, 'N': 11, 'P': 12, 'Q': 13, 'R': 14, 
                 'S': 15, 'T': 16, 'V': 17, 'W': 18, 'Y': 19}
     int_to_aa = {v: k for k, v in aa_to_int.items()}
+    
+    # Process exclude_residues parameter
+    excluded_indices = np.array([], dtype=int)
+    if exclude_residues is not None:
+        excluded_indices = np.array([aa_to_int[aa] for aa in exclude_residues if aa in aa_to_int])
     
     # Check if all sequences have the same length for optimal vectorization
     seq_lens = np.array([len(seq) for seq in sequences])
@@ -162,11 +170,17 @@ def optimize_hydropathy_vectorized(
                     candidates = np.where(hydro_lookup[current_aa])[0]
                     if preserve_charged:
                         candidates = candidates[~np.isin(candidates, charged_indices)]
+                    # Exclude specified residues
+                    if len(excluded_indices) > 0:
+                        candidates = candidates[~np.isin(candidates, excluded_indices)]
                 else:
                     # Need lower hydropathy
                     candidates = np.where(~hydro_lookup[current_aa])[0]
                     if preserve_charged:
                         candidates = candidates[~np.isin(candidates, charged_indices)]
+                    # Exclude specified residues
+                    if len(excluded_indices) > 0:
+                        candidates = candidates[~np.isin(candidates, excluded_indices)]
                     
                 # Remove self from candidates
                 candidates = candidates[candidates != current_aa]
