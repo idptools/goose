@@ -117,6 +117,8 @@ class SequenceGenerator:
         # If no probabilities are provided, use the default
         if chosen_probabilities is None:
             self.chosen_probabilities = DEFAULT_PROBABILITIES
+        else:
+            self.use_weighted_probabilities = False
 
         # Initialize the amino acid to integer and integer to amino acid mappings
         self.aa_to_int={'A': 0, 'C': 1, 'D': 2, 'E': 3, 'F': 4, 'G': 5, 'H': 6, 'I': 7, 'K': 8, 'L': 9, 'M': 10, 'N': 11, 'P': 12, 'Q': 13, 'R': 14, 'S': 15, 'T': 16, 'V': 17, 'W': 18, 'Y': 19}
@@ -553,30 +555,3 @@ class SequenceGenerator:
         
         return sequences
 
-'''
-
-EXAMPLE USAGE
-
-
-generator = SequenceGenerator()
-import time
-from sparrow.protein import Protein as pr
-start=time.time()
-seqs=generator.generate_sequences_vectorized(100, fcr=0.2, ncpr=None, hydropathy=3, num_sequences=10, specific_probabilities=aa_probs.HumanProbabilities)
-for i in seqs:
-    print(f'FCR={round(pr(i).FCR,3)}, NCPR={round(pr(i).NCPR,3)}, Hydro={round(pr(i).hydrophobicity,3)}, length={len(i)}')
-print(time.time()-start)
-
-'''
-
-import time
-start=time.time()
-generator = SequenceGenerator()
-seqs=generator.generate_sequences_vectorized(50, fcr=0.2, ncpr=0.1, hydropathy=3, num_sequences=10)
-print(seqs)
-print(f'Generated 10 sequences 50 amino acids long in {round(time.time()-start,4)} seconds.')
-
-from sparrow import Protein as pr
-
-for i in seqs:
-    print(f'FCR={round(pr(i).FCR,3)}, NCPR={round(pr(i).NCPR,3)}, Hydro={round(pr(i).hydrophobicity,3)}, length={len(i)}')

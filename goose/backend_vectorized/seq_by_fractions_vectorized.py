@@ -14,7 +14,7 @@ AMINO_ACIDS_LIST = list(AMINO_ACIDS)
 CHARGED_RESIDUES = "DEKR"
 POSITIVE_CHARGED = "KR"
 NEGATIVE_CHARGED = "DE"
-DEFAULT_REMAINING_PROBABILITIES = aa_probs.HumanProbabilities
+DEFAULT_REMAINING_PROBABILITIES = aa_probs.HumanProbabilitiesByAA
 
 @dataclass
 class SequenceParametersByFractions:
@@ -30,14 +30,16 @@ class SequenceParametersByFractions:
         randomize_unspecified (bool): Whether to randomize unspecified fractions
         normalize (bool): Whether to normalize fractions to sum to 1.0
         strict (bool): Whether to strictly enforce specified fractions
+        default_remaining_probabilities (Dict[str, float]): Probability distribution 
+            used for unspecified amino acids when randomize_unspecified is False
     """
     length: int
     fractions: Dict[str, float] = field(default_factory=dict)
     randomize_unspecified: bool = False
     normalize: bool = True
     strict: bool = True  # Controls whether specified fractions must be preserved exactly
+    default_remaining_probabilities: Dict[str, float] = field(default_factory=lambda: DEFAULT_REMAINING_PROBABILITIES)
     
-
     def __post_init__(self):
         """Validate and normalize the amino acid fractions."""
         # Make sure we're working with a copy
@@ -51,6 +53,14 @@ class SequenceParametersByFractions:
                 valid_fractions[aa] = fraction
         
         self.fractions = valid_fractions
+        
+        # Validate default_remaining_probabilities
+        valid_default_probs = {}
+        for aa, prob in self.default_remaining_probabilities.items():
+            aa = aa.upper()
+            if aa in AMINO_ACIDS and prob >= 0:
+                valid_default_probs[aa] = prob
+        self.default_remaining_probabilities = valid_default_probs
         
         # Calculate sum of specified fractions
         specified_sum = sum(self.fractions.values())
@@ -89,24 +99,28 @@ class SequenceParametersByFractions:
                         for i, aa in enumerate(unspecified):
                             self.fractions[aa] = random_values[i]
                     else:
-                        # Distribute using normalized DEFAULT_REMAINING_PROBABILITIES
-                        # Calculate sum of DEFAULT_REMAINING_PROBABILITIES for unspecified amino acids
-                        unspec_prob_sum = sum(DEFAULT_REMAINING_PROBABILITIES.get(aa, 0) for aa in unspecified)
+                        # Distribute using normalized default_remaining_probabilities
+                        # Calculate sum of default_remaining_probabilities for unspecified amino acids
+                        unspec_prob_sum = sum(self.default_remaining_probabilities.get(aa, 0) for aa in unspecified)
                         
                         # Distribute with normalization
                         if unspec_prob_sum > 0:
                             for aa in unspecified:
-                                self.fractions[aa] = (DEFAULT_REMAINING_PROBABILITIES.get(aa, 0) / unspec_prob_sum) * remaining
+                                self.fractions[aa] = (self.default_remaining_probabilities.get(aa, 0) / unspec_prob_sum) * remaining
                         else:
                             # Fallback to even distribution if no probabilities available
                             per_aa = remaining / len(unspecified)
                             for aa in unspecified:
                                 self.fractions[aa] = per_aa
                 
-                # If all amino acids are specified but sum < 1.0, we have a problem
+                # If all amino acids are specified but sum < 1.0, normalize instead of raising error
                 elif specified_sum < 0.999:  # Allow for small floating point errors
-                    raise ValueError(f"All amino acids are specified but their fractions sum to {specified_sum}, "
-                                     f"which is less than 1.0. Please correct the fractions.")
+                    if self.normalize:
+                        for aa in self.fractions:
+                            self.fractions[aa] /= specified_sum
+                    else:
+                        raise ValueError(f"All amino acids are specified but their fractions sum to {specified_sum}, "
+                                         f"which is less than 1.0. Please correct the fractions or set normalize=True.")
             else:
                 # In non-strict mode, scale everything if sum > 1.0
                 if specified_sum > 1.0:
@@ -127,43 +141,21 @@ class SequenceParametersByFractions:
                         for i, aa in enumerate(unspecified):
                             self.fractions[aa] = random_values[i]
                     else:
-                        # Distribute using normalized DEFAULT_REMAINING_PROBABILITIES
-                        # Calculate sum of DEFAULT_REMAINING_PROBABILITIES for unspecified amino acids
-                        unspec_prob_sum = sum(DEFAULT_REMAINING_PROBABILITIES.get(aa, 0) for aa in unspecified)
+                        # Distribute using normalized default_remaining_probabilities
+                        # Calculate sum of default_remaining_probabilities for unspecified amino acids
+                        unspec_prob_sum = sum(self.default_remaining_probabilities.get(aa, 0) for aa in unspecified)
                         
                         # Distribute with normalization
                         if unspec_prob_sum > 0:
                             for aa in unspecified:
-                                self.fractions[aa] = (DEFAULT_REMAINING_PROBABILITIES.get(aa, 0) / unspec_prob_sum) * remaining
+                                self.fractions[aa] = (self.default_remaining_probabilities.get(aa, 0) / unspec_prob_sum) * remaining
                         else:
                             # Fallback to even distribution if no probabilities available
                             per_aa = remaining / len(unspecified)
                             for aa in unspecified:
                                 self.fractions[aa] = per_aa
-        
-        # Calculate derived properties
-        self._calculate_properties()
-    
-    def _calculate_properties(self):
-        """Calculate sequence properties based on specified fractions."""
-        # Calculate FCR (Fraction of Charged Residues)
-        self.fcr = sum(self.fractions.get(aa, 0) for aa in CHARGED_RESIDUES)
-        
-        # Calculate NCPR (Net Charge Per Residue)
-        positive = sum(self.fractions.get(aa, 0) for aa in POSITIVE_CHARGED)
-        negative = sum(self.fractions.get(aa, 0) for aa in NEGATIVE_CHARGED)
-        self.ncpr = positive - negative
-        
-        # Calculate expected hydropathy (simplified calculation)
-        hydropathy_scale = {
-            'A': 1.8, 'C': 2.5, 'D': -3.5, 'E': -3.5, 'F': 2.8,
-            'G': -0.4, 'H': -3.2, 'I': 4.5, 'K': -3.9, 'L': 3.8,
-            'M': 1.9, 'N': -3.5, 'P': -1.6, 'Q': -3.5, 'R': -4.5,
-            'S': -0.8, 'T': -0.7, 'V': 4.2, 'W': -0.9, 'Y': -1.3
-        }
-        
-        self.hydropathy = sum(self.fractions.get(aa, 0) * hydropathy_scale.get(aa, 0) 
-                             for aa in AMINO_ACIDS)
+
+
     
     def get_fraction_array(self):
         """Convert fractions dictionary to a numpy array in AMINO_ACIDS order."""
@@ -174,9 +166,6 @@ class SequenceParametersByFractions:
         fractions_str = ', '.join(f"{aa}:{self.fractions.get(aa, 0):.3f}" 
                                 for aa in sorted(self.fractions.keys()))
         
-        return (f"SequenceParametersByFractions(length={self.length}, "
-                f"FCR={self.fcr:.3f}, NCPR={self.ncpr:.3f}, hydropathy={self.hydropathy:.3f}, "
-                f"fractions={{{fractions_str}}})")
 
 
 class FractionBasedSequenceGenerator:
@@ -188,7 +177,8 @@ class FractionBasedSequenceGenerator:
                  fractions: Optional[Dict[str, float]] = None,
                  randomize_unspecified: bool = True,
                  normalize: bool = True,
-                 strict: bool = True):
+                 strict: bool = True,
+                 default_remaining_probabilities: Optional[Dict[str, float]] = None):
         """
         Initialize the sequence generator.
         
@@ -198,12 +188,18 @@ class FractionBasedSequenceGenerator:
             randomize_unspecified (bool): Whether to randomize unspecified fractions
             normalize (bool): Whether to normalize fractions to sum to 1.0
             strict (bool): Whether to strictly enforce specified fractions
+            default_remaining_probabilities (Dict[str, float], optional): Probability
+                distribution used for unspecified amino acids
         """
         self.length = length
         self.fractions = fractions if fractions else {}
         self.randomize_unspecified = randomize_unspecified
         self.normalize = normalize
         self.strict = strict
+        if default_remaining_probabilities is None:
+            self.default_remaining_probabilities = DEFAULT_REMAINING_PROBABILITIES
+        else:
+            self.default_remaining_probabilities = default_remaining_probabilities
         
         # Create a mapping from amino acid to index
         self.aa_to_idx = {aa: i for i, aa in enumerate(AMINO_ACIDS)}
@@ -213,7 +209,8 @@ class FractionBasedSequenceGenerator:
                           num_sequences: int = 1, 
                           length: Optional[int] = None,
                           fractions: Optional[Dict[str, float]] = None,
-                          strict: Optional[bool] = None) -> List[str]:
+                          strict: Optional[bool] = None,
+                          default_remaining_probabilities: Optional[Dict[str, float]] = None) -> List[str]:
         """
         Generate protein sequences using the specified amino acid fractions.
         
@@ -222,14 +219,24 @@ class FractionBasedSequenceGenerator:
             length (int, optional): Length of sequences to generate (overrides init value)
             fractions (Dict[str, float], optional): Amino acid fractions (overrides init value)
             strict (bool, optional): Whether to strictly enforce specified fractions
+            default_remaining_probabilities (Dict[str, float], optional): Probability
+                distribution used for unspecified amino acids
             
         Returns:
             List[str]: List of generated protein sequences
         """
+        # Validate input parameters
+        if num_sequences <= 0:
+            raise ValueError(f"num_sequences must be positive, got {num_sequences}")
+            
         # Use provided values or fall back to initialized values
         use_length = length if length is not None else self.length
+        if use_length is None or use_length <= 0:
+            raise ValueError(f"Sequence length must be positive, got {use_length}")
+            
         use_fractions = fractions if fractions is not None else self.fractions
         use_strict = strict if strict is not None else self.strict
+        use_default_probs = default_remaining_probabilities if default_remaining_probabilities is not None else self.default_remaining_probabilities
         
         # Create parameters object
         params = SequenceParametersByFractions(
@@ -237,7 +244,8 @@ class FractionBasedSequenceGenerator:
             fractions=use_fractions,
             randomize_unspecified=self.randomize_unspecified,
             normalize=self.normalize,
-            strict=use_strict
+            strict=use_strict,
+            default_remaining_probabilities=use_default_probs
         )
         
         # Add warning for very short sequences when many amino acids are specified

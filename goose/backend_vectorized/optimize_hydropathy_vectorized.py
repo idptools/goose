@@ -35,139 +35,10 @@ def optimize_hydropathy_vectorized(
     target_hydropathy: float, 
     preserve_charged: bool = True,
     max_iterations: int = 100,
-    tolerance: float = 0.05) -> List[str]:
-    """
-    Efficiently optimize protein sequences to match a target mean hydropathy value
-    using vectorized operations.
-    
-    Parameters:
-    -----------
-    sequences : list of str or numpy.ndarray
-        Input sequences to optimize (can be a single sequence or multiple)
-    target_hydropathy : float
-        Target mean hydropathy value to achieve
-    preserve_charged : bool, optional (default=True)
-        If True, charged residues (D, E, K, R) will not be modified
-    max_iterations : int, optional (default=100)
-        Maximum number of optimization iterations per sequence
-    tolerance : float, optional (default=0.05)
-        Acceptable difference between achieved and target hydropathy
-        
-    Returns:
-    --------
-    list
-        Optimized sequences with hydropathy values close to target
-    """
-    # Convert single string to list if needed
-    if isinstance(sequences, str):
-        sequences = [sequences]
-    
-    # Convert to numpy array if not already
-    if not isinstance(sequences, np.ndarray):
-        sequences = np.array(sequences)
-    
-    # Create amino acid mappings
-    aa_to_int = {'A': 0, 'C': 1, 'D': 2, 'E': 3, 'F': 4, 'G': 5, 'H': 6, 'I': 7, 
-                'K': 8, 'L': 9, 'M': 10, 'N': 11, 'P': 12, 'Q': 13, 'R': 14, 
-                'S': 15, 'T': 16, 'V': 17, 'W': 18, 'Y': 19}
-    int_to_aa = {v: k for k, v in aa_to_int.items()}
-    
-    # Convert all sequences to integer matrices at once
-    seq_matrices = []
-    for seq in sequences:
-        seq_matrices.append(np.array([aa_to_int[aa] for aa in seq]))
-    
-    # Identify charged and uncharged residues
-    charged_indices = np.array([2, 3, 8, 14])  # D, E, K, R
-    uncharged_indices = np.array([i for i in range(20) if i not in charged_indices])
-    
-    # Sort amino acids by hydropathy
-    sorted_aa_by_hydro = np.argsort(HYDROPATHY_SCALE)
-    
-    # Create maps for amino acid substitution based on hydropathy
-    # For each amino acid, find replacements that increase or decrease hydropathy
-    increase_hydro_map = {}
-    decrease_hydro_map = {}
-    
-    for aa_idx in range(20):
-        current_hydro = HYDROPATHY_SCALE[aa_idx]
-        
-        # Get replacements that would increase hydropathy
-        higher_hydro = sorted_aa_by_hydro[HYDROPATHY_SCALE[sorted_aa_by_hydro] > current_hydro]
-        if len(higher_hydro) == 0:
-            higher_hydro = sorted_aa_by_hydro[HYDROPATHY_SCALE[sorted_aa_by_hydro] >= current_hydro]
-        increase_hydro_map[aa_idx] = higher_hydro
-        
-        # Get replacements that would decrease hydropathy
-        lower_hydro = sorted_aa_by_hydro[HYDROPATHY_SCALE[sorted_aa_by_hydro] < current_hydro]
-        if len(lower_hydro) == 0:
-            lower_hydro = sorted_aa_by_hydro[HYDROPATHY_SCALE[sorted_aa_by_hydro] <= current_hydro]
-        decrease_hydro_map[aa_idx] = lower_hydro
-    
-    # Process sequences in parallel batches
-    for iteration in range(max_iterations):
-        # Calculate hydropathy for all sequences simultaneously
-        hydropathy_scores = calculate_hydropathy_batch(seq_matrices)
-        
-        # Check which sequences are already within tolerance
-        delta = hydropathy_scores - target_hydropathy
-        within_tolerance = np.abs(delta) <= tolerance
-        
-        # If all sequences are within tolerance, we're done
-        if np.all(within_tolerance):
-            break
-        
-        # Process each sequence that needs adjustment
-        for i, (seq_array, hydro_score) in enumerate(zip(seq_matrices, hydropathy_scores)):
-            if within_tolerance[i]:
-                continue  # Skip sequences that are already good
-            
-            # Determine if we need to increase or decrease hydropathy
-            increase_needed = hydro_score < target_hydropathy
-            
-            # Find positions that can be modified
-            if preserve_charged:
-                mutable_mask = ~np.isin(seq_array, charged_indices)
-            else:
-                mutable_mask = np.ones_like(seq_array, dtype=bool)
-                
-            # Get modifiable positions
-            mutable_positions = np.where(mutable_mask)[0]
-            if len(mutable_positions) == 0:
-                continue  # Can't modify this sequence
-            
-            # Choose a random position to modify
-            mod_position = np.random.choice(mutable_positions)
-            current_aa = seq_array[mod_position]
-            
-            # Choose appropriate replacement based on whether we need to increase or decrease
-            if increase_needed:
-                candidate_aas = increase_hydro_map[current_aa]
-            else:
-                candidate_aas = decrease_hydro_map[current_aa]
-                
-            # Filter out charged residues if preserving charge
-            if preserve_charged:
-                candidate_aas = candidate_aas[~np.isin(candidate_aas, charged_indices)]
-                
-            if len(candidate_aas) > 0:
-                # Replace the amino acid
-                replacement = np.random.choice(candidate_aas)
-                seq_matrices[i][mod_position] = replacement
-    
-    # Convert integer arrays back to sequences
-    optimized_sequences = [''.join([int_to_aa[idx] for idx in seq]) for seq in seq_matrices]
-    
-    return optimized_sequences
-
-
-def optimize_hydropathy_fully_vectorized(
-    sequences: Union[List[str], np.ndarray],
-    target_hydropathy: float, 
-    preserve_charged: bool = True,
-    max_iterations: int = 100,
     tolerance: float = 0.05,
-    batch_size: int = 10) -> List[str]:
+    batch_size: int = 10, 
+    only_return_within_tolernace: bool = False,
+    return_when_num_hit=None) -> List[str]:
     """
     Fully vectorized approach to optimize protein sequences to match a target hydropathy.
     Processes all sequences in parallel and modifies them in batches.
@@ -186,6 +57,11 @@ def optimize_hydropathy_fully_vectorized(
         Acceptable difference between achieved and target hydropathy
     batch_size : int
         Number of positions to modify in each sequence per iteration
+    only_return_within_tolernace : bool
+        If True, only return sequences that are within the tolerance
+        default is False
+    return_when_num_hit : int
+        If specified, return when this number of sequences are within tolerance
         
     Returns:
     --------
@@ -197,6 +73,13 @@ def optimize_hydropathy_fully_vectorized(
         sequences = [sequences]
     if not isinstance(sequences, np.ndarray):
         sequences = np.array(sequences)
+
+    if return_when_num_hit is not None:
+        only_return_within_tolernace = True
+        if return_when_num_hit > len(sequences):
+            return_when_num_hit = len(sequences)        
+    else:
+        return_when_num_hit = len(sequences)
     
     # Create amino acid mappings
     aa_to_int = {'A': 0, 'C': 1, 'D': 2, 'E': 3, 'F': 4, 'G': 5, 'H': 6, 'I': 7, 
@@ -228,7 +111,7 @@ def optimize_hydropathy_fully_vectorized(
             hydro_lookup[i, j] = HYDROPATHY_SCALE[j] > HYDROPATHY_SCALE[i]
     
     # Main optimization loop
-    for iteration in range(max_iterations):
+    for _ in range(max_iterations):
         # Calculate current hydropathy for all sequences
         if same_length:
             # For same-length sequences, we can use advanced vectorization
@@ -240,9 +123,9 @@ def optimize_hydropathy_fully_vectorized(
         # Check which sequences are within tolerance
         delta = current_hydro - target_hydropathy
         within_tolerance = np.abs(delta) <= tolerance
-        
-        # If all sequences are within tolerance, we're done
-        if np.all(within_tolerance):
+
+        # if return_when_num_hit is specified, check if we have enough sequences within tolerance
+        if np.sum(within_tolerance) >= return_when_num_hit:
             break
         
         # Get sequences that need modification
@@ -295,6 +178,14 @@ def optimize_hydropathy_fully_vectorized(
                         seq_matrices[i, pos] = replacement
                     else:
                         seq_matrices[i][pos] = replacement
+
+    # if we only want to return sequences within tolerance, filter them
+    if only_return_within_tolernace:
+        # calulate hydropathy for all sequences using matrices
+        hydropathy_scores = calculate_hydropathy_batch(seq_matrices)
+        within_tolerance = np.abs(hydropathy_scores - target_hydropathy) <= tolerance
+        seq_matrices = seq_matrices[within_tolerance]
+
     
     # Convert optimized sequences back to strings
     if same_length and isinstance(seq_matrices, np.ndarray):
@@ -303,5 +194,4 @@ def optimize_hydropathy_fully_vectorized(
         optimized_sequences = [''.join([int_to_aa[idx] for idx in seq]) for seq in seq_matrices]
     
     return optimized_sequences
-
 

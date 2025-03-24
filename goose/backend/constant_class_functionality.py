@@ -3,15 +3,8 @@ backend code for generating sequence variants where it is necessary to keep the
 classes of amino acids in the sequence the same
 '''
 
-
-import math
 import random
 from random import randint
-
-from goose.backend.amino_acids import AminoAcid
-
-
-from metapredict import meta
 
 # standard amino acids
 amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']

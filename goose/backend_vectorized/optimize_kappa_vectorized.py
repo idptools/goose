@@ -53,7 +53,7 @@ def decrease_charge_asymmetry(sequences, iterations):
     """
     Iteratively decreases charge asymmetry in sequences by creating more evenly
     distributed alternating patterns of positive and negative charges.
-    Optimized version with faster performance.
+    Heavily optimized version for faster performance, especially for low kappa targets.
 
     Args:
         sequences (np.array): A NxL shaped array of sequences with values -1, 0, 1.
@@ -62,134 +62,146 @@ def decrease_charge_asymmetry(sequences, iterations):
     Returns:
         list: A list of intermediate sequences at each iteration, including the initial sequences.
     """
-    intermediate_sequences = [sequences.copy()]  # Store initial sequences
+    # Only store initial and final sequences if iterations are high
+    store_intermediates = iterations <= 20
+    intermediate_sequences = [sequences.copy()] if store_intermediates else [sequences.copy()]
     current_sequences = sequences.copy()
     num_sequences = current_sequences.shape[0]
     
-    # Pre-allocate random values for performance
-    strategy2_mask = np.random.random(size=(iterations, num_sequences)) < 0.5
-    strategy3_mask = np.random.random(size=(iterations, num_sequences)) < 0.3
-
+    # Pre-generate all random values at once
+    strategy_probs = np.random.random(size=(iterations, num_sequences, 3))
+    random_positions = np.random.random(size=(iterations, num_sequences, 2))
+    
+    # Pre-allocate arrays for efficiency
+    sequence_buffer = np.zeros_like(current_sequences)
+    
     for iter_idx in range(iterations):
-        updated_sequences = current_sequences.copy()
-        
+        # Efficient batch processing - process all sequences at once where possible
         for i in range(num_sequences):
-            sequence = updated_sequences[i]
+            sequence = current_sequences[i]
             seq_length = len(sequence)
             
-            # Find charged residues only once
-            positive_indices = np.where(sequence == 1)[0]
-            negative_indices = np.where(sequence == -1)[0]
+            # Find positive and negative charges once
+            pos_mask = sequence == 1
+            neg_mask = sequence == -1
+            positive_indices = np.where(pos_mask)[0]
+            negative_indices = np.where(neg_mask)[0]
             
-            # Skip if there aren't enough charges to work with
             if positive_indices.size < 1 or negative_indices.size < 1:
                 continue
             
-            # Strategy 1: Break up clusters of like charges - optimized approach
-            if positive_indices.size > 1:
-                # Find clusters by checking for adjacent positions
-                adjacent_pos = np.where(np.diff(positive_indices) == 1)[0]
-                
-                for adj_idx in adjacent_pos:
-                    pos_idx = positive_indices[adj_idx + 1]  # Second position in the adjacent pair
-                    
-                    if negative_indices.size > 0:
-                        # Vectorized check for suitable negative charges
-                        valid_neg = np.ones(negative_indices.size, dtype=bool)
-                        
-                        # Check if negative charge has positive neighbors
-                        for neg_offset in [-1, 1]:
-                            neg_neighbors = negative_indices + neg_offset
-                            in_bounds = (neg_neighbors >= 0) & (neg_neighbors < seq_length)
-                            has_pos_neighbor = np.zeros(negative_indices.size, dtype=bool)
-                            
-                            for k in range(negative_indices.size):
-                                if in_bounds[k]:
-                                    if sequence[neg_neighbors[k]] == 1:
-                                        has_pos_neighbor[k] = True
-                            
-                            valid_neg = valid_neg & ~has_pos_neighbor
-                        
-                        valid_neg_indices = np.where(valid_neg)[0]
-                        if valid_neg_indices.size > 0:
-                            # Choose first valid negative index
-                            neg_idx = negative_indices[valid_neg_indices[0]]
-                            # Swap
-                            sequence[pos_idx], sequence[neg_idx] = sequence[neg_idx], sequence[pos_idx]
-                            break
+            # Fast strategy selection based on pre-generated random values
+            strategy_selector = strategy_probs[iter_idx, i, 0]
             
-            if negative_indices.size > 1:
-                # Find clusters by checking for adjacent positions
-                adjacent_neg = np.where(np.diff(negative_indices) == 1)[0]
+            # STRATEGY 1: Perfect charge alternation (very effective for low kappa)
+            # This strategy focuses on creating perfect alternation of + and - charges
+            if strategy_selector < 0.4:  # Higher probability for this strategy
+                # Create ideal alternating positions
+                ideal_positions = np.zeros(seq_length, dtype=bool)
                 
-                for adj_idx in adjacent_neg:
-                    neg_idx = negative_indices[adj_idx + 1]  # Second position in the adjacent pair
-                    
-                    if positive_indices.size > 0:
-                        # Vectorized check for suitable positive charges
-                        valid_pos = np.ones(positive_indices.size, dtype=bool)
-                        
-                        # Check if positive charge has negative neighbors
-                        for pos_offset in [-1, 1]:
-                            pos_neighbors = positive_indices + pos_offset
-                            in_bounds = (pos_neighbors >= 0) & (pos_neighbors < seq_length)
-                            has_neg_neighbor = np.zeros(positive_indices.size, dtype=bool)
-                            
-                            for k in range(positive_indices.size):
-                                if in_bounds[k]:
-                                    if sequence[pos_neighbors[k]] == -1:
-                                        has_neg_neighbor[k] = True
-                            
-                            valid_pos = valid_pos & ~has_neg_neighbor
-                        
-                        valid_pos_indices = np.where(valid_pos)[0]
-                        if valid_pos_indices.size > 0:
-                            # Choose first valid positive index
-                            pos_idx = positive_indices[valid_pos_indices[0]]
-                            # Swap
-                            sequence[neg_idx], sequence[pos_idx] = sequence[pos_idx], sequence[neg_idx]
-                            break
+                # Calculate total charges
+                total_charges = positive_indices.size + negative_indices.size
+                
+                # Create alternating pattern for charged residues
+                spaced_positions = np.linspace(0, seq_length-1, total_charges).astype(int)
+                
+                # Get current charged positions (both + and -)
+                current_charged = np.sort(np.concatenate([positive_indices, negative_indices]))
+                
+                # Try to move charged residues to be evenly spaced
+                # This greatly helps achieve very low kappa values
+                if spaced_positions.size == current_charged.size:
+                    # Find positions that need to be swapped
+                    for pos_old, pos_new in zip(current_charged, spaced_positions):
+                        if pos_old != pos_new and sequence[pos_old] != 0 and sequence[pos_new] == 0:
+                            # Do the swap
+                            sequence[pos_new] = sequence[pos_old]
+                            sequence[pos_old] = 0
+                            break  # Only do one swap per iteration for stability
             
-            # Strategy 2: Create alternating patterns
-            if strategy2_mask[iter_idx, i] and positive_indices.size > 0 and negative_indices.size > 0:
-                # Choose indices randomly but only once
-                pos_idx_idx = np.random.randint(positive_indices.size)
-                neg_idx_idx = np.random.randint(negative_indices.size)
-                pos_idx = positive_indices[pos_idx_idx]
-                neg_idx = negative_indices[neg_idx_idx]
+            # STRATEGY 2: Break clusters of like charges (original optimized strategy)
+            elif strategy_selector < 0.7:
+                # Find clusters efficiently using vectorization
+                if positive_indices.size > 1:
+                    # Get adjacent positive charges
+                    pos_clusters = np.where(np.diff(positive_indices) == 1)[0]
+                    
+                    if pos_clusters.size > 0:
+                        # Take first cluster
+                        pos_idx = positive_indices[pos_clusters[0] + 1]
+                        
+                        # Find neutral position to swap with
+                        neutral_positions = np.where(sequence == 0)[0]
+                        
+                        if neutral_positions.size > 0:
+                            # Prefer positions adjacent to negative charges
+                            good_positions = []
+                            for neut_pos in neutral_positions:
+                                # Check if adjacent to a negative charge
+                                has_neg_neighbor = False
+                                if neut_pos > 0 and sequence[neut_pos-1] == -1:
+                                    has_neg_neighbor = True
+                                elif neut_pos < seq_length-1 and sequence[neut_pos+1] == -1:
+                                    has_neg_neighbor = True
+                                
+                                if has_neg_neighbor:
+                                    good_positions.append(neut_pos)
+                            
+                            # If found good position, swap
+                            if good_positions:
+                                neut_idx = good_positions[0]
+                                sequence[pos_idx], sequence[neut_idx] = sequence[neut_idx], sequence[pos_idx]
                 
-                # Check if swapping would create a more alternating pattern
-                would_improve = False
-                
-                # Efficient neighbor checking
-                if pos_idx > 0 and sequence[pos_idx-1] == 1:
-                    would_improve = True
-                elif pos_idx < seq_length-1 and sequence[pos_idx+1] == 1:
-                    would_improve = True
-                
-                if neg_idx > 0 and sequence[neg_idx-1] == -1:
-                    would_improve = True
-                elif neg_idx < seq_length-1 and sequence[neg_idx+1] == -1:
-                    would_improve = True
-                
-                # If the swap would break up like charges, do it
-                if would_improve:
+                # Same logic for negative charges
+                if negative_indices.size > 1:
+                    neg_clusters = np.where(np.diff(negative_indices) == 1)[0]
+                    
+                    if neg_clusters.size > 0:
+                        neg_idx = negative_indices[neg_clusters[0] + 1]
+                        
+                        # Find neutral position to swap with
+                        neutral_positions = np.where(sequence == 0)[0]
+                        
+                        if neutral_positions.size > 0:
+                            # Prefer positions adjacent to positive charges
+                            good_positions = []
+                            for neut_pos in neutral_positions:
+                                # Check if adjacent to a positive charge
+                                has_pos_neighbor = False
+                                if neut_pos > 0 and sequence[neut_pos-1] == 1:
+                                    has_pos_neighbor = True
+                                elif neut_pos < seq_length-1 and sequence[neut_pos+1] == 1:
+                                    has_pos_neighbor = True
+                                
+                                if has_pos_neighbor:
+                                    good_positions.append(neut_pos)
+                            
+                            # If found good position, swap
+                            if good_positions:
+                                neut_idx = good_positions[0]
+                                sequence[neg_idx], sequence[neut_idx] = sequence[neut_idx], sequence[neg_idx]
+            
+            # STRATEGY 3: Simple direct charge swapping
+            else:
+                # Direct swap of positive and negative charge
+                if positive_indices.size > 0 and negative_indices.size > 0:
+                    pos_idx = positive_indices[int(random_positions[iter_idx, i, 0] * positive_indices.size) % positive_indices.size]
+                    neg_idx = negative_indices[int(random_positions[iter_idx, i, 1] * negative_indices.size) % negative_indices.size]
+                    
+                    # Only swap if they are not adjacent to like charges
                     sequence[pos_idx], sequence[neg_idx] = sequence[neg_idx], sequence[pos_idx]
             
-            # Strategy 3: Random swaps (simplified)
-            if strategy3_mask[iter_idx, i] and positive_indices.size > 0 and negative_indices.size > 0:
-                pos_idx = positive_indices[np.random.randint(positive_indices.size)]
-                neg_idx = negative_indices[np.random.randint(negative_indices.size)]
-                
-                # Simple swap
-                sequence[pos_idx], sequence[neg_idx] = sequence[neg_idx], sequence[pos_idx]
-            
-            # Update the sequence
-            updated_sequences[i] = sequence
-            
-        current_sequences = updated_sequences
+            # Update in-place
+            current_sequences[i] = sequence
+        
+        # Store intermediate result if needed
+        if store_intermediates:
+            intermediate_sequences.append(current_sequences.copy())
+    
+    # Always store the final result
+    if not store_intermediates:
         intermediate_sequences.append(current_sequences.copy())
-
+    
     return intermediate_sequences
 
 
@@ -248,9 +260,10 @@ def increase_charge_asymmetry(sequences, iterations):
 
 def optimize_kappa_vectorized(sequences, target_kappa, 
                               tolerance=0.03, num_iterations=100, 
-                              max_change_iterations=1, verbose=False,
-                              use_multiprocessing=False, n_jobs=-1,
-                              early_stopping=True):
+                              max_change_iterations=20,
+                              early_stopping=True,
+                              return_when_num_hit=None,
+                              only_return_within_tolerance=False):
     '''
     Optimize kappa values of sequences by either increasing or decreasing charge asymmetry
     to reach a target kappa value. Optimized for performance.
@@ -261,19 +274,28 @@ def optimize_kappa_vectorized(sequences, target_kappa,
         tolerance (float): Acceptable difference from target kappa
         num_iterations (int): Maximum number of overall iterations to perform
         max_change_iterations (int): Number of iterations for each charge rearrangement step
-        verbose (bool): Whether to print progress information
-        use_multiprocessing (bool): Whether to use multiprocessing for large batches
-        n_jobs (int): Number of jobs for multiprocessing (-1 means all cores)
         early_stopping (bool): Stop early if target is reached
+        return_when_num_hit : int
+            If not None, return when this number of sequences are within tolerance
+        only_return_within_tolerance (bool): If True, only return sequences within tolerance.
+            if False, return all sequences, even if they are not within tolerance.
+
     
     Returns:
         list: Sequences with kappa values optimized to be close to the target
     '''
-    import time
-    start_time = time.time()
     
     # Convert input to numpy array for consistency
     sequences = np.array([str(seq) for seq in sequences])
+
+    # if we are returning when num hit 
+    if return_when_num_hit != None:
+        # force only_return_within_tolerance to be true
+        only_return_within_tolerance=True
+        if return_when_num_hit > len(sequences):
+            return_when_num_hit = len(sequences)
+    else:
+        return_when_num_hit = len(sequences)
 
     # Ternarize the sequences (only once at the start)
     ternarized_sequences = vectorized_ternarize(sequences, group1=['K', 'R'], group2=['D', 'E'])
@@ -281,9 +303,6 @@ def optimize_kappa_vectorized(sequences, target_kappa,
     # Get unique ternarized sequences to avoid redundant processing
     unique_seqs, unique_indices, inverse_mapping = find_unique_ternarized_sequences(ternarized_sequences)
     
-    if verbose:
-        print(f"Processing {len(sequences)} sequences, {len(unique_indices)} unique sequences")
-
     # Calculate initial kappa values only for unique sequences
     kappa_values = batch_calculate_kappa(unique_seqs, ternarize=False)
     
@@ -293,8 +312,6 @@ def optimize_kappa_vectorized(sequences, target_kappa,
     
     # Check if any sequence needs modification
     if not np.any(needs_increase) and not np.any(needs_decrease):
-        if verbose:
-            print("All sequences are already within tolerance of target kappa.")
         return sequences
     
     # Track which sequences have reached their target
@@ -307,14 +324,11 @@ def optimize_kappa_vectorized(sequences, target_kappa,
     prev_kappa_values = kappa_values.copy()
     stagnation_counter = np.zeros(len(unique_seqs), dtype=int)
     max_stagnation = 5  # Stop if no improvement for this many iterations
-    
-    # Track progress
-    if verbose:
-        print(f"Initial: {np.sum(reached_target)}/{len(unique_seqs)} sequences within target range")
+
     
     # Calculate adaptive iterations based on distance from target
     if early_stopping:
-        # Calculate distance from target
+        # Calculate distance to target
         distance_to_target = np.abs(kappa_values - target_kappa)
         # Scale iterations; farther sequences get more iterations
         adaptive_iterations = np.clip(
@@ -323,14 +337,18 @@ def optimize_kappa_vectorized(sequences, target_kappa,
         )
     else:
         adaptive_iterations = np.full(len(unique_seqs), max_change_iterations)
+
     
     # Process in iterations
     for iteration in range(num_iterations):
         # If all sequences reached target, we're done
         if np.all(reached_target):
-            if verbose:
-                print(f"All sequences reached target after {iteration} iterations.")
             break
+        
+        # if we are stopping at a specific number of successes...
+        if np.sum(reached_target) >= return_when_num_hit:
+            break
+
         
         # Process sequences that need kappa increased
         increase_indices = np.where(needs_increase)[0]
@@ -400,10 +418,6 @@ def optimize_kappa_vectorized(sequences, target_kappa,
             
             # Store current kappa values for stagnation detection
             prev_kappa_values[recalc_indices] = current_kappa
-        
-        # Print progress
-        if verbose and iteration % 10 == 0:
-            print(f"Iteration {iteration}: {np.sum(reached_target)}/{len(unique_seqs)} sequences within target range")
     
     # Create a new array to hold all modified sequences
     all_modified_sequences = np.zeros_like(ternarized_sequences)
@@ -414,11 +428,15 @@ def optimize_kappa_vectorized(sequences, target_kappa,
     
     # Convert ternarized sequences back to amino acid sequences
     modified_sequences = optimized_convert_ternarized_to_amino(all_modified_sequences, sequences)
-    
-    if verbose:
-        elapsed_time = time.time() - start_time
-        print(f"Optimization complete in {elapsed_time:.2f} seconds")
 
+    if only_return_within_tolerance:
+        # Create full-sized boolean array for all sequences
+        all_reached_target = np.zeros(len(modified_sequences), dtype=bool)
+        # Map reached_target status from unique sequences to all sequences
+        for i, unique_idx in enumerate(inverse_mapping):
+            all_reached_target[i] = reached_target[unique_idx]
+        return modified_sequences[all_reached_target]
+    
     return modified_sequences
 
 

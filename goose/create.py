@@ -8,7 +8,7 @@
 ##Handles the primary functions
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'alpha_helix', 'beta_strand', 'beta_sheet', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var', 'targeted_reposition_var',  'weighted_shuffle_var']
+__all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var', 'targeted_reposition_var',  'weighted_shuffle_var']
 
 import os
 import sys
@@ -57,9 +57,9 @@ from goose.backend.library_generation_backend import generate_library_by_paramet
 from goose.backend.library_generation_backend import generate_library_by_fraction_ranges as _generate_library_by_fraction_ranges
 
 # for folded structure generation
-from goose.backend.folded_region_generation import gen_helix as _gen_helix
-from goose.backend.folded_region_generation import gen_beta_strand as _gen_beta_strand
-from goose.backend.folded_region_generation import gen_beta_sheet as _gen_beta_sheet
+#from goose.backend.folded_region_generation import gen_helix as _gen_helix
+#from goose.backend.folded_region_generation import gen_beta_strand as _gen_beta_strand
+#from goose.backend.folded_region_generation import gen_beta_sheet as _gen_beta_sheet
 
 # FOR WHEN THINGS GO WRONG
 from goose import goose_exceptions
@@ -1621,109 +1621,6 @@ def rg_var(sequence, increase_or_decrease, return_all=False, return_all_interval
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with a different input values or a different cutoff value.')
     return final_sequence
-
-
-
-'''
-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
- PREDICTED FOLDED REGION GENERATORS
-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
-'''
-
-def alpha_helix(length, attempts=500):
-    '''
-    User facing function for generating a sequence predicted to be an alpha
-    helix based on DSSP scores. 
-
-    Parameters
-    ----------
-    length : int
-        The length of the desired alpha helix.
-        Must be between 8 and 150.
-
-    attempts : int
-        Specify the number of times to make the sequence. Default is 500. Greater numbers
-        of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence. (Optional) 
-
-    Returns
-    -------
-    final_seq : str
-        The final sequence generated.
-
-    '''
-    if length > 150:
-        raise goose_exceptions.GooseInputError('Unable to make alpha helix with length greater than 150.')    
-    elif length < 8:
-        raise goose_exceptions.GooseInputError('Unable to make alpha helix with length less than 8.')    
-    else:
-        try:
-            final_seq = _gen_helix(length, max_iters=attempts)
-        except:
-            raise goose_exceptions.GooseFail('Sorry! Goose was unable to make that helix. Try again or try a different length.')
-        return final_seq
-
-
-def beta_strand(length, attempts=5000):
-    '''
-    User facing function for generating a sequence predicted to be 
-    a beta strand based on DSSP scores.
-
-    Parameters
-    ----------
-    length : int
-        The length of the desired beta strand.
-        Must be between 5 and 34.
-    
-    attempts : int
-        Specify the number of times to make the sequence. Default is 5000. Greater numbers
-        of attempts increase the odds that a sequence will be generated but will increase
-        the duration of attempting to make the sequence.  
-    
-    returns
-    -------
-    final_seq : str  
-        Final generated sequence.  
-    '''
-    if length > 34:
-        raise goose_exceptions.GooseInputError('Unable to make beta strands with length greater than 34.')
-    elif length < 5:
-        raise goose_exceptions.GooseInputError('Unable to make beta strands with length less than 5.')
-    else:
-        try:
-            final_seq = _gen_beta_strand(length, max_iters=attempts)
-        except:
-            raise goose_exceptions.GooseFail('Sorry! Goose was unable to make that strand. Try again or try a different length.')
-        return final_seq
-
-def beta_sheet(length):
-    '''
-    User facing function for generating a sequence predicted to be 
-    a beta sheet based on DSSP scores. Uses coils to connect strands.
-
-    Parameters
-    ----------
-    length : int
-        The length of the desired beta_sheet.
-        Must be between 18 and 400 residues.
-
-    returns
-    -------
-    final_seq : str  
-        Final generated sequence.  
-    '''
-
-    if length < 18:
-        raise goose_exceptions.GooseInputError('cannot generate beta sheet less than 18 amino acids.')
-    elif length > 400:
-        raise goose_exceptions.GooseInputError('cannot generate beta sheet greater than 400 amino acids.')
-    try:
-        final_seq = _gen_beta_sheet(length)
-    except:
-        raise goose_exceptions.GooseFail('Sorry! Goose was unable to make that beta sheet. Try again or try a different length.')
-    return final_seq
 
 
 

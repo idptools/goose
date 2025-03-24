@@ -2,7 +2,6 @@
 various essential tools to help GOOSE take flight
 '''
 import random
-from random import randint
 
 import csv
 

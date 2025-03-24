@@ -1,13 +1,11 @@
 """
-code that uses the AminoAcid class to calculate protein parameter
-values based off of the amino acids
+Basically a wrapper over sparrow. 
 """
 
 import random
-import math
 
 from goose.backend.amino_acids import AminoAcid
-from sparrow import Protein as SP
+from sparrow import Protein as SparrowProtein
 from goose.goose_exceptions import GooseInputError
 
 
@@ -25,29 +23,26 @@ class Protein:
         # make the sequence all uppercase
         self.seq = seq.upper()
         
-        #check sequence
-        for i in seq:
-            if i in AminoAcid.standard_amino_acids:
-                continue
-            else:
-                raise GooseInputError ("Invalid amino acid detected. Make sure sequence only has canonical amino acids.")
+        # Check if all amino acids in the sequence are standard
+        if not set(seq).issubset(AminoAcid.standard_amino_acids):
+            raise GooseInputError("Invalid amino acid detected. Make sure sequence only has canonical amino acids.")
 
         # build a new sparrow Protein object which can then be called as needed
-        self._sparrow_protein = SP(seq)
+        self._sparrow_protein = SparrowProtein(seq)
 
 
     # ......................................................................
     #
     @property
     def sequence(self):
-        return self._sparrow_protein.sequence
+        return self.seq
 
     
     # ......................................................................
     #    
     @property
     def length(self):
-        return len(self._sparrow_protein)
+        return len(self.seq)
 
     
     # ......................................................................
@@ -61,10 +56,8 @@ class Protein:
         # get the raw fractions
         fraction_amino_acids = self._sparrow_protein.amino_acid_fractions
 
-        for amino_acid in fraction_amino_acids:
-            fraction_amino_acids[amino_acid] = round(fraction_amino_acids[amino_acid],5)
-
-        return fraction_amino_acids
+        # Use dictionary comprehension for faster rounding
+        return {amino_acid: round(frac, 5) for amino_acid, frac in fraction_amino_acids.items()}
 
     
     # ......................................................................
@@ -91,9 +84,7 @@ class Protein:
         else:
             return round(((self.NCPR**2) / self.FCR), 6)
 
-        
-
-
+    
 
     # ......................................................................
     #    
@@ -151,13 +142,6 @@ class Protein:
 
     def auto_name(self):
         # generates an autoname based on the sequence properties
-        random_name = '>'
-        amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
-        for i in range(0, 5):
-            random_name += random.choice(amino_acids)
-            random_name += str(random.randint(0, 9))
-        return random_name
+        return '>' + ''.join(f"{random.choice(list(AminoAcid.standard_amino_acids))}{random.randint(0, 9)}" for _ in range(5))
 
 
-
-            
