@@ -58,7 +58,7 @@ from goose.backend.gen_minimal_variant_backend import gen_minimal_sequence_varia
 from goose.backend.library_generation_backend import generate_library_by_parameter_ranges as _generate_library_by_parameter_ranges
 from goose.backend.library_generation_backend import generate_library_by_fraction_ranges as _generate_library_by_fraction_ranges
 
-# for folded structure generation
+# for folded structure generation - deprecating. 
 #from goose.backend.folded_region_generation import gen_helix as _gen_helix
 #from goose.backend.folded_region_generation import gen_beta_strand as _gen_beta_strand
 #from goose.backend.folded_region_generation import gen_beta_sheet as _gen_beta_sheet
