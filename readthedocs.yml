@@ -5,15 +5,10 @@
 # Required
 version: 2
 
-# Build documentation in the docs/ directory with Sphinx
-sphinx:
-  configuration: docs/conf.py
-
 # Optionally set the version of Python and requirements required to build your docs
 python:
   install:
     - requirements: docs/requirements.txt
-
 
 # build information
 build:
@@ -27,4 +22,6 @@ build:
       - pip install git+https://git@github.com/idptools/sparrow.git
       - pip install sphinx-rtd-theme
 
-
+# Build documentation in the docs/ directory with Sphinx
+sphinx:
+  configuration: docs/conf.py

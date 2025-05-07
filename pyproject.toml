@@ -1,0 +1,80 @@
+# set build system.
+[build-system]
+# requiring cython and numpy because it is needed for various dependencies.
+requires = ["setuptools>=61", "versioningit~=2.0", "cython", "numpy", ]
+build-backend = "setuptools.build_meta"
+
+# here we define the project information
+[project]
+name = "goose"
+dynamic = ["version"]
+description = "A Python package for making IDRs and IDR variants"
+authors = [
+    {name = "Ryan Emenecker", email = "remenecker@wustl.edu"}
+]
+license = {text = "MIT"}
+readme = "README.md"  
+requires-python = ">=3.8"
+
+# define dependencies
+# are not the same as the INSTALL dependencies. 
+dependencies = [
+    "cython",
+    "scipy",
+    "matplotlib",
+    "numpy",
+    "torch",
+    "metapredict >=3.0.1",
+    "PredictDSSP >=1.3.1",
+    "protfasta",
+    "urllib3",
+    "tqdm",
+    "alphaPredict>=1.3.0",
+    "getSequence >= 2.2.1",
+    "sparrow @ git+https://git@github.com/idptools/sparrow.git",
+    "finches @ git+https://git@github.com/idptools/finches.git",
+]
+
+# define any optional dependencies (we put pytest here cos we 
+# need that to run)
+[project.optional-dependencies]
+test = [
+  "pytest>=6.1.2",
+]
+
+[tool.setuptools]
+zip-safe = false
+
+# Ensure all data and code are distributed AND installed by setting
+# this to true AND setting the packages.find command be
+include-package-data = true
+
+[tool.setuptools.packages.find]
+namespaces = true
+where = ["."]
+
+# Discover all sub-packages under goose 
+include = ["goose", "goose.*"]  
+
+[tool.setuptools.package-data]
+goose = [
+    "py.typed"
+]
+
+[tool.versioningit]
+default-version = "1+unknown"
+
+[tool.versioningit.format]
+distance = "{base_version}+{distance}.{vcs}{rev}"
+dirty = "{base_version}+{distance}.{vcs}{rev}.dirty"
+distance-dirty = "{base_version}+{distance}.{vcs}{rev}.dirty"
+	
+[tool.versioningit.vcs]
+# The method key:
+method = "git"  # <- The method name
+# Parameters to pass to the method:
+match = ["*"]
+default-tag = "1.0.0"
+
+[tool.versioningit.write]
+file = "goose/_version.py"

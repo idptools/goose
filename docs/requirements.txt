@@ -3,14 +3,23 @@
 #
 ###### Requirements without Version Specifiers ######
 cython
+scipy
+matplotlib
 numpy
 torch
-sphinx-rtd-theme
-argparse
-matplotlib
-protfasta
 metapredict
 PredictDSSP
+protfasta
+urllib3
+tqdm
+alphapredict
+getsequence
+# hoping this works....
+sparrow @ git+https://git@github.com/idptools/sparrow.git
+finches @ git+https://git@github.com/idptools/finches.git
+argparse
+versioningit
+sphinx-rtd-theme
 
 #
 ###### Requirements with Version Specifiers ######

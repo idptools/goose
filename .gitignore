@@ -7,6 +7,9 @@ __pycache__/
 *.so
 .DS_Store
 
+# _version.py
+goose/_version.py
+
 # other .DS_store
 goose/.DS_Store
 images/.DS_Store
