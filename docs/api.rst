@@ -7,9 +7,9 @@ In general, we recommend using goose in Python by first importing create from go
 
 .. code-block:: python
 
-   from goose imoprt create
+   from goose import create
 
-   
+
 The ``create`` module can the be used to call all the user-facing functions. Documentation for these functions is included below.
 
 

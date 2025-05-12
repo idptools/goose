@@ -1,324 +1,278 @@
 '''
-objective of this sequence is to change the fewest amino acids
-possible to get the desired sequence. 
+Code for taking an input sequence and modifying it as little as possible
+to match user-specified kappa, FCR, NCPR, and hydropathy values.
 '''
 
-from goose.backend.protein import Protein as pr
-from goose.backend.amino_acids import AminoAcid as AA
-from goose.backend.goose_tools import check_valid_kwargs
+import numpy as np
 import random
+from goose.backend.amino_acids import AminoAcid
+from goose.backend_vectorized.calculate_properties_vectorized import (
+    sequences_to_matrices, calculate_fcr_batch, calculate_ncpr_batch, calculate_hydropathy_batch
+)
+from goose.backend_vectorized.calculate_kappa_vectorized import batch_calculate_kappa
+from goose.backend.parameters import(
+        HYDRO_ERROR, MAXIMUM_KAPPA_ERROR
+)
 
 
-def identify_sequence_change(input_sequence, **kwargs):
-    '''
-    Basically looks at the difference in the input sequence and specified
-    parameters to identify what to change.
-
-    Parameters
+def generate_candidates_vectorized(sequence, mutable_indices, aa_list):
+    """
+    Generate all possible mutation candidates using vectorized operations.
+    
+    Parameters:
     -----------
-    input_sequence: string
-        The sequence to be changed
-
-    **kwargs: dictionary:
-        the properties specified by the user
-
-    '''
-    valid_kwargs=['FCR', 'NCPR', 'hydropathy', 'kappa']
-    check_valid_kwargs(kwargs, valid_kwargs)
-    # first calculate the values for the input sequence
-    initial_parameters = pr(input_sequence).properties
-
-    # now figure out differences between input sequence and the objective parameters
-    sequence_changes={}
-    for param in kwargs.keys():
-        if initial_parameters[param] != kwargs[param]:
-            sequence_changes[param]=kwargs[param]-initial_parameters[param]
-    return sequence_changes
-
-
-def identify_best_hydro_change_diff_class(input_sequence, hydro_change):
-    '''
-    Function to identify the best residue to change for altering the
-    hydropathy of a sequence when you cannot keep the residue the same
-    within class. Basically prioritizes to minimze sequence chemistry
-    changes but does allow chemistry to change. 
-    '''
-    # first checks hydrophobics and polar. This is a big change but less
-    # bad than changing aromatics or charged, etc. This could change as far as order in the future.
-    # order of residues to check 
-    aromatics = ['F', 'W', 'Y']
-    polar = ['Q', 'N', 'S', 'T']
-    aliphatics = ['I', 'V', 'L', 'A', 'M']
-    positive = ['K', 'R']
-    negative = ['D', 'E']
-    special_cases = ['C', 'P', 'H','G']
-
-
-    best_aas = []
-    # iterate through input sequence and choose best aa(s) to change.
-    for ind, res in enumerate(input_sequence):
-        if hydro_change > 0:
-            if res in polar:
-                best_aas.append(ind)
-                change_to = aliphatics
-        else:
-            if res in aliphatics:
-                best_aas.append(ind)
-                change_to = polar
-
-    if best_aas == []:
-        for ind, res in enumerate(input_sequence):
-            if res in special_cases:
-                best_aas.append(ind)
-        change_to = polar
-        change_to.extend(aliphatics)
-    if best_aas == []:
-        for ind, res in enumerate(input_sequence):
-            if hydro_change > 0:
-                if res in negative or res in positive:
-                    best_aas.append(ind)
-            else:
-                if res in aromatics:
-                    best_aas.append(ind)
-
-    # if for some reason we haven't found anything easy to change, just go for anything.
-    if best_aas == []:
-        best_aas = [aa for aa in range(0, len(input_sequence))]
-        change_to = ['S', 'T', 'N', 'Q', 'G', 'A', 'L', 'V', 'I', 'M', 'P', 'C', 'Y', 'W', 'F', 'H', 'D', 'E', 'K', 'R']
-
-    # keep track of best change
-    best_change=10000000
-
-    # first try to change a residue within class.
-    # just try to find the biggest within class change possible.
-    for ind in best_aas:
-        res = input_sequence[ind]
-        cur_hydro = AA.hydro(res)
-        if len(change_to)>1:
-            for possible_res in change_to:
-                if possible_res != res:
-                    hydro_diff = AA.hydro(possible_res) - cur_hydro
-                    if abs(hydro_change-hydro_diff) < best_change:
-                        best_change = abs(hydro_change-hydro_diff)
-                        possible_in_class_changes=[[ind, possible_res]]
-                    if abs(hydro_change-hydro_diff) == best_change:
-                        possible_in_class_changes.append([ind, possible_res])
-    if len(possible_in_class_changes)==1:
-        return possible_in_class_changes
-    elif len(possible_in_class_changes)>1:
-        return possible_in_class_changes[random.randint(0, len(possible_in_class_changes)-1)]
-    else:
-        # can't do an in class change. Now need to prioritize a bit...
-        # Going to choose class to change in specific order to see if I can get that first.
-        raise Exception('Unable to change residue within class.')    
+    sequence : list
+        The current protein sequence as a list of characters
+    mutable_indices : np.ndarray
+        Indices of positions that can be mutated
+    aa_list : list
+        List of amino acids to use for mutations
     
-
-
-def identify_best_within_class_hydro_change(input_sequence, hydro_change):
-    '''
-    Function to identify the best hydropathy change for min var. Different than the 
-    within class hydro optimization function in that this is meant to find a single
-    residue and change it whereas the hydropathy optimization allows for changing as
-    many residues as possible. Falls back to identify_best_hydro_change_diff_class function.
-
-    Parameters
-    ----------
-    input_sequence: string
-        The sequence to be changed
-
-    hydro_change: float
-        The desired change in hydropathy
-
-    returns
-    -------
-    res_index : int
-        returns the index for the residue to change
-    '''
+    Returns:
+    --------
+    tuple
+        (candidate_seqs, candidate_positions, candidate_aas)
+    """
+    seq_str = ''.join(sequence)
     
-    # residues that you can change to make a difference in hydropathy within class
-    aa_class_dict = {'aromatic' : ['F', 'W', 'Y'], 'polar' : ['Q', 'N', 'S', 'T'], 'positive' : ['K', 'R'], 'negative' : ['D', 'E'], 'hydrophobic' : ['I', 'V', 'L', 'A', 'M'], 'G':['G'], 'H':['H'], 'P':['P'], 'C':['C']}
-
-    # keep track of best change
-    best_change=10000000
-    # keep track of possible in track changes
-    possible_in_class_changes=[]
-
-    # first try to change a residue within class.
-    # just try to find the biggest within class change possible.
-    for ind, res in enumerate(input_sequence):
-        cur_hydro = AA.hydro(res)
-        cur_class = AA(res).AA_class
-        within_class_changes=aa_class_dict[cur_class]
-        if len(within_class_changes)>1:
-            if within_class_changes!=['D', 'E']:
-                for possible_res in within_class_changes:
-                    if possible_res != res:
-                        hydro_diff = AA.hydro(possible_res) - cur_hydro
-                        if abs(hydro_change-hydro_diff) < best_change:
-                            best_change = abs(hydro_change-hydro_diff)
-                            possible_in_class_changes=[[ind, possible_res]]
-                        if abs(hydro_change-hydro_diff) == best_change:
-                            possible_in_class_changes.append([ind, possible_res])
-
-    if len(possible_in_class_changes)==1:
-        return possible_in_class_changes
-    elif len(possible_in_class_changes)>1:
-        return possible_in_class_changes[random.randint(0, len(possible_in_class_changes)-1)]
-    else:
-        # can't do an in class change. Now need to prioritize a bit...
-        # Going to choose class to change in specific order to see if I can get that first.
-        raise Exception('Unable to change residue within class.')
+    # Create all combinations of positions and amino acids
+    positions = np.repeat(mutable_indices, len(aa_list))
+    aas = np.tile(np.array(aa_list), len(mutable_indices))
+    
+    # Get original amino acids at each position
+    original_aas = np.array([sequence[i] for i in mutable_indices])
+    original_aas_repeated = np.repeat(original_aas, len(aa_list))
+    
+    # Filter out combinations where amino acid doesn't change
+    mask = original_aas_repeated != aas
+    valid_positions = positions[mask]
+    valid_aas = aas[mask]
+    
+    # Generate candidate sequences efficiently
+    candidate_seqs = []
+    for pos, aa in zip(valid_positions, valid_aas):
+        candidate_seqs.append(seq_str[:pos] + aa + seq_str[pos+1:])
+    
+    return candidate_seqs, valid_positions.tolist(), valid_aas.tolist()
 
 
-def identify_best_FCR_change(input_sequence, FCR_change, charge_change=None):
-    '''
-    Function to identify the best residues to change in a sequence
-    when adjusting FCR. 
-
-    Basically uses a simple 'change hierarchy' in that it tries to
-    minimize chemical changes in the output sequence. For example, increasing
-    FCR at the expense of aromatics would be a huge change, so we try to avoid this. 
-
-    Parameters
-    ----------
-    input_sequence: string
-        The sequence to be changed
-
-    FCR_change: string
-        The desired change in FCR
-        Options: 'increase' or 'decrease'
-
-    charge_change : string
-        the desired charged residue to change. Let's you choose
-        negative or positive. Default is random. 
-
-
-    Returns
-    -------
-    res_index : int
-        returns the index for the residue to change
-    '''
-    # TO DO: Add in some checks here.
-
-    if FCR_change == 'decrease':
-        if charge_change == None:
-            change_residues=['D', 'E', 'K']
-        elif charge_change == 'positive':
-            change_residues = ['K']
-        elif charge_Change == 'negative':
-            change_residues= ['D', 'E']
-        else:
-            raise Exception('Can only specify charge_change as None, negative, or positive.')
-        # find target residues
-        target_residues=[]
-        arg_pos=[]
-        for ind, res in enumerate(input_sequence):
-            if res in change_residues:
-                target_residues.append(ind)
-            if res == 'R':
-                arg_pos.append(ind)
-
-        # shuffle the list
-        random.shuffle(target_residues)
-        # add on R last
-        if charge_change == None or charge_change=='positive':
-            target_residues.extend(arg_pos)
-
-    elif FCR_change == 'increase':
-        # order of residues to change to charged based on how much it would fundamentally change the seq.
-        # this list could be changed TBH, but this is my best guess for now.
-        to_charged = ['S', 'T', 'N', 'Q', 'G', 'A', 'L', 'V', 'I', 'M', 'P', 'C', 'Y', 'W', 'F', 'H']
-        target_residues=[]
-        for target_res in to_charged:
-            if target_residues==[]:
-                for ind, res in enumerate(input_sequence):
-                    if res == target_res:
-                        target_residues.append(ind)
-        random.shuffle(target_residues)
-
-    else:
-        raise Exception('Parameter FCR_change can only be decrease or increase.')
+def minimal_sequence_modification(
+    sequence,
+    target_kappa=None,
+    target_FCR=None,
+    target_NCPR=None,
+    target_hydropathy=None,
+    tolerance_kappa=MAXIMUM_KAPPA_ERROR,
+    tolerance_FCR=0.001,
+    tolerance_NCPR=0.001,
+    tolerance_hydropathy=HYDRO_ERROR,
+    max_iterations=1000,
+    protected_positions=None,
+    weights=None,
+    use_simulated_annealing=False,
+    temperature=10.0,
+    cooling_rate=0.95,
+    early_stop_patience=50,
+    verbose=True
+):
+    """
+    Iteratively modify a protein sequence to match user-specified kappa, FCR, NCPR, and hydropathy values
+    with minimal changes. Uses numpy vectorized operations for efficiency.
+    
+    Parameters:
+    -----------
+    sequence : str
+        The input protein sequence
+    target_kappa, target_FCR, target_NCPR, target_hydropathy : float, optional
+        Target values for the respective properties
+    tolerance_* : float
+        Acceptable tolerance for each property
+    max_iterations : int
+        Maximum number of iterations to run
+    protected_positions : list or None
+        List of indices (0-based) that should not be mutated
+    weights : dict or None
+        Weights for each property (e.g., {'kappa': 2.0, 'FCR': 1.0})
+    use_simulated_annealing : bool
+        Whether to use simulated annealing to escape local minima
+    temperature, cooling_rate : float
+        Parameters for simulated annealing
+    early_stop_patience : int
+        Stop if no improvement for this many iterations
+    verbose : bool
+        Whether to print progress information
+    
+    Returns:
+    --------
+    dict
+        Contains modified sequence, number of mutations, and final properties
+    """
+    aa_list = AminoAcid.standard_amino_acids
+    seq = list(sequence.upper())
+    seq_len = len(seq)
+    
+    # Initialize protected positions
+    if protected_positions is None:
+        protected_positions = []
+    mutable_indices = np.array([i for i in range(seq_len) if i not in protected_positions])
+    
+    # Initialize weights
+    if weights is None:
+        weights = {'kappa': 1.0, 'FCR': 1.0, 'NCPR': 1.0, 'hydropathy': 1.0}
+    
+    # Vectorized property calculation
+    def get_properties_batch(sequence_list):
+        # Convert to matrices for vectorized property calculations
+        seq_matrices = sequences_to_matrices(sequence_list)
         
-    # return the first element in the target residues list
-    if target_residues != []:
-        return target_residues[0]
-    else:
-        raise Exception('Was not able to find a residue to change using the identify_best_FCR_change function.')
+        # Calculate all properties in batch
+        fcr_values = calculate_fcr_batch(seq_matrices)
+        ncpr_values = calculate_ncpr_batch(seq_matrices)
+        hydro_values = calculate_hydropathy_batch(seq_matrices)
+        kappa_values = batch_calculate_kappa(sequence_list)
+        
+        # Create dictionary of properties for each sequence
+        properties_list = []
+        for i in range(len(sequence_list)):
+            props = {
+                'kappa': kappa_values[i],
+                'FCR': fcr_values[i],
+                'NCPR': ncpr_values[i],
+                'hydropathy': hydro_values[i]
+            }
+            properties_list.append(props)
+        
+        return properties_list
+    
+    def prop_distance_vectorized(props_list):
+        """Calculate distance metrics for a batch of property dictionaries"""
+        # Extract property arrays
+        kappas = np.array([p['kappa'] for p in props_list])
+        fcrs = np.array([p['FCR'] for p in props_list])
+        ncprs = np.array([p['NCPR'] for p in props_list])
+        hydropathies = np.array([p['hydropathy'] for p in props_list])
+        
+        # Initialize distances array
+        distances = np.zeros(len(props_list))
+        
+        # Add weighted distances for each property if target is specified
+        if target_kappa is not None:
+            distances += weights.get('kappa', 1.0) * np.abs(kappas - target_kappa) / tolerance_kappa
+        if target_FCR is not None:
+            distances += weights.get('FCR', 1.0) * np.abs(fcrs - target_FCR) / tolerance_FCR
+        if target_NCPR is not None:
+            distances += weights.get('NCPR', 1.0) * np.abs(ncprs - target_NCPR) / tolerance_NCPR
+        if target_hydropathy is not None:
+            distances += weights.get('hydropathy', 1.0) * np.abs(hydropathies - target_hydropathy) / tolerance_hydropathy
+            
+        return distances
 
+    # Track mutations
+    original_seq = seq.copy()
+    best_seq = seq.copy()
+    best_dist = float('inf')
+    best_props = None
+    no_improvement_count = 0
+    current_temp = temperature
+    
+    # Get initial properties
+    current_seq_str = ''.join(seq)
+    props_list = get_properties_batch([current_seq_str])
+    current_props = props_list[0]
+    
+    # Set target props to original props if None
+    if target_kappa is None:
+        target_kappa = current_props['kappa']
+    if target_FCR is None:
+        target_FCR = current_props['FCR']
+    if target_NCPR is None:
+        target_NCPR = current_props['NCPR']
+    if target_hydropathy is None:
+        target_hydropathy = current_props['hydropathy']
+    
+    for iteration in range(max_iterations):
+        current_seq_str = ''.join(seq)
+        current_dist = prop_distance_vectorized([current_props])[0]
+        
+        # Update best solution if needed
+        if current_dist < best_dist:
+            best_dist = current_dist
+            best_seq = seq.copy()
+            best_props = current_props
+            no_improvement_count = 0
+        else:
+            no_improvement_count += 1
+        
+        # Check early stopping
+        if no_improvement_count >= early_stop_patience:
+            if verbose:
+                print(f"Early stopping after {iteration} iterations with no improvement")
+            break
+        
+        # Check if all targets are within tolerance
+        within = True
+        if target_kappa is not None and abs(current_props['kappa'] - target_kappa) > tolerance_kappa:
+            within = False
+        if target_FCR is not None and abs(current_props['FCR'] - target_FCR) > tolerance_FCR:
+            within = False
+        if target_NCPR is not None and abs(current_props['NCPR'] - target_NCPR) > tolerance_NCPR:
+            within = False
+        if target_hydropathy is not None and abs(current_props['hydropathy'] - target_hydropathy) > tolerance_hydropathy:
+            within = False
+        if within:
+            if verbose:
+                print(f"All targets met after {iteration} iterations")
+            break
 
+        # Generate all possible single substitutions in one batch using vectorized operations
+        candidate_seqs, candidate_positions, candidate_aas = generate_candidates_vectorized(seq, mutable_indices, aa_list)
+        
+        if not candidate_seqs:
+            break
+            
+        # Evaluate all candidates at once using vectorized operations
+        props_list = get_properties_batch(candidate_seqs)
+        distances = prop_distance_vectorized(props_list)
+        
+        # Find the best substitutions
+        min_dist = np.min(distances)
+        
+        if use_simulated_annealing and random.random() < 0.3:  # Sometimes try simulated annealing
+            # Pick based on probability proportional to improvement
+            probs = np.exp(-(distances - current_dist) / current_temp)
+            probs = probs / np.sum(probs)
+            chosen_idx = np.random.choice(len(candidate_seqs), p=probs)
+            best_pos = candidate_positions[chosen_idx]
+            best_aa = candidate_aas[chosen_idx]
+            current_props = props_list[chosen_idx]
+        else:
+            # Regular greedy selection
+            best_idxs = np.where(distances == min_dist)[0]
+            chosen_idx = random.choice(best_idxs)
+            best_pos = candidate_positions[chosen_idx]
+            best_aa = candidate_aas[chosen_idx]
+            current_props = props_list[chosen_idx]
+        
+        seq[best_pos] = best_aa
+        current_temp *= cooling_rate
+        
+        if verbose and iteration % 10 == 0:
+            print(f"Iteration {iteration}, distance: {current_dist:.4f}, temperature: {current_temp:.4f}")
 
-def identify_best_NCPR_change(input_sequence, NCPR_change):
-    '''
-    Function to identify the best position for changing NCPR.
-    Basically tries to just change lysine before arg.
-
-    Parameters
-    ----------
-    input_sequence: string
-        The sequence to be changed
-
-    NCPR_change: string
-        The desired change in NCPR. Specify increase or decrease.
-        options: 'increase' or 'decrease'
-
-    Returns
-    -------
-    res_index : int
-        returns the index for the residue to change
-    '''
-    # TO DO: Add in some checks here.
-    if NCPR_change == 'increase':
-        targets = ['D', 'E']
-    elif NCPR_change == 'decrease':
-        targets = ['K']
-    else:
-        raise Exception('Parameter NCPR_change can only be decrease or increase.')
-
-    # find target residues
-    target_residues=[]
-    for ind, res in enumerate(input_sequence):
-        if res in targets:
-            target_residues.append(ind)
-    # shuffle the list
-    random.shuffle(target_residues)
-    if NCPR_change == 'decrease':
-        for ind, res in enumerate(input_sequence):
-            if res == 'R':
-                target_residues.append(ind)
-    # return the first element in the target residues list
-    if target_residues != []:
-        return target_residues[0]
-    else:
-        raise Exception('Was not able to find a residue to change using the identify_best_NCPR_change function.')
-
-
-
-
-
-"""
-# dumb function to test the function above, will delete later.
-def change_hydro(input_sequence, objective_hydro):
-    cur_hydro=3
-    objective_hydro=4
-    total_change=(objective_hydro-cur_hydro)*len(input_sequence)
-    for i in range(0, 1000):
-        curchange = identify_best_hydro_change(input_sequence, total_change)
-        newseq = f'{input_sequence[:curchange[0]]}{curchange[1]}{input_sequence[curchange[0]+1:]}'
-        input_sequence = newseq
-        cur_hydro = pr(input_sequence).hydropathy
-        total_change=(objective_hydro-cur_hydro)*len(input_sequence)
-        print(cur_hydro)
-        print(input_sequence)
-        print()
-
-"""
-
-
-          
-
-
-
-
-
-
-
+    # Use the best solution found
+    mutations = sum(1 for i, aa in enumerate(best_seq) if aa != original_seq[i])
+    mutation_positions = [i for i, aa in enumerate(best_seq) if aa != original_seq[i]]
+    
+    return {
+        'sequence': ''.join(best_seq),
+        'mutations': mutations,
+        'mutation_positions': mutation_positions,
+        'original_sequence': ''.join(original_seq),
+        'properties': best_props,
+        'target_met': all([
+            target_kappa is None or abs(best_props['kappa'] - target_kappa) <= tolerance_kappa,
+            target_FCR is None or abs(best_props['FCR'] - target_FCR) <= tolerance_FCR,
+            target_NCPR is None or abs(best_props['NCPR'] - target_NCPR) <= tolerance_NCPR,
+            target_hydropathy is None or abs(best_props['hydropathy'] - target_hydropathy) <= tolerance_hydropathy
+        ])
+    }

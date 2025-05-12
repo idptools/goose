@@ -78,7 +78,7 @@ class ComputeIWD(ProteinProperty):
         self.residues = residues
 
     def calculate(self, protein: 'sparrow.Protein') -> float:
-        return protein.compute_iwd(*self.residues)
+        return protein.compute_iwd(list(self.residues))
 
 class Hydrophobicity(ProteinProperty):
     """
@@ -368,6 +368,60 @@ class FractionDisorder(ProteinProperty):
         percent_disorder = (disorder>self.disorder_cutoff).sum()/len(disorder)
         return percent_disorder
     
+
+class MatchSequenceDisorder(ProteinProperty):
+    """
+    Matches the disorder of a specified sequence. By default, the 
+    specified sequence sets the MINIMUM disorder. 
+    You can also try to get the exact disorder.
+
+    Example usage:
+
+    # imports
+    import goose
+    from sparrow.protein import Protein as pr
+    import metapredict as meta
+
+    target_seq='MPHIQKKAQGWCNNPGQQLNPHLQWQWQNQQYIDFDPYNY'
+    optimizer = goose.SequenceOptimizer(target_length=200, verbose=True, gap_to_report=100)
+    optimizer.add_property(goose.MatchSequenceDisorder, target_sequence=target_seq, weight=1)
+    optimizer.set_optimization_params(max_iterations=2000, tolerance=0.01)
+    sequence=optimizer.run()
+    print(sequence)
+
+    # double check
+    disorder=meta.predict_disorder(sequence)
+    print((disorder>0.5).sum()/len(disorder))
+
+    """
+    def __init__(self, 
+                 target_sequence: str, 
+                 exact_match: bool = False,
+                 target_value : float = 0,
+                 weight: float = 1.0):
+        super().__init__(target_value, weight)
+        self.target_sequence = target_sequence
+        self.exact_match = exact_match
+        self.target_disorder = None
+
+
+    def set_initial_disorder(self, target_sequence=None):
+        if type(self.target_disorder) != np.array:
+            if target_sequence==None:
+                target_sequence=self.target_sequence
+            self.target_disorder = meta.predict_disorder(target_sequence)
+        return self.target_disorder
+
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        target_disorder=self.set_initial_disorder()
+        disorder=meta.predict_disorder(protein.sequence)
+        if self.exact_match==True:
+            err = np.sum(np.abs(disorder-target_disorder))
+        else:
+            err = np.sum(disorder<target_disorder)
+        # normalize to length. 
+        return err/len(target_disorder)
+
 
 
 class MatchingResidues(ProteinProperty):

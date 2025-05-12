@@ -5,7 +5,7 @@ import numpy as np
 
 # Uncomment later
 from goose.backend import parameters
-from goose.goose_exceptions import GooseError, GooseException, GooseInputError, GooseFail
+from goose.goose_exceptions import GooseInputError
 from goose.backend.sequence_generation_backend import calculate_max_charge
 import itertools
 

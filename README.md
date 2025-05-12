@@ -1,74 +1,102 @@
 ![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
 # GOOSE : Generate disOrdered prOtiens Specifying propErties
 
-### Last updated November 2024
+## Last updated May 2025
+
+### What's new (the highlights)?
+* Thanks to moving to a system whereby sequences are generated using numpy vectorized operations, we no longer need to use weighted probabilities for sequence generation to keep gOOSE fast. This should dramatically imporimproveve the sequence space that GOOSE can explore when generating a protein seuqence. 
+* A completely new approach for sequence / sequence variant generation has been launched! Check out the new SequenceOptimizer documentation on ReadTheDocs. 
+* SPEED! GOOSE is faster. This is obviously thanks to the numpy vectorized operations but also to metapredict V3 being able to simultaneously predit disorder for over 256 sequences at once. 
+* Additional functionality for sequence creation (custom probabilities for amino acids wehn specifying sequences by properties).
+* Updated minimal_variant functionality. It is technically slower but does a much better job of minimizing the number of amino acids mutated when trying to create your desired sequence from a starting sequence. 
+
+**NOTE:** Further documentation and examples on generating sequences based on self interaction or interaction with other IDRs (or the surface of folded proteins...) is coming soon!
+
 
 ### What is GOOSE?
-GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. Basically, we want to make it easy for you to design IDRs or IDR variants for your research.
+GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. 
 
 ## What can GOOSE do?
 
-There are four main functionalities currently in GOOSE. 
+The main functionalities of GOOSE are:
 
-**1.** Generate synthetic IDRs where you can specify the length and:  
- • properties including *average hydropathy*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa* (which is a property that defines opposite charge distribution in a sequence),  
- • fractions of amino acids (you can specify multiple fractions simultaneously), or  
- • ensemble dimensions, either end-to-end distance (Re) or radius of gyration (Rg)  
+**1.** Generate synthetic IDRs where you can specify length and...
+ • Simultaneously specify *average hydrophobicity*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa* (quantifies opposite charge distribution)  
+ • Fractions of amino acids (multiple fractions simultaneously)  
+ • End-to-end distance (Re) or radius of gyration (Rg)  
+ • Interactions between an IDR and itself or other IDRs
 
-**2.** Generate IDR variants. There are over 16 different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test different hypotheses.  
+ **2.** Generate sequences by *sequence optimization*. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can **define your own functions to design sequences**!
 
-**3.** Make sequence libraries spanning sequence properties or fractions of amino acids.  
+**3.** Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 
-**4.** Analyze sequences.  
+**4.** Make sequence libraries spanning sequence properties or fractions of amino acids.  
 
-## How can I use GOOSE?
+**5.** Analyze sequences. Although this is possible in GOOSE, I recommend using[SPARROW](https://github.com/idptools/sparrow) for sequence analysis. 
+
+## How to use GOOSE
 
 You can use GOOSE from Python or from a Google Colab notebook. The Colab notebook can be found at https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing
 
 ## Installation - GOOSE takes flight!
 
-Right now you can only install GOOSE through Github. It will be on PyPi to allow for pip installation soon!  
+Right now you can only install GOOSE through Github. We plan to put it on PyPi at some point to allow for install via pip!  
 
 GOOSE has a few requirements **prior** to installation. Just follow the steps below to use GOOSE!  
 
 **First install cython and numpy.**  
-
-	$ pip install cython
-	$ pip install numpy
+```bash
+pip install cython
+pip install numpy
+```
 
 **Now you can install GOOSE.**  
 
 To install directly from the git repository simply run:
 
-	$ pip install git+https://github.com/idptools/goose.git
+```bash
+pip install git+https://github.com/idptools/goose.git
+```
 
 Or to clone the GitHub repository and install locally run - 
-
-	$ git clone https://github.com/idptools/goose.git
-	$ cd goose
-	$ pip install .
+```bash
+git clone https://github.com/idptools/goose.git
+cd goose
+pip install .
+```
 
 **Important note**
 
 GOOSE requires the package ``sparrow``. Sparrow should be downloaded automatically just by pip installing GOOSE, but if you have issues, try installing it by running:
 
-	$ pip install git+https://github.com/holehouse-lab/sparrow.git
+```bash
+pip install git+https://github.com/holehouse-lab/sparrow.git
+```
 
-This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have numpy or cython installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. See step 1. of Installation for instructions on installing cython and numpy. 
+This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have **numpy or cython** installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. See step 1. of Installation for instructions on installing cython and numpy. If you keep having issues, please contact me or raise an issue and I'll get to it as soon as I can.
 
 
 ## Documentation
 
-Documentation for GOOSE can be found at https://goose.readthedocs.io/en/latest/index.html.  
+Documentation for GOOSE can be found [here](https://goose.readthedocs.io/en/latest/index.html)  
 
 
 ## How to cite GOOSE
 
-You can not currently cite GOOSE as we have yet to publish it (hopefully soon!). We would appreciate if you would mention GOOSE in your methods section with a link to the Github page so readers of your paper can understand how you generated the sequences you used.  
+For the time being, you can cite our [preprint](https://www.biorxiv.org/content/10.1101/2023.10.29.564547v2). It would also be helpful to link the GitHub page in your methods section so readers of your paper can understand how you generated the sequences you used.  
 
 ## Changes
 
 The section below logs changes to GOOSE.  
+
+#### V0.2.0 - MAJOR UPDATE! (May 2025)
+* Overhaul of sequence generation. Sequence generation now by default does not use weighted lists. Rather, vectorized operations produce many sequences at once allowing creating of much more diverse sequences while maintaining speed of sequence generation. 
+* Introduction of customizable probabilities of dictionaries when generating sequences and specifying properties. 
+* Introduction of SequenceOptimizer. This allows for users to generate sequences with many combinations of parameters and create their own custom parameters. 
+* Release of sequence generation by epsilon (a way to quantify sequence interaction). See https://github.com/idptools/finches/.
+* Overhaul of code used for generation of minimal_variant. 
+* Update to installation via pyproject.toml to enable compatbility with newer versions of Python. 
+* Deprecation of generation of sequences predicted to form alpha helices, beta sheets, or beta strands
 
 #### Version unchaged  - continued work on sequence_optimization functionality and a small bug fix (November 2024)
 
@@ -103,7 +131,7 @@ Initial release. Begin tracking changes.
 This project was supported by grants from agencies including the National Science Foundation (NSF), the National Institute of Health (NIH).
 
 **Development**
-Development of GOOSE was led primarily by Ryan Emenecker. Numerous ideas were contributed from others along the way including from Shahar Sukenik, Alex Holehouse, and many more. 
+Development of GOOSE was led primarily by Ryan Emenecker. Numerous ideas were contributed from others along the way including from Shahar Sukenik, Alex Holehouse, and more. Development of the SequenceOptimizer functionality released in V0.2.0 was led by Jeffrey Lotthammer. GOOSE is not possible without the amazing tools developed by the Holehouse Lab. Shoutout to Garrett Ginell, Dan Griffith, Borna Novak, and Nick Razo for their various contributions.
 
 **Cookiecutter**
 Project based on the 

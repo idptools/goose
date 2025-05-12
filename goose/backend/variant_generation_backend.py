@@ -6,14 +6,14 @@ from random import randint
 import numpy as np
 
 from sparrow import Protein as pr
-from goose.goose_exceptions import GooseInputError, GooseInstallError, GooseBackendBug
+from goose.goose_exceptions import GooseInputError, GooseBackendBug
 from goose.backend.protein import Protein
-from goose.backend.sequence_generation_backend import identify_residue_positions, get_optimal_residue, optimal_residue_key, create_seq_by_props, fast_predict_disorder, calculate_max_charge, fraction_net_charge
+from goose.backend.sequence_generation_backend import identify_residue_positions, get_optimal_residue, optimal_residue_key, create_seq_by_props, calculate_max_charge, fraction_net_charge
 from goose.backend import lists
 from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
 from goose.backend.ginell_clustering_parameter import calculate_average_inverse_distance_from_sequence as clustering_param
-
+from goose.backend_vectorized.optimize_kappa_vectorized import optimize_kappa_vectorized
 
 def return_num_for_class(sequence):
     '''
@@ -1302,6 +1302,24 @@ def create_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIM
         specified kappa value and the kappa value
         calculated for the returned sequence
     '''
+
+    num_iterations = 20*attempts
+    new_seq = optimize_kappa_vectorized([sequence], target_kappa=kappa, 
+                              tolerance=allowed_kappa_error, num_iterations=num_iterations, 
+                              max_change_iterations=20,
+                              early_stopping=True,
+                              return_when_num_hit=20,
+                              only_return_within_tolerance=True)
+    
+    # if we have any sequences returned, return them. 
+    if len(new_seq)>1:
+        return new_seq[0]
+    elif len(new_seq)==1:
+        if isinstance(new_seq, list):
+            return new_seq[0]
+    else:
+        return new_seq
+
     # set number sub attempts
     sub_attempts=5000
 

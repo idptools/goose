@@ -2,13 +2,10 @@
 various essential tools to help GOOSE take flight
 '''
 import random
-
 import csv
 
 from goose.goose_exceptions import GooseError, GooseInputError
-
 from goose.backend import parameters
-
 from goose.backend.sequence_generation_backend import calculate_max_charge
 
 
@@ -317,7 +314,15 @@ def check_and_correct_fracs_kwargs(**kwargs):
     
 
     # make sure the six essential keywords have been initialized to their default values if they were not provided
-    essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD, 'strict_disorder': False, 'attempts': parameters.DEFAULT_ATTEMPTS, 'max_aa_fractions': {}}
+    essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD, 
+                        'strict_disorder': False, 
+                        'attempts': parameters.DEFAULT_ATTEMPTS, 
+                        'max_aa_fractions': {},
+                        'metapredict_version': parameters.METAPREDICT_DEFAULT_VERSION,
+                        'return_all_sequences': False,
+                        'use_weighted_probabilities': False,
+                        'custom_probabilities': None,
+                        'exclude': None}
 
     for kw in essential_kwargs:
         if kw not in kwargs:

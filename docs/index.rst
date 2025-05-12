@@ -11,7 +11,11 @@ Welcome to goose's documentation!
    :caption: Contents:
 
    getting_started
-   using_goose
+   sequence_generation
+   variant_generation
+   sequence_optimization
+   sequence_library_generation
+   sequence_analysis
    how_to_cite_goose
    acknowledgements
    api

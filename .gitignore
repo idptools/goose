@@ -7,6 +7,12 @@ __pycache__/
 *.so
 .DS_Store
 
+# roadmap
+.roadmap.txt
+./roadmap.txt
+goose/roadmap.txt
+../roadmap.txt
+
 # _version.py
 goose/_version.py
 

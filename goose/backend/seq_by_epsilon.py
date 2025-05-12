@@ -19,7 +19,6 @@ TO DO: (if time)
 '''
 
 from collections import Counter
-import itertools
 import random
 
 import matplotlib.pyplot as plt

@@ -9,19 +9,17 @@ for what we are trying to do here.
 
 '''
 
-from matplotlib import pyplot as plt
 import random
-import numpy as np
 
 from sparrow import Protein as pr
 from sparrow.predictors import batch_predict
 
 from goose.backend.sequence_generation_backend import gen_sequence
 from goose.backend import parameters
-from goose.backend.parameters import re_error, rg_error, rg_re_attempt_num, get_min_re, get_max_re
+from goose.backend.parameters import re_error, rg_error, rg_re_attempt_num
 from goose.backend import lists
 from goose.backend.lists import disordered_list, disordered_list_reduced_charge
-from goose.goose_exceptions import GooseError, GooseException, GooseInputError, GooseFail
+from goose.goose_exceptions import GooseError, GooseInputError, GooseFail
 from goose.backend.variant_generation_backend import create_asymmetry_variant
 
 

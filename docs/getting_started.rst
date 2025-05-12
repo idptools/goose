@@ -1,23 +1,23 @@
 What is GOOSE?
 ===============
-**GOOSE : Generate disOrdered prOtiens Specifying propErties** is a python package developed to generate intrinsically disordered proteins or protein regions (collectively IDRs) and IDR variants. Basically, we want to make it easy for you to design IDRs or IDR variants for your research. My goal is to make this *as useful as possible to the protein disorder community*. If you have any feature requests, please email me at remenecker@wustl.edu with the subject line **GOOSE feature request** and I'll be happy to see if I can make it happen. 
+**GOOSE : Generate disOrdered prOtiens Specifying propErties** is a python package developed to generate intrinsically disordered proteins or protein regions (collectively IDRs) and IDR variants. My goal is to make this *as useful as possible to the protein disorder community*. If you have any feature requests, please email me at remenecker@wustl.edu with the subject line **GOOSE feature request** and I'll be happy to see if I can make it happen. 
 
 Why was GOOSE made?
 --------------------
-It is difficult to know which properties of any given intrinsically disordered protein region (IDR) are important for function. Is it the hydropathy? Maybe the fraction of charged residues? How about the global dimensions? Who knows! Further, generating IDR variants can be a tricky task. This is why we made GOOSE. GOOSE lets you:  
- **1.** Generate synthetic IDRs where you can specify the length and:  
-    • properties including *average hydropathy*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa* (which is a property that defines opposite charge distribution in a sequence),  
-    • fractions of amino acids (you can specify multiple fractions simultaneously), or  
-    • ensemble dimensions, either end-to-end distance (Re) or radius of gyration (Rg)  
- **2. Generate IDR variants.** There are over 16 different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test different hypotheses. The different variants I currently have implemented should allow you to address many questions you might be interested in by letting you choose which parts or properties of your IDR to hold constant and which to change. This can really narrow down *what makes your IDR of interest work*.  
+The main functionalities of GOOSE are:
 
- **3. Make sequence libraries**. This includes libraries of sequences spanning different sequence properties or fractions of amino acids. 
-
- **4. Analyze sequences.** Analysis includes sequence properties, fractions of amino acids, and various predicted sequence features. Predicted sequence features are all machine learning based and are generated using SPARROW (see https://github.com/idptools/sparrow). Predictions include phosphorylation sites, cellular localization, radius of gyration, end-to-end distance, and transcriptional activation domains. By using any predictions in GOOSE you acknowledge that they are just predictions and not ground truth and the accuracy of any predictions generated cannot be gauranteed.
+* Generate synthetic IDRs where you can specify length and
+  * Simultaneously specify *average hydrophobicity*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa* (quantifies opposite charge distribution)  
+  * Fractions of amino acids (multiple fractions simultaneously)  
+  * End-to-end distance (Re) or radius of gyration (Rg)  
+  * Interactions between an IDR and itself or other IDRs
+* Generate sequences by *sequence optimization*. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can **define your own functions to design sequences**!
+* Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
+* Make sequence libraries spanning sequence properties or fractions of amino acids.  
 
 How can I use GOOSE?
 --------------------
-You can use GOOSE from Python or from a Google Colab notebook. The Colab notebook can be found at https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing
+You can use GOOSE from Python or from a Google Colab notebook. The Colab notebook can be found `here <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_ and is a great way to get started with GOOSE. 
 
 Installation - GOOSE takes flight!
 ===================================
@@ -61,7 +61,7 @@ This will install SPARROW. **Important note**: if your attempted install of SPAR
 
 Important limitations
 ======================
-GOOSE has some important limitations that users should be aware of. First, GOOSE makes sequences **predicted** to be disordered based on the disorder predictor metapredict V2. Although modern disorder predictors have proven to be *quite good*, one should aways keep in mind that predicted disorder is **not** gaurenteed disorder. 
+GOOSE has some important limitations that users should be aware of. First, GOOSE makes sequences **predicted** to be disordered based on the disorder predictor metapredict. Although modern disorder predictors have proven to be *quite good*, one should aways keep in mind that predicted disorder is **not** gaurenteed disorder. 
 
 Allowed error in sequence properties
 -------------------------------------

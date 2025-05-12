@@ -2,13 +2,13 @@
 code for variant generation, actually predicts disorder.
 '''
 
-from goose.backend.sequence_generation_backend import identify_residue_positions, fast_predict_disorder, gen_sequence, create_seq_by_props
+from goose.backend.sequence_generation_backend import identify_residue_positions
 from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
-from goose.backend.protein import Protein
-from goose.goose_exceptions import GooseError, GooseInputError, GooseFail, GooseException
+from goose.goose_exceptions import GooseInputError, GooseFail, GooseException
 from goose.backend.variant_generation_backend import create_kappa_variant, create_region_shuffle_variant, create_constant_residue_variant, create_hydropathy_class_variant, create_new_variant, create_constant_class_variant, create_new_var_constant_class_nums, create_asymmetry_variant, create_fcr_class_variant, create_ncpr_class_variant, create_all_props_class_variant
 from goose.backend.seq_by_dimension_backend import make_rg_re_variant, predict_rg, predict_re
+from goose.backend.gen_minimal_var_backend_v2 import minimal_sequence_modification
 
 import metapredict as meta
 
@@ -1594,4 +1594,102 @@ def gen_dimensions_variant(sequence, increase_or_decrease, rg_or_re, return_all=
                     else:
                         return final_seqs
 
+    raise GooseFail('Unable to generate sequence.')
+
+
+def gen_minimal_variant(sequence, 
+                        target_kappa=None,
+                            target_FCR=None,
+                            target_NCPR=None,
+                            target_hydropathy=None,
+                            tolerance_kappa=parameters.MAXIMUM_KAPPA_ERROR,
+                            tolerance_FCR=0.001,
+                            tolerance_NCPR=0.001,
+                            tolerance_hydropathy=parameters.HYDRO_ERROR,
+                            max_iterations=1000,
+                            protected_positions=None,
+                            weights=None,
+                            use_simulated_annealing=False,
+                            temperature=10.0,
+                            cooling_rate=0.95,
+                            early_stop_patience=50,
+                            verbose=True, 
+                            disorder_threshold=parameters.DISORDER_THRESHOLD, 
+                            strict_disorder=False,
+                            attempts=10):
+    '''
+    Function to generate a sequence with minimal changes.
+    This function will try to minimize the changes to the sequence
+    while also generating the sequence with the desired properties.
+    Because this function minimizes the changes to the sequence, 
+    it can take a long time to run, especially if the sequence is long.
+
+    parameters
+    ----------
+    sequence : str
+        The input protein sequence
+    target_kappa, target_FCR, target_NCPR, target_hydropathy : float, optional
+        Target values for the respective properties
+    tolerance_* : float
+        Acceptable tolerance for each property
+    max_iterations : int
+        Maximum number of iterations to run
+    protected_positions : list or None
+        List of indices (0-based) that should not be mutated
+    weights : dict or None
+        Weights for each property (e.g., {'kappa': 2.0, 'FCR': 1.0})
+    use_simulated_annealing : bool
+        Whether to use simulated annealing to escape local minima
+    temperature, cooling_rate : float
+        Parameters for simulated annealing
+    early_stop_patience : int
+        Stop if no improvement for this many iterations
+    verbose : bool
+        Whether to print progress information
+    disorder_threshold : float
+        The threshold value required for an amino acid
+        to be considered disordered
+    strict_disorder : bool
+        Whether to require all disorder values to be 
+        over threshold or if it is okay to use the values
+        from the input sequence
+    attempts : int
+        The number of times to try to make the sequence
+    
+    Returns
+    -------
+    str
+        The generated sequence with the desired properties
+    '''
+    # get starting disorder
+    starting_disorder = meta.predict_disorder(sequence)
+
+    for _ in range(attempts):
+        new_sequence = minimal_sequence_modification(
+            sequence=sequence,
+            target_kappa=target_kappa,
+            target_FCR=target_FCR,
+            target_NCPR=target_NCPR,
+            target_hydropathy=target_hydropathy,
+            tolerance_kappa=tolerance_kappa,
+            tolerance_FCR=tolerance_FCR,
+            tolerance_NCPR=tolerance_NCPR,
+            tolerance_hydropathy=tolerance_hydropathy,
+            max_iterations=max_iterations,
+            protected_positions=protected_positions,
+            weights=weights,
+            use_simulated_annealing=use_simulated_annealing,
+            temperature=temperature,
+            cooling_rate=cooling_rate,
+            early_stop_patience=early_stop_patience,
+            verbose=verbose)['sequence']
+        
+        # Check if the new sequence meets the disorder criteria
+        if sequence_variant_disorder(new_sequence, starting_disorder, 
+            cutoff_val=disorder_threshold, strict=strict_disorder, input_disorder_val=False) == True:
+            # if passes the 'disorder test', return the seq
+            return new_sequence
+        else:
+            continue
+    # if it doesn't work, raise an error
     raise GooseFail('Unable to generate sequence.')

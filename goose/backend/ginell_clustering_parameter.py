@@ -1,8 +1,8 @@
 """
-This method was developed by Garrett Ginell, a member of the
+This method was developed by Garrett Ginell, a form member of the
 Holehouse Lab. 
 
-Code written by Holehouse Lab member Garrett Ginell. This
+Code written by former Holehouse Lab member Garrett Ginell. This
 code allows for calculating the clustering of any amino acid, 
 which will be used in GOOSE to calculate approximate residue
 clustering. Thanks Garrett!

@@ -10,19 +10,14 @@
 # if any new functions are added to create.py, you need to add them here.
 __all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var', 'targeted_reposition_var',  'weighted_shuffle_var']
 
-import os
-import sys
 import random
 
 # note - we import packages below with a leading _ which means they are ignored in the import
 
 #for sequence generation
-#from goose.backend.sequence_generation import generate_disordered_seq_by_fractions as _generate_disordered_seq_by_fractions
-#from goose.backend.sequence_generation import generate_disordered_seq_by_props as _generate_disordered_seq_by_props
 from goose.backend_vectorized.sequence_generation_vectorized import generate_seq_by_fractions as _generate_disordered_seq_by_fractions
 from goose.backend_vectorized.sequence_generation_vectorized import generate_seq_by_props as _generate_disordered_seq_by_props
 from goose.backend.sequence_generation import generate_disordered_seq_by_dimensions as _generate_disordered_seq_by_dimensions
-from goose.backend.sequence_generation_backend import calculate_max_charge as _calculate_max_charge
 
 # goose tools for checking and fixing parameters
 from goose.backend.goose_tools import check_and_correct_props_kwargs as _check_and_correct_props_kwargs
@@ -52,16 +47,11 @@ from goose.backend.variant_generation import gen_excluded_shuffle_variant as _ge
 from goose.backend.variant_generation import gen_dimensions_variant as _gen_dimensions_variant
 
 # for minimal variant, need to... get rid of this old code.
-from goose.backend.gen_minimal_variant_backend import gen_minimal_sequence_variant as _gen_minimal_sequence_variant
+from goose.backend.variant_generation import gen_minimal_variant as _gen_minimal_variant
 
 # library creation
 from goose.backend.library_generation_backend import generate_library_by_parameter_ranges as _generate_library_by_parameter_ranges
 from goose.backend.library_generation_backend import generate_library_by_fraction_ranges as _generate_library_by_fraction_ranges
-
-# for folded structure generation - deprecating. 
-#from goose.backend.folded_region_generation import gen_helix as _gen_helix
-#from goose.backend.folded_region_generation import gen_beta_strand as _gen_beta_strand
-#from goose.backend.folded_region_generation import gen_beta_sheet as _gen_beta_sheet
 
 # FOR WHEN THINGS GO WRONG
 from goose import goose_exceptions
@@ -259,17 +249,30 @@ def seq_fractions(length, **kwargs):
     # check we passed in acceptable keyword arguments. At this stage, if a keyword
     # was passed that is not found in the list passed to _check_valid_kwargs then
     # an exception is raised. 
-    _check_valid_kwargs(kwargs, ['cutoff', 'attempts',  'strict_disorder',  'max_aa_fractions', 'A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y'])
+    _check_valid_kwargs(kwargs, ['cutoff', 'attempts',  'strict_disorder',  
+                                 'max_aa_fractions', 'A','C','D','E','F','G',
+                                 'H','I','K','L','M','N','P','Q','R','S','T',
+                                 'V','W','Y', 'return_all_sequences', 'metapredict_version'])
 
     # First correct kwargs. Do this first because
     # the next function that looks over kwargs values
     # can only take in corrected kwargs.
     kwargs = _check_and_correct_fracs_kwargs(**kwargs)
 
+    fractions={}
+    for f in kwargs:
+        if f in ['A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y']:
+            fractions[f] = kwargs[f]
+
     # now make sure that the input vals are within appropriate bounds
     _check_fracs_parameters(**kwargs)
 
-    generated_seq = _generate_disordered_seq_by_fractions(length, **kwargs)
+    generated_seq = _generate_disordered_seq_by_fractions(length,fractions=fractions,
+                                                          disorder_cutoff=kwargs['cutoff'],
+                                                          num_attempts=kwargs['attempts'],
+                                                          strict_disorder=kwargs['strict_disorder'],
+                                                          metapredict_version=kwargs['metapredict_version'],
+                                                          return_all_sequences=kwargs['return_all_sequences'])
 
     # return the seq
     return generated_seq
@@ -421,8 +424,8 @@ def seq_rg(length, objective_rg, allowed_error=parameters.rg_error, attempts=20,
 
 
 
-def minimal_var(input_sequence, hydropathy = '', FCR = '', 
-    NCPR = '', SCD='', cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+def minimal_var(input_sequence, hydropathy = None, FCR = None, 
+    NCPR = None, kappa=None, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
     '''
     User facing function for generating the minimal sequence variant. This variant
     tries to make a sequence as similar to the input sequence as possible all while
@@ -442,7 +445,7 @@ def minimal_var(input_sequence, hydropathy = '', FCR = '',
     NCPR : float
         The net charge per residue of the sequence. If not specified does not change. (Optional)
 
-    SCD : float
+    kappa : float
         The charge asymmetry of the sequence. If not specified does not change. (Optional)
 
     cutoff : float
@@ -469,8 +472,8 @@ def minimal_var(input_sequence, hydropathy = '', FCR = '',
     if cutoff > 1 or cutoff < 0:
         raise goose_exceptions.GooseInputError('cutoff value must be between 0 and 1 for disorder threshold')    
     try:
-        final_sequence = _gen_minimal_sequence_variant(input_sequence, mean_hydro = hydropathy, fraction = FCR, 
-        net_charge = NCPR, charge_asymmetry=SCD, cutoff=cutoff, strict=strict)
+        final_sequence = _gen_minimal_variant(input_sequence, target_hydropathy = hydropathy, target_FCR = FCR, 
+        target_NCPR = NCPR, target_kappa=kappa, cutoff=cutoff, strict=strict)
     except:
         raise goose_exceptions.GooseFail('Sorry! GOOSE was unable to generate the sequence. Please try again or try with different parameters or a lower cutoff value.')
     return final_sequence

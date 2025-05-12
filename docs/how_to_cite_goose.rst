@@ -1,7 +1,9 @@
 How to cite GOOSE
 ==================
 
-You can not currently cite GOOSE as we have yet to publish it (hopefully soon!). We would appreciate if you would mention GOOSE in your methods section with a link to the Github page so readers of your paper can understand how you generated the sequences you used.
+If you use GOOSE in your research, please cite the following preprint: 
+https://www.biorxiv.org/content/10.1101/2023.10.29.564547v2
+
 
 
 

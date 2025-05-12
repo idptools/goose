@@ -173,7 +173,7 @@ def everything(sequence, split_predictions = False, just_predictions=False):
         all_info['T phosphorylation'] = all_phosphosites['T']
         all_info['Y phosphorylation'] = all_phosphosites['Y']
         all_localization = cellular_localization(sequence)
-        pol_props=(sequence)
+        pol_props=polymer_properties(sequence)
         all_info['Re']=round(pol_props['Re'],4)
         all_info['Rg']=round(pol_props['Rg'],4)
         all_info['NLS'] = all_localization['NLS']

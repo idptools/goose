@@ -1,5 +1,6 @@
 """
-Basically a wrapper over sparrow. 
+This was originally build before SPARROW. Now it is
+asically a wrapper over SPARROW. 
 """
 
 import random

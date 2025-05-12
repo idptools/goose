@@ -57,7 +57,7 @@ def test_fractions_basic(min_length=100,
                    max_length=100,
                    seqs_per_length=5,
                    fractions_per_aa=19,
-                   verbose=False):
+                   verbose=True):
     '''
     function to test fraction functionality
     is the basic test because it's what I used to get the max values for the amino acid
