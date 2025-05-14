@@ -10,3 +10,4 @@ Tracking future changes...
 • Update autosummary in docs. 
 • Make sure no residual kappa errors (-1 for no charge or only same charge) arising from the new kappa code
 • Reassess logic in making hydropathy by class variants, add in numpy vectorization version. 
+• Fix the Colab Notebook!

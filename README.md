@@ -37,6 +37,8 @@ The main functionalities of GOOSE are:
 
 You can use GOOSE from Python or from a Google Colab notebook. The Colab notebook can be found at https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing
 
+**NOTE: May 2025** - It seems that the colab notebook is not working properly at this time. I will fix it as soon as I can. It doesn't appear to be an issue with GOOSE but rather an issue with a dependency (which makes it a little harder to debug). Apologies for any inconveniences!
+
 ## Installation - GOOSE takes flight!
 
 Right now you can only install GOOSE through Github. We plan to put it on PyPi at some point to allow for install via pip!  

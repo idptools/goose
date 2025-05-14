@@ -123,7 +123,7 @@ The constant_residue_var()
 
 
 The region_shuffle_var()
--------------------
+--------------------------
 
 ``region_shuffle_var()`` - Variant that will shuffle specific regions of an IDR. Multiple regions can be specified simultaneously.
 **Note** - The region_shuffle_var does **NOT** use index values like you would normally in Python. For the region_shuffle_var, 1 = the first amino acid in the sequence **NOT 0**. 

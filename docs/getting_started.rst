@@ -75,14 +75,7 @@ GOOSE requires the package ``sparrow``. Sparrow should be downloaded automatical
     $ pip install git+https://github.com/holehouse-lab/sparrow.git
 
 This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have numpy or cython installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. See step 1. of Installation for instructions on installing cython and numpy. 
- 
-Quick start to different functionalities on Readthedocs
----------------------------------------------------------
-* For using GOOSE to generate sequences, see sequence_generation
-* For using GOOSE to generate sequence variants, see variant_generation
-* For using GOOSE to generate sequence libraries, see sequence_library_generation
-* For using GOOSE to analyze sequences, see sequence_analysis
-* For using GOOSE to optimize sequences, see sequence_optimization
+
 
 Important limitations
 ======================

@@ -47,33 +47,57 @@ Property Classes Overview
 
 GOOSE provides many built-in property classes. Each can be added to the optimizer with its required arguments. Here is a summary:
 
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| Property Class                | Description                                   | Key Arguments                                |
-+===============================+===============================================+==============================================+
-| Hydrophobicity                | Target average hydrophobicity                 | target_value, weight                         |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| FCR                           | Fraction of Charged Residues                  | target_value, weight                         |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| NCPR                          | Net Charge Per Residue                        | target_value, weight                         |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| Kappa                         | Charge patterning parameter                   | target_value, weight                         |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| SCD                           | Sequence Charge Decoration                    | target_value, weight                         |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| ComputeIWD                    | Inverse Weighted Distance for residues        | residues (tuple), target_value, weight       |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| RadiusOfGyration              | Predicted radius of gyration                  | target_value, weight                         |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| EndToEndDistance              | Predicted end-to-end distance                 | target_value, weight                         |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| FractionDisorder              | Fraction of disordered residues               | target_value, weight, disorder_cutoff        |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| TargetAminoAcidFractions      | Target amino acid composition                 | target_fractions (dict), weight              |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| MaxFractions, MinFractions    | Max/min fractions for specific amino acids    | max_fractions/min_fractions (dict), weight   |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
-| SelfEpsilon                   | Self-interaction potential                    | target_value, weight, model                  |
-+-------------------------------+-----------------------------------------------+----------------------------------------------+
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| Property Class                | Description                                   | Key Arguments                                  |
++===============================+===============================================+================================================+
+| Hydrophobicity                | Target average hydrophobicity                 | target_value, weight                           |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| FCR                           | Fraction of Charged Residues                  | target_value, weight                           |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| NCPR                          | Net Charge Per Residue                        | target_value, weight                           |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| Kappa                         | Charge patterning parameter                   | target_value, weight                           |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| SCD                           | Sequence Charge Decoration                    | target_value, weight                           |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| ComputeIWD                    | Inverse Weighted Distance for residues        | residues (tuple), target_value, weight         |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| RadiusOfGyration              | Predicted radius of gyration                  | target_value, weight                           |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| EndToEndDistance              | Predicted end-to-end distance                 | target_value, weight                           |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| FractionDisorder              | Fraction of disordered residues               | target_value, weight, disorder_cutoff          |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| TargetAminoAcidFractions      | Target amino acid composition                 | target_fractions (dict), weight                |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| MaxFractions, MinFractions    | Max/min fractions for specific amino acids    | max_fractions/min_fractions (dict), weight     |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| SelfEpsilon                   | Self-interaction potential                    | target_value, weight, model                    |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| MatchSequenceDisorder         | Match disorder profile of a target sequence   | target_sequence, weight, exact_match,          |
+|                               |                                               | target_value                                   |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| Complexity                    | Wootton-Federhen (SEG) sequence complexity    | target_value, weight                           |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| MatchingResidues              | Number of residues matching a target sequence | target_sequence, target_value, weight          |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| MaxMatchingResidues           | Penalize if matches exceed target value       | target_sequence, target_value, weight          |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| EpsilonVectorBySequence       | Match epsilon interaction vectors to target   | original_sequence, target_interacting_sequence,|
+|                               |                                               | weight, model                                  |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| EpsilonByValue                | Target total epsilon interaction value        | target_value, target_sequence, weight, model   |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| EpsilonBySequence             | Match total epsilon value to reference        | original_sequence, target_interacting_sequence,|
+|                               |                                               | target_value, weight, model                    |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| FDSurfaceInteractionByValue   | Target surface repulsion/attraction (folded)  | repulsive_target, attractive_target, weight,   |
+|                               |                                               | model, path_to_pdb, probe_radius,              |
+|                               |                                               | surface_thresh, sasa_mode, fd_start, fd_end,   |
+|                               |                                               | preloaded_fd                                   |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
+| ChemicalFingerprint           | Match chemical fingerprint to target sequence | target_sequence, target_value, weight, model   |
++-------------------------------+-----------------------------------------------+------------------------------------------------+
 
 .. note::
    Some properties (e.g., ComputeIWD, TargetAminoAcidFractions) require extra arguments. See the API or docstrings for details.
