@@ -2,7 +2,7 @@ What is GOOSE?
 ===============
 **GOOSE : Generate disOrdered prOtiens Specifying propErties** is a python package developed to generate intrinsically disordered proteins or protein regions (collectively IDRs) and IDR variants. My goal is to make this *as useful as possible to the protein disorder community*. If you have any feature requests, please email me at remenecker@wustl.edu with the subject line **GOOSE feature request** and I'll be happy to see if I can make it happen. 
 
-Why was GOOSE made?
+Why can GOOSE do?
 --------------------
 The main functionalities of GOOSE are:
 
@@ -15,13 +15,31 @@ The main functionalities of GOOSE are:
 * Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 * Make sequence libraries spanning sequence properties or fractions of amino acids.  
 
+What is new in V0.2.0?
+-----------------------
+The higlights of the new features in GOOSE V0.2.0 are:
+* An entirely new approach to make sequences or sequence variants with ``SequenceOptimizer``
+* Completely rewritten backend for sequence generation by specifying properties or fractions of amino acids. 
+* More efficient sequence generation means we no longer rely on weighted probabilities to make disordered sequences. This means all sequences are generated more or less randomly to match some set of sequence parameters and then checked for disorder. Thank you Numpy for making this possible.
+* Way faster kappa optimization. This helps with de novo sequence generation and variant generation.
+* Support for generating sequences with specified interactions (self interactions or interactions with other IDRs).
+
+
+For full details, see the change log `here <https://github.com/idptools/goose>`_ 
+
 How can I use GOOSE?
 --------------------
-You can use GOOSE from Python or from a Google Colab notebook. The Colab notebook can be found `here <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_ and is a great way to get started with GOOSE. 
+You can use GOOSE from Python or from a Google Colab notebook. The Colab notebook can be found `here <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
 
 Installation - GOOSE takes flight!
 ===================================
-Right now you can only install GOOSE through Github. It will be on PyPi to allow for pip installation soon!  
+Right now you can only install GOOSE through Github. It will be on PyPi to allow for pip installation... soon!  
+
+A few notes on how to best use GOOSE.
+* We strongly recommend using GOOSE in a virtual environment. This is not required, but it will help you avoid any issues with package dependencies. See conda or venv for more information on how to set up a virtual environment.
+* GOOSE was tested largely in Python 3.11, so you will likely run into the fewest issues if you use that version. 
+* As of GOOSE v0.2.0, GOOSE should work with Python 3.12 and above. However, if you run into issues, let us know and we will do our best to fix them.
+
 
 GOOSE has a few requirements **prior** to installation. Just follow the steps below to use GOOSE!  
 
@@ -58,6 +76,13 @@ GOOSE requires the package ``sparrow``. Sparrow should be downloaded automatical
 
 This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have numpy or cython installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. See step 1. of Installation for instructions on installing cython and numpy. 
  
+Quick start to different functionalities on Readthedocs
+---------------------------------------------------------
+* For using GOOSE to generate sequences, see sequence_generation
+* For using GOOSE to generate sequence variants, see variant_generation
+* For using GOOSE to generate sequence libraries, see sequence_library_generation
+* For using GOOSE to analyze sequences, see sequence_analysis
+* For using GOOSE to optimize sequences, see sequence_optimization
 
 Important limitations
 ======================

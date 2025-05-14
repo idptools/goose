@@ -1337,7 +1337,7 @@ def create_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIM
     best_error = abs(best_kappa - kappa)
     if best_error < allowed_kappa_error:
         return sequence
-
+    
     # start trying to make sequence
     for attempt in range(0, attempts):
         if current_kappa > kappa:
@@ -1368,7 +1368,6 @@ def create_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIM
                 best_sequence = new_seq
                 best_kappa = current_kappa
                 best_error = abs(best_kappa-kappa)            
-
     fail_message = 'Unable to make kappa sequence in variant_generation_backend.py'        
     raise GooseBackendBug(fail_message)
 
@@ -1470,8 +1469,15 @@ def create_fcr_class_variant(sequence, fraction, constant_ncpr=True, use_closest
     original_fcr = Protein(sequence).FCR
     original_ncpr = Protein(sequence).NCPR
 
+    if original_kappa==-1:
+        ignore_kappa=True
+    
+   
+
+
     # figure out max possible FCR that can maintain disorder
     max_FCR = calculate_max_charge(original_hydropathy)
+
     if fraction > max_FCR:
         error_message = f'\n\nThe input FCR of {fraction} is greater than the max possible FCR to keep hydropathy the same and maintain disorder, which is {max_FCR}\n'
         raise GooseInputError(error_message)
@@ -2043,6 +2049,7 @@ def create_all_props_class_variant(sequence, hydropathy=None, fraction=None, net
             sequence = create_fcr_class_variant(sequence, fraction, constant_ncpr=False, use_closest = True, ignore_kappa=True)
         else:
             sequence = create_fcr_class_variant(sequence, fraction, constant_ncpr=False, use_closest = True, ignore_kappa=True)
+
     if net_charge != None:
         if fraction == None:
             sequence = create_ncpr_class_variant(sequence, net_charge, constant_fcr=False, ignore_kappa=True)
@@ -2050,10 +2057,12 @@ def create_all_props_class_variant(sequence, hydropathy=None, fraction=None, net
             sequence = create_ncpr_class_variant(sequence, net_charge, constant_fcr=False, ignore_kappa=True)
     if hydropathy != None:
         sequence = create_hydropathy_class_variant(sequence, hydro=hydropathy)
+
     if kappa == None:
         sequence = create_kappa_variant(sequence, original_kappa)
     else:
         sequence = create_kappa_variant(sequence, kappa)
+
     return sequence
 
 

@@ -1,16 +1,15 @@
 Creating sequences and sequence variants with GOOSE
 =====================================================
-Both sequence generation and variant generation are in the ``create`` moduel. First import *create from goose*
+First import ``create`` from goose.
 
 .. code-block:: python
 
     from goose import create
 
-Once *create* has been imported, you can start making sequences and sequence variants!
+Once ``create`` has been imported, you can start making sequences.
 
 Generating sequences with specified properties
 ===============================================
-GOOSE can generate sequences by either specifying sequence properties or fractions of amino acids. 
 
 The ``create.sequence()`` function lets you create sequences predicted to be disordered with various specified properties. 
 

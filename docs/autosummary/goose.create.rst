@@ -14,10 +14,7 @@
    .. autosummary::
    
       all_props_class_var
-      alpha_helix
       asymmetry_var
-      beta_sheet
-      beta_strand
       constant_class_var
       constant_properties_var
       constant_residue_var

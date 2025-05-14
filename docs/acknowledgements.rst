@@ -7,7 +7,7 @@ This project was supported by grants from agencies including the National Scienc
 
 Development
 ------------
-Development of GOOSE was led primarily by Ryan Emenecker. Numerous ideas were contributed from others along the way including from Shahar Sukenik, Alex Holehouse, and many more. Development of the SequenceOptimizer functionality released in V0.2.0 was led by Jeffrey Lotthammer. 
+Development of GOOSE was led primarily by Ryan Emenecker. Numerous ideas were contributed from others along the way including from Shahar Sukenik, Alex Holehouse, and many more. Development of the SequenceOptimizer functionality released in V0.2.0 was led by Jeffrey Lotthammer. Additional shout out to Garret Ginell, Nick Razo, Borna Novak, and Dan Griffith for making this possible. 
 
 Cookiecutter
 -------------

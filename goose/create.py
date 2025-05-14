@@ -425,7 +425,8 @@ def seq_rg(length, objective_rg, allowed_error=parameters.rg_error, attempts=20,
 
 
 def minimal_var(input_sequence, hydropathy = None, FCR = None, 
-    NCPR = None, kappa=None, cutoff=parameters.DISORDER_THRESHOLD, strict=False):
+    NCPR = None, kappa=None, cutoff=parameters.DISORDER_THRESHOLD, 
+    strict=False, attempts=10):
     '''
     User facing function for generating the minimal sequence variant. This variant
     tries to make a sequence as similar to the input sequence as possible all while
@@ -456,6 +457,9 @@ def minimal_var(input_sequence, hydropathy = None, FCR = None,
         Whether to use a strict disorder calculation. By default, variants are allowed
         to have regions below the disorder threshold *for regions where the input sequence
         is also below the threshold*. (Optional)
+
+    attempts : int
+        the number of times to attempt to make your sequence of interest. 
 
     Returns
     -----------
@@ -959,9 +963,9 @@ def fcr_class_var(sequence, FCR, attempts=10, cutoff=parameters.DISORDER_THRESHO
         The final sequence variant.
     '''
 
-    # make sure that the input sequence is all caps
+    # make sure that the input seq
+    # uence is all caps
     sequence = sequence.upper()
-
     # check length
     _length_check(sequence)
 

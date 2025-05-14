@@ -9,8 +9,7 @@ from goose.goose_exceptions import GooseInputError, GooseFail, GooseException
 from goose.backend.variant_generation_backend import create_kappa_variant, create_region_shuffle_variant, create_constant_residue_variant, create_hydropathy_class_variant, create_new_variant, create_constant_class_variant, create_new_var_constant_class_nums, create_asymmetry_variant, create_fcr_class_variant, create_ncpr_class_variant, create_all_props_class_variant
 from goose.backend.seq_by_dimension_backend import make_rg_re_variant, predict_rg, predict_re
 from goose.backend.gen_minimal_var_backend_v2 import minimal_sequence_modification
-
-import metapredict as meta
+from metapredict import meta # Ensure meta is imported if not already
 
 import random
 
@@ -1033,24 +1032,31 @@ def gen_all_props_class_variant(sequence, hydropathy=None, fcr=None, ncpr=None, 
         over threshold or if it si okay to use the values
         from the input sequence
     '''
-    # get original sequence disorder
-    starting_disorder = meta.predict_disorder(sequence)    
-    
-    # attempt to build sequence
-    for attempt_num in range(0, attempts):
-        disordered_seq = create_all_props_class_variant(sequence, hydropathy=hydropathy,
-        fraction=fcr, net_charge=ncpr,kappa=kappa)
+    # Calculate starting_disorder once before the loop
+    try:
+        starting_disorder = meta.predict_disorder(sequence)
+    except Exception as e:
+        raise GooseInputError(f"Failed to predict disorder for the initial sequence: {e}")
 
-        if sequence_variant_disorder(disordered_seq, starting_disorder, 
-            cutoff_val=disorder_threshold, strict=strict_disorder) == True:
-            # if passes the 'disorder test', return the seq
-            return disordered_seq
-        else:
-            newsequence = optimize_disorder_within_class(disordered_seq, num_iterations=500)
-            if sequence_variant_disorder(newsequence, starting_disorder, 
-                cutoff_val=disorder_threshold, strict=strict_disorder) == True:
-                return newsequence
-    raise GooseFail('Unable to generate sequence.')
+    for i in range(attempts):
+        try:
+            disordered_seq = create_all_props_class_variant(sequence, hydropathy=hydropathy, fraction=fcr, net_charge=ncpr, kappa=kappa)
+
+            if not disordered_seq:  # Check if the generated sequence is empty
+                # Optionally, log a warning or info message here
+                # print(f"Warning: Attempt {i+1} of {attempts} for gen_all_props_class_variant resulted in empty sequence.")
+                continue # Skip to the next attempt
+            
+            # Now, disordered_seq is guaranteed not to be empty here
+            if sequence_variant_disorder(disordered_seq, starting_disorder, 
+                cutoff_val=disorder_threshold, strict=strict_disorder):
+                return disordered_seq
+        except GooseException: # Catch specific exceptions if create_all_props_class_variant raises them
+            # Optionally, log info about the caught exception
+            # print(f"Info: Attempt {i+1} for gen_all_props_class_variant failed internally.")
+            pass # Continue to the next attempt
+            
+    raise GooseFail('Sorry! GOOSE was unable to generate the sequence after multiple attempts. Please try again or try with different input values or a different cutoff value.')
 
 
 def gen_targeted_shuffle_variant(sequence, target_aas, attempts=10, 
