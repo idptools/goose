@@ -4,13 +4,12 @@
 ## Last updated May 2025
 
 ### What's new (the highlights)?
-* Thanks to moving to a system whereby sequences are generated using numpy vectorized operations, we no longer need to use weighted probabilities for sequence generation to keep gOOSE fast. This should dramatically imporimproveve the sequence space that GOOSE can explore when generating a protein seuqence. 
+* Thanks to moving to a system whereby sequences are generated using numpy vectorized operations, we no longer need to use weighted probabilities for sequence generation to keep GOOSE fast. This should dramatically improve the sequence space that GOOSE can explore when generating a protein seuqence. 
 * A completely new approach for sequence / sequence variant generation has been launched! Check out the new SequenceOptimizer documentation on ReadTheDocs. 
-* SPEED! GOOSE is faster. This is obviously thanks to the numpy vectorized operations but also to metapredict V3 being able to simultaneously predit disorder for over 256 sequences at once. 
-* Additional functionality for sequence creation (custom probabilities for amino acids wehn specifying sequences by properties).
-* Updated minimal_variant functionality. It is technically slower but does a much better job of minimizing the number of amino acids mutated when trying to create your desired sequence from a starting sequence. 
-
-**NOTE:** Further documentation and examples on generating sequences based on self interaction or interaction with other IDRs (or the surface of folded proteins...) is coming soon!
+* SPEED! GOOSE is faster. This is numpy and metapredict V3. 
+* Additional functionality for sequence creation (ex. custom probabilities for amino acids when specifying sequences by properties).
+* Updated minimal_variant functionality. It is  slower but does a much better job of minimizing the number of amino acids changed when trying to create your desired sequence from a starting sequence. 
+* Addition of demo Jupyter Notebooks. See /goose/demos for examples on using SequenceOptimizer, generating sequences based on interactions, and making custom optimizer properties
 
 
 ### What is GOOSE?
