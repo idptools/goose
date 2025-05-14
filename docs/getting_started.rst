@@ -7,18 +7,19 @@ Why can GOOSE do?
 The main functionalities of GOOSE are:
 
 * Generate synthetic IDRs where you can specify length and
-  * Simultaneously specify *average hydrophobicity*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa* (quantifies opposite charge distribution)  
+  * Simultaneously specify average hydrophobicity, fraction of charged residues (FCR), net charge per residue (NCPR), and kappa (quantifies opposite charge distribution)  
   * Fractions of amino acids (multiple fractions simultaneously)  
   * End-to-end distance (Re) or radius of gyration (Rg)  
   * Interactions between an IDR and itself or other IDRs
-* Generate sequences by *sequence optimization*. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can **define your own functions to design sequences**!
+* Generate sequences by sequence optimization. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can define your own functions to design sequences!
 * Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 * Make sequence libraries spanning sequence properties or fractions of amino acids.  
 
 What is new in V0.2.0?
 -----------------------
 The higlights of the new features in GOOSE V0.2.0 are:
-* An entirely new approach to make sequences or sequence variants with ``SequenceOptimizer``
+
+* An entirely new approach to make sequences or sequence variants with SequenceOptimizer
 * Completely rewritten backend for sequence generation by specifying properties or fractions of amino acids. 
 * More efficient sequence generation means we no longer rely on weighted probabilities to make disordered sequences. This means all sequences are generated more or less randomly to match some set of sequence parameters and then checked for disorder. Thank you Numpy for making this possible.
 * Way faster kappa optimization. This helps with de novo sequence generation and variant generation.
