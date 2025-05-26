@@ -148,6 +148,7 @@ You cannot have values for NCPR where the absolute value of NCPR is greater than
     'IIPKLKDKIRKIGEEDGRKKKRAIRKRVKRRRKIRCRMKMEDERKRAARLRSKRKKDDGKHKTAKKKRERRKLKRYRRLELRGKDKGDDKIVRKKDMIDP'
 
 **Specifying metapredict version**
+
 .. code-block:: python
 
     create.sequence(100, hydropathy=2.5, metapredict_version=2)
