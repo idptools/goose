@@ -42,16 +42,7 @@ A few notes on how to best use GOOSE.
 * As of GOOSE v0.2.0, GOOSE should work with Python 3.12 and above. However, if you run into issues, let us know and we will do our best to fix them.
 
 
-GOOSE has a few requirements **prior** to installation. Just follow the steps below to use GOOSE!  
-
-1. Install cython and numpy.  
-
-.. code-block:: bash
-
-    $ pip install cython
-    $ pip install numpy
-
-2. Install GOOSE.  
+As of GOOSE V0.2.0, you should be able to install GOOSE with a single command. 
 
 To install directly from the git repository simply run:
 

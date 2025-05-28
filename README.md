@@ -43,15 +43,7 @@ You can use GOOSE from Python or from a Google Colab notebook. The Colab noteboo
 
 Right now you can only install GOOSE through Github. We plan to put it on PyPi at some point to allow for install via pip!  
 
-GOOSE has a few requirements **prior** to installation. Just follow the steps below to use GOOSE!  
-
-**First install cython and numpy.**  
-```bash
-pip install cython
-pip install numpy
-```
-
-**Now you can install GOOSE.**  
+After moving GOOSE to use pyproject.toml, you should be able to install GOOSE in a single step. 
 
 To install directly from the git repository simply run:
 
