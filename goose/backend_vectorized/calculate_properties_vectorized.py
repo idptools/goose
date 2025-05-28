@@ -60,10 +60,11 @@ def matrices_to_sequences(seq_matrices):
         sequences.append(''.join([INT_TO_AA[aa] for aa in matrix]))
     return sequences
 
+
 def calculate_fcr_batch(seq_matrices):
     """
-    Calculate FCR for multiple sequences simultaneously.
-    
+    Calculate FCR for multiple sequences simultaneously (fully vectorized).
+
     Parameters:
     -----------
     seq_matrices : list of numpy.ndarray
@@ -72,11 +73,12 @@ def calculate_fcr_batch(seq_matrices):
     Returns:
     --------
     numpy.ndarray
-        Array of FCR values for each sequence
+        Array of FCR values for each sequence    
     """
-    # Calculate mean FCR for each sequence using vectorized operations
-    fcr_scores = np.array([np.mean(FCR_SCALE[seq]) for seq in seq_matrices])
+    stacked = np.stack(seq_matrices)  # shape: (num_seqs, seq_len)
+    fcr_scores = FCR_SCALE[stacked].mean(axis=1)
     return fcr_scores
+
 
 def calculate_ncpr_batch(seq_matrices):
     """
@@ -93,7 +95,8 @@ def calculate_ncpr_batch(seq_matrices):
         Array of NCPR values for each sequence
     """
     # Calculate mean NCPR for each sequence using vectorized operations
-    ncpr_scores = np.array([np.mean(NCPR_SCALE[seq]) for seq in seq_matrices])
+    stacked = np.stack(seq_matrices)
+    ncpr_scores = NCPR_SCALE[stacked].mean(axis=1)
     return ncpr_scores
 
 
@@ -112,5 +115,7 @@ def calculate_hydropathy_batch(seq_matrices):
         Array of hydropathy scores for each sequence
     """
     # Calculate mean hydropathy for each sequence using vectorized operations
-    hydropathy_scores = np.array([np.mean(HYDROPATHY_SCALE[seq]) for seq in seq_matrices])
+    stacked = np.stack(seq_matrices)
+    hydropathy_scores = HYDROPATHY_SCALE[stacked].mean(axis=1)
     return hydropathy_scores
+

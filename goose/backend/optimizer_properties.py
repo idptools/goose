@@ -303,6 +303,7 @@ class SCD(ProteinProperty):
     def calculate(self, protein: 'sparrow.Protein') -> float:
         return protein.SCD
 
+
 class SHD(ProteinProperty):
     """
     Returns the default sequence hydropathy decoration (SHD) parameter 
@@ -458,7 +459,25 @@ class MaxMatchingResidues(ProteinProperty):
         else:
             return self.target_value
           
+# making a min matching residues param. 
+class MinMatchingResidues(ProteinProperty):
+    '''
+    Determines the number of residues that match a target sequence in the current sequence.
+    Penalizes the score if the number of matching residues is greater than the target value.
+    '''
+    def __init__(self, 
+                 target_sequence: str,
+                 target_value: float, 
+                 weight: float = 1.0):
+        super().__init__(target_value, weight)
+        self.target_sequence = target_sequence
 
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        matches = sum([1 for i in range(len(protein.sequence)) if protein.sequence[i] == self.target_sequence[i]])
+        if matches < self.target_value:
+            return abs(matches - self.target_value)
+        else:
+            return self.target_value
 
 class EpsilonVectorBySequence(ProteinProperty):
     """
@@ -790,7 +809,7 @@ class SelfEpsilon(ProteinProperty):
         return current_epsilon
 
 
-class FDSurfaceInteractionByValue(ProteinProperty):
+class FDSurfaceInteractionByRepulsiveAndAttractiveValues(ProteinProperty):
     """
     Try to get a specific surface repulsion and attraction
 
@@ -933,6 +952,107 @@ class FDSurfaceInteractionByValue(ProteinProperty):
         # get the diff
         return np.abs(self.repulsive_target-current_repulsive) + np.abs(self.attractive_target-current_attractive)
         
+
+# make new class that makes sequences by net. 
+class FDSurfaceInteractionByMean(ProteinProperty):
+    """
+    Try to get a specific Net attraction. 
+
+    """
+    def __init__(self,  
+                 weight: float = 1.0,
+                 target_value: float = 0,
+                 model = 'mpipi',
+                 path_to_pdb: str = None,
+                 probe_radius: float = 1.4,
+                 surface_thresh: float = 0.10,
+                 sasa_mode: str = 'v1',
+                 fd_start : int = None,
+                 fd_end : int = None,
+                 preloaded_fd = None):
+        super().__init__(target_value, weight)
+        self.model = model
+        self.path_to_pdb = path_to_pdb
+        self.probe_radius = probe_radius
+        self.sasa_mode = sasa_mode
+        self.surface_thresh = surface_thresh
+        self.fd_start = fd_start
+        self.fd_end = fd_end
+
+        # stuff to set to None and then update when this class is initiated    
+        self.loaded_IMC_object = None
+        if preloaded_fd != None:
+            self.folded_domain = preloaded_fd
+        else:
+            self.folded_domain = None
+        self.target_epsilon = None
+    
+    def load_IMC_object(self, model: str = None):
+        """
+        Load the IMC_object to be used for the calculation.
+
+        Parameters:
+        model (str): The model to be used for the calculation.
+        """
+        if model is None:
+            model = self.model.lower()
+        
+        if self.loaded_IMC_object==None:
+            if model == 'mpipi':
+                self.loaded_IMC_object = finches.frontend.mpipi_frontend.Mpipi_frontend().IMC_object
+            elif model == 'calvados':
+                self.loaded_IMC_object = finches.frontend.calvados_frontend.CALVADOS_frontend().IMC_object
+            else:
+                raise ValueError(f"Model {model} not supported.")
+        return self.loaded_IMC_object
+
+    def load_folded_domain(self, path_to_pdb: str = None, start=None, end=None,
+                           probe_radius: float = None, surface_thresh: float = None,
+                           sasa_mode: str = None):
+        """
+        Load the folded domain to be used for the calculation.
+
+        Parameters:
+        path_to_pdb (str): The path to the pdb file for the folded domain.
+        start (int): The start residue of the folded domain.
+        end (int): The end residue of the folded domain.
+        probe_radius (float): The probe radius to use for the calculation.
+        surface_thresh (float): The surface threshold to use for the calculation.
+        sasa_mode (str): The SASA mode to use for the calculation.
+        """
+        # only run if we haven't already loaded the folded domain
+        if self.folded_domain is None:
+            # get everything from the class if not provided
+            if path_to_pdb is None:
+                path_to_pdb = self.path_to_pdb
+            if start is None:
+                start = self.fd_start
+            if end is None:
+                end = self.fd_end
+            if probe_radius is None:
+                probe_radius = self.probe_radius
+            if surface_thresh is None:
+                surface_thresh = self.surface_thresh
+            if sasa_mode is None:
+                sasa_mode = self.sasa_mode
+            
+            # get folded domain
+            self.folded_domain = FoldedDomain(path_to_pdb,
+                                                        start=start,
+                                                        end=end,
+                                                        probe_radius=probe_radius,
+                                                        surface_thresh=surface_thresh,
+                                                        sasa_mode=sasa_mode)
+        
+        return self.folded_domain
+    
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        # make sure we have the original epsilon vectors
+        self.loadedloaded_IMC_object_model = self.load_IMC_object()
+        self.folded_domain = self.load_folded_domain()
+        cur_net = target_fd.calculate_mean_surface_epsilon(protein.sequence, imc_obj)
+        # get the diff
+        return cur_net
 
 
 
