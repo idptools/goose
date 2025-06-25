@@ -15,8 +15,8 @@ import random
 # note - we import packages below with a leading _ which means they are ignored in the import
 
 #for sequence generation
-from goose.backend_vectorized.sequence_generation_vectorized import generate_seq_by_fractions as _generate_disordered_seq_by_fractions
-from goose.backend_vectorized.sequence_generation_vectorized import generate_seq_by_props as _generate_disordered_seq_by_props
+from goose.backend_sequence_generation.sequence_generation_vectorized import generate_seq_by_fractions as _generate_disordered_seq_by_fractions
+from goose.backend_sequence_generation.sequence_generation_vectorized import generate_seq_by_props as _generate_disordered_seq_by_props
 from goose.backend.sequence_generation import generate_disordered_seq_by_dimensions as _generate_disordered_seq_by_dimensions
 
 # goose tools for checking and fixing parameters

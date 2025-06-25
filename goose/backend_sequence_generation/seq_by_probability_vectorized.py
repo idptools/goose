@@ -544,8 +544,6 @@ class SequenceGenerator:
                 neg_mask = sequences_array[i] == -1
                 neutral_mask = sequences_array[i] == 0
 
-                
-                
                 # Fill positive positions with positive amino acids
                 pos_count = np.sum(pos_mask)
                 if pos_count > 0:

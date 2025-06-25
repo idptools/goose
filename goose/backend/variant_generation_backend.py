@@ -13,7 +13,7 @@ from goose.backend import lists
 from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
 from goose.backend.ginell_clustering_parameter import calculate_average_inverse_distance_from_sequence as clustering_param
-from goose.backend_vectorized.optimize_kappa_vectorized import optimize_kappa_vectorized
+from goose.backend_property_optimization.optimize_kappa import optimize_kappa_vectorized
 
 def return_num_for_class(sequence):
     '''

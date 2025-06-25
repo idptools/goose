@@ -7,10 +7,10 @@ import numpy as np
 import metapredict as meta
 from sparrow.protein import Protein
 from goose import goose_exceptions
-from goose.backend_vectorized.optimize_kappa_vectorized import optimize_kappa_vectorized
-from goose.backend_vectorized.optimize_hydropathy_vectorized import optimize_hydropathy_vectorized
-from goose.backend_vectorized.seq_by_probability_vectorized import SequenceGenerator
-from goose.backend_vectorized.seq_by_fractions_vectorized import FractionBasedSequenceGenerator
+from goose.backend_property_optimization.optimize_kappa import optimize_kappa_vectorized
+from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy_vectorized
+from goose.backend_sequence_generation.seq_by_probability_vectorized import SequenceGenerator
+from goose.backend_sequence_generation.seq_by_fractions_vectorized import FractionBasedSequenceGenerator
 
 
 
@@ -117,7 +117,7 @@ def generate_seq_by_props(length,
                            hydropathy=None, 
                            kappa=None, 
                            exclude_residues=None,
-                           num_attempts=100,
+                           num_attempts=1000,
                            strict_disorder=False,
                            hydropathy_tolerance = 0.05,
                            kappa_tolerance=0.03,
@@ -128,7 +128,7 @@ def generate_seq_by_props(length,
                            return_all_sequences=False,
                            use_weighted_probabilities=True,
                            chosen_probabilities=None,
-                           batch_size=1000):
+                           batch_size=100):
     """
     Generate sequences with specific properties and check for disorder.
     
@@ -179,7 +179,7 @@ def generate_seq_by_props(length,
         Only used if use_weighted_probabilities is True.
     batch_size : int
         Number of sequences to generate in each batch
-        default is 1000
+        default is 100
     Returns
     -------
     list
@@ -193,7 +193,8 @@ def generate_seq_by_props(length,
     # iterate over the number of attempts
     for _ in range(num_attempts):
         # generate starter sequences with specified properties
-        seqs = seq_gen.generate_sequences_vectorized(length, fcr=fcr, ncpr=ncpr, hydropathy=hydropathy, num_sequences=batch_size,
+        seqs = seq_gen.generate_sequences_vectorized(length, fcr=fcr, ncpr=ncpr, 
+                                                     hydropathy=hydropathy, num_sequences=batch_size,
                                                      specific_probabilities=chosen_probabilities,
                                                      exclude_residues=exclude_residues)
 
