@@ -5,6 +5,7 @@ uses numpy vectorized operations to maximize efficiency.
 
 import numpy as np
 from typing import List, Union
+from goose import parameters
 from goose.backend_property_calculation.calculate_properties_vectorized import calculate_hydropathy_batch, sequences_to_matrices, matrices_to_sequences
 
 
@@ -13,11 +14,13 @@ def optimize_hydropathy_vectorized(
     target_hydropathy: float, 
     preserve_charged: bool = True,
     max_iterations: int = 1000,
-    tolerance: float = 0.05,
+    tolerance: float = parameters.HYDRO_ERROR,
     batch_size: int = 10, 
-    only_return_within_tolernace: bool = False,
+    only_return_within_tolernace: bool = True,
     return_when_num_hit=None,
-    exclude_residues=None) -> List[str]:
+    exclude_residues=None,
+    need_to_convert_seqs=False,
+    convert_back_to_sequences=False) -> List[str]:
     """
     Hydropathy optimization function that modifies sequences to achieve a target hydropathy value.
 
@@ -41,6 +44,10 @@ def optimize_hydropathy_vectorized(
         If specified, return when this many sequences are within tolerance.
     exclude_residues : List[str] or None
         Residues to exclude from modification.
+    need_to_convert_seqs : bool
+        If True, convert sequences to matrices before processing.
+    convert_back_to_sequences : bool
+        If True, convert the final matrices back to sequences.
 
     Returns:
     --------
@@ -51,12 +58,15 @@ def optimize_hydropathy_vectorized(
     HYDROPATHY_SCALE = np.array([6.3, 7.0, 1.0, 1.0, 7.3, 4.1, 1.3, 9.0, 
                             0.6, 8.3, 6.4, 1.0, 2.9, 1.0, 0.0, 3.7, 3.8, 8.7, 3.6, 3.2])
 
-    # Convert input to proper format
-    if isinstance(sequences, str):
-        sequences = [sequences]
-    if not isinstance(sequences, np.ndarray):  
-        sequences = np.array(sequences)
+    if need_to_convert_seqs:    # Convert input to proper format
+        if isinstance(sequences, str):
+            sequences = [sequences]
+        # Convert sequences to matrices
+        seq_matrices = sequences_to_matrices(sequences)
+    else:
+        seq_matrices = sequences
 
+    # see if we need to return a specific number. 
     if return_when_num_hit is not None:
         only_return_within_tolernace = True
         if return_when_num_hit > len(sequences):
@@ -74,8 +84,7 @@ def optimize_hydropathy_vectorized(
     if exclude_residues is not None:
         excluded_indices = set(aa_to_int[aa] for aa in exclude_residues if aa in aa_to_int)
     
-    # Convert sequences to matrices
-    seq_matrices = sequences_to_matrices(sequences)
+    # get num and length
     n_sequences, seq_length = seq_matrices.shape
     
     # Define charged residue indices
@@ -179,7 +188,10 @@ def optimize_hydropathy_vectorized(
         seq_matrices = seq_matrices[sorted_indices]
 
     # Convert back to sequences
-    optimized_sequences = matrices_to_sequences(seq_matrices)
+    if convert_back_to_sequences:
+        optimized_sequences = matrices_to_sequences(seq_matrices)
+    else:
+        optimized_sequences = seq_matrices
     
     return optimized_sequences
 

@@ -27,7 +27,6 @@ class SequenceParameters:
     target_hydropathy: Optional[float] = None
     target_fcr: Optional[float] = None
     target_ncpr: Optional[float] = None
-    num_iterations: int = 1000
 
     def __post_init__(self):
         """Initialize parameter ranges and set defaults."""
@@ -100,7 +99,6 @@ class SequenceGenerator:
                  fcr=None,
                  ncpr=None,
                  hydropathy=None,
-                 num_iterations=1000,
                  num_sequences: int = 1,
                  use_weighted_probabilities: bool = True,
                  chosen_probabilities: Dict[str, float] = None,
@@ -110,7 +108,6 @@ class SequenceGenerator:
         self.fcr = fcr
         self.ncpr = ncpr
         self.hydropathy = hydropathy
-        self.num_iterations = num_iterations
         self.num_sequences = num_sequences
         self.use_weighted_probabilities = use_weighted_probabilities
         self.chosen_probabilities = chosen_probabilities
@@ -139,7 +136,6 @@ class SequenceGenerator:
                                   ncpr=None,
                                   hydropathy=None,
                                   num_sequences=None,
-                                  num_iterations=None,
                                   exclude_residues=None):
         """Generate a batch of parameters, randomizing unspecified values."""
         # Use specified values if provided
@@ -153,8 +149,6 @@ class SequenceGenerator:
             hydropathy = self.hydropathy
         if num_sequences is None:
             num_sequences = self.num_sequences
-        if num_iterations is None:
-            num_iterations = self.num_iterations
         
         # get excluded residues as numbers. 
         if exclude_residues is not None:
@@ -384,9 +378,9 @@ class SequenceGenerator:
                                      ncpr=None,
                                      hydropathy=None,
                                      num_sequences=None,
-                                     num_iterations=None,
                                      specific_probabilities=None,
-                                     exclude_residues=None):
+                                     exclude_residues=None,
+                                     convert_to_amino_acids=False):
         """
         Generate amino acid sequences using fully vectorized numpy operations.
         Uses a fixed sequence length for all generated sequences to enable better vectorization.
@@ -403,12 +397,12 @@ class SequenceGenerator:
             Target hydropathy score
         num_sequences : int, optional
             Number of sequences to generate
-        num_iterations : int, optional
-            Number of iterations for optimization
         specific_probabilities : dict, optional
             Specific probabilities for amino acids (if not using default)
         exclude_residues : list, optional
             List of residues to exclude from generation
+        convert_to_amino_acids : bool, optional
+            If True, convert generated indices to amino acid characters
         Returns:
         --------
         list
@@ -492,13 +486,13 @@ class SequenceGenerator:
             if specific_probabilities is None:
                 num_positive, num_negative, _, probabilities = self._generate_parameter_batch(
                     length=length, fcr=fcr, ncpr=ncpr, hydropathy=hydropathy,
-                    num_sequences=num_sequences, num_iterations=num_iterations,
+                    num_sequences=num_sequences,
                     exclude_residues=exclude_residues
                 )
             else:
                 num_positive, num_negative, _, _ = self._generate_parameter_batch(
                     length=length, fcr=fcr, ncpr=ncpr, hydropathy=hydropathy,
-                    num_sequences=num_sequences, num_iterations=num_iterations,
+                    num_sequences=num_sequences,
                     exclude_residues=exclude_residues
                 )
 
@@ -579,12 +573,12 @@ class SequenceGenerator:
         
         # Create lookup array for amino acid conversion
         max_idx = max(self.int_to_aa.keys())
-        aa_lookup = np.array([self.int_to_aa.get(i, '') for i in range(max_idx + 1)])
         
         # Convert integer arrays to amino acid sequences using vectorized join
-        sequences = []
-        for seq_indices in sequences_array:
-            sequences.append(''.join(aa_lookup[seq_indices]))
+        if convert_to_amino_acids:
+            sequences = np.array([''.join(self.int_to_aa[aa] for aa in seq) for seq in sequences_array])
+        else:
+            sequences = sequences_array
         
         return sequences
 

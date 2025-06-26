@@ -10,8 +10,9 @@ The optimization is done by moving the charged residues in the sequence.
 import random
 import numpy as np
 from typing import List, Union, Optional, Tuple
+from goose import parameters
 from goose.backend_property_calculation.calculate_kappa import charge_matrix_to_ternary, kappa
-from goose.backend_property_calculation.calculate_properties_vectorized import sequences_to_matrices
+from goose.backend_property_calculation.calculate_properties_vectorized import sequences_to_matrices, matrices_to_sequences
 from goose.backend_property_optimization.shuffle_sequences_in_matrix import shuffle_sequence_return_matrix
 from goose.backend_property_optimization.minimize_kappa import efficient_kappa_minimization
 from goose.backend_property_optimization.modify_kappa import increase_kappa, decrease_kappa, increase_kappa_aggressive
@@ -19,9 +20,13 @@ from goose.backend_property_optimization.modify_kappa import increase_kappa, dec
 def optimize_kappa_vectorized(sequence, target_kappa, 
                               num_copies: int = 10,
                               max_change_iterations: int = 10,
-                              tolerance=0.03, num_iterations=1000, 
+                              tolerance=parameters.MAXIMUM_KAPPA_ERROR, 
+                              num_iterations=1000, 
                               return_when_num_hit=None,
-                              only_return_within_tolerance=False):
+                              only_return_within_tolerance=True,
+                              convert_input_seq_to_matrix=False,
+                              inputting_matrix=True,
+                              avoid_shuffle=False) -> List[str]:
     '''
     Optimize kappa values of sequences by either increasing or decreasing charge asymmetry
     to reach a target kappa value. Optimized for performance.
@@ -38,33 +43,50 @@ def optimize_kappa_vectorized(sequence, target_kappa,
             If not None, return when this number of sequences are within tolerance
         only_return_within_tolerance (bool): If True, only return sequences within tolerance.
             if False, return all sequences, even if they are not within tolerance.
-
+        convert_input_seq_to_matrix (bool): If True, convert input sequence to matrix format before processing.
+        inputting_matrix (bool): If True, inputting something ready to go. 
+        avoid_shuffle (bool): If True, avoid shuffling sequences.
     
     Returns:
         list: Sequences with kappa values optimized to be close to the target
     '''
-    # Ensure we have a single sequence as input
-    if isinstance(sequence, list):
-        if len(sequence) == 1:
-            sequence = sequence[0]
+
+    if inputting_matrix==False:
+        if convert_input_seq_to_matrix:
+            # Ensure we have a single sequence as input
+            if isinstance(sequence, list):
+                if len(sequence) == 1:
+                    sequence = sequence[0]
+                else:
+                    raise ValueError("Function expects a single sequence, but got a list of multiple sequences")
+            # Convert input to numpy array for consistency
+            sequence_matrix = sequences_to_matrices([sequence])
         else:
-            raise ValueError("Function expects a single sequence, but got a list of multiple sequences")
+            sequence_matrix=sequence.copy()
+            sequence = matrices_to_sequences(sequence)[0]  # Ensure we have a single sequence
+       
+        # make sure seq matrix has correct shape
+        if sequence_matrix.shape[0] != 1:
+            raise ValueError("Input sequence matrix must have shape (1, L) where L is the length of the sequence")
+
+        # make copies of the sequence and shuffle all but the original
+        if avoid_shuffle==False:
+            sequence_matrix = shuffle_sequence_return_matrix(sequence_matrix, num_shuffles=num_copies)
+        else:
+            # make a matrix with num_copies of the sequence
+            sequence_matrix = np.tile(sequence_matrix, (num_copies, 1))
+    else:
+        sequence_matrix = sequence.copy()
+        sequence = matrices_to_sequences(sequence)
+
     
-    # if we are returning when num hit 
     if return_when_num_hit != None:
         # force only_return_within_tolerance to be true
         only_return_within_tolerance=True
-        if return_when_num_hit > num_copies:
-            return_when_num_hit = num_copies
+        if return_when_num_hit > sequence_matrix.shape[0]:
+            return_when_num_hit = sequence_matrix.shape[0]
     else:
-        return_when_num_hit = num_copies
-
-
-    # Convert input to numpy array for consistency
-    sequence_matrix = sequences_to_matrices([sequence])
-
-    # make copies of the sequence and shuffle all but the original
-    sequence_matrix = shuffle_sequence_return_matrix(sequence_matrix, num_shuffles=num_copies)
+        return_when_num_hit = sequence_matrix.shape[0]
 
     # Ternarize the sequences (only once at the start)
     ternarized_sequences = charge_matrix_to_ternary(sequence_matrix)
@@ -164,13 +186,35 @@ def optimize_kappa_vectorized(sequence, target_kappa,
                     window_size=5
             if num_not_improved > 3:
                 window_size=5
-                # shuffle sequences in recalc_indices
-                modified_sequences[recalc_indices] = charge_matrix_to_ternary(
-                    shuffle_sequence_return_matrix(
-                    sequences_to_matrices([sequence]), num_shuffles=len(recalc_indices)))
+                if inputting_matrix==False:
+                    # should have single sequence, just make shuffles
+                    if avoid_shuffle==False:
+                        modified_sequences[recalc_indices] = charge_matrix_to_ternary(
+                            shuffle_sequence_return_matrix(
+                            sequences_to_matrices([sequence]), num_shuffles=len(recalc_indices)))
+                    else:
+                        # set the sequences unable to improve to the original sequence
+                        modified_sequences[recalc_indices] = charge_matrix_to_ternary(
+                            sequences_to_matrices([sequence]))[0]
+                        
+                else:
+                    # we need to get each sequence that is in recalc_indices and shuffle it. 
+                    for n, idx in enumerate(recalc_indices):
+                        cur_seq = sequence_matrix[idx:idx+1].copy()
+                        modified_sequences[idx] = charge_matrix_to_ternary(
+                            shuffle_sequence_return_matrix(cur_seq, num_shuffles=1))[0]
+                # reset num_not_improved
+                num_not_improved=0
                 
     # Convert ternarized sequences back to amino acid sequences
-    modified_amino_sequences = optimized_convert_ternarized_to_amino(modified_sequences, sequence)
+    if inputting_matrix==False:
+        modified_amino_sequences = optimized_convert_ternarized_to_amino(modified_sequences, sequence)
+    else:
+        modified_amino_sequences=[]
+        for n, s in enumerate(sequence):
+            cur_ternarized_seq = np.array([modified_sequences[n]])
+            modified_amino_sequences.append(optimized_convert_ternarized_to_amino(cur_ternarized_seq, s)[0])
+
 
     if only_return_within_tolerance:
         # sort sequences by closest to target kappa

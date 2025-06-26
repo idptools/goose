@@ -1,7 +1,7 @@
 from sparrow.protein import Protein
 import numpy as np
-from goose.backend_variants.defined_aa_classes import aa_classes, aa_classes_by_aa, aa_class_indices
-from goose.backend_vectorized.calculate_properties_single_sequence import sequence_to_array, array_to_sequence, calculate_hydropathy_single_sequence, calculate_ncpr_single_sequence, calculate_fcr_single_sequence
+from goose.data.defined_aa_classes import aa_classes, aa_classes_by_aa, aa_class_indices
+from goose.backend_property_calculation.calculate_properties_single_sequence import sequence_to_array, array_to_sequence, calculate_hydropathy_single_sequence, calculate_ncpr_single_sequence, calculate_fcr_single_sequence
 
 def check_properties(
         variant_sequence,

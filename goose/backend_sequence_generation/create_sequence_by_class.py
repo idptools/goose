@@ -1,10 +1,10 @@
 '''
 Functionality to create a sequence from the class of amino acids. 
 '''
-from goose.backend_vectorized.seq_by_fractions_vectorized import FractionBasedSequenceGenerator
+from goose.backend_sequence_generation.seq_by_fractions_vectorized import FractionBasedSequenceGenerator
 from typing import Dict, List, Optional, Union
 import numpy as np
-from goose.backend_variants.defined_aa_classes import aa_classes, aa_classes_by_aa, aa_class_indices
+from goose.data.defined_aa_classes import aa_classes, aa_classes_by_aa, aa_class_indices
 
 def get_individual_amino_acid_fractions(
         length: int,
@@ -187,7 +187,8 @@ def create_sequence_by_class(
         proline_fraction: float = 0.0,
         cysteine_fraction: float = 0.0,
         histidine_fraction: float = 0.0,
-        num_sequences: int = 1) -> Union[str, List[str]]:
+        num_sequences: int = 1,
+        convert_to_amino_acids: bool = True) -> Union[str, List[str]]:
     '''
     Create sequence(s) based on the specified amino acid class fractions.
     
@@ -219,7 +220,8 @@ def create_sequence_by_class(
         Fraction of histidine (H).
     num_sequences : int
         Number of sequences to generate (default: 1).
-    
+    convert_to_amino_acids : bool
+        If True, convert the generated sequences to amino acid strings.
     Returns:
     --------
     Union[str, List[str]]
@@ -251,7 +253,7 @@ def create_sequence_by_class(
             raise ValueError(f"{class_name}_fraction must be non-negative, got {fraction}")
     
     # Check if sum exceeds 1.0
-    total_specified = sum(class_fractions.values())
+    total_specified = round(sum(class_fractions.values()),8)
     if total_specified > 1.0:
         raise ValueError(f"Sum of class fractions ({total_specified:.4f}) exceeds 1.0")
     
@@ -286,10 +288,11 @@ def create_sequence_by_class(
         randomize_unspecified=False,  # We've already filled everything
         normalize=False,  # Don't normalize again since we just did it
         strict=True  # Use strict mode for exact counts
-    )
+        )
     
-    sequences = generator.generate_sequences(num_sequences=num_sequences)
-    
+    sequences = generator.generate_sequences(num_sequences=num_sequences,
+                                             convert_to_amino_acids=convert_to_amino_acids)
+
     # Return single string if only one sequence requested, otherwise return list
     if num_sequences == 1:
         return sequences[0]

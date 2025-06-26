@@ -5,8 +5,10 @@ The strategy here is to generate many sequences rapidly and then filter for ones
 import random
 import numpy as np
 import metapredict as meta
-from sparrow.protein import Protein
+from numpy.lib.stride_tricks import sliding_window_view
+from goose import parameters
 from goose import goose_exceptions
+from goose.backend_property_calculation.calculate_properties_vectorized import sequences_to_matrices, matrices_to_sequences
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa_vectorized
 from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy_vectorized
 from goose.backend_sequence_generation.seq_by_probability_vectorized import SequenceGenerator
@@ -90,18 +92,26 @@ def check_disorder_vectorized(sequences,
         # Initialize array for consecutive check
         consecutive_condition = np.ones(N, dtype=bool)
         
-        # Use efficient sliding window approach for checking consecutive residues
+        # Vectorized consecutive residue check
         if max_consecutive_ordered < seq_length:
             max_consecutive_to_check = max_consecutive_ordered + 1
             
-            # Check windows of size max_consecutive_ordered+1
-            # If any window is all ordered, then we have too many consecutive ordered residues
-            for i in range(N):
-                # For each possible window of size max_consecutive_to_check
-                for j in range(seq_length - max_consecutive_to_check + 1):
-                    if np.all(ordered_mask[i, j:j+max_consecutive_to_check]):
-                        consecutive_condition[i] = False
-                        break
+            # Create sliding windows for all sequences at once using broadcasting
+            # This creates a 3D array: (N, num_windows, window_size)
+            num_windows = seq_length - max_consecutive_to_check + 1
+            
+            if num_windows > 0:
+                # Create sliding windows for all sequences at once
+                windowed_mask = sliding_window_view(ordered_mask, 
+                                                  window_shape=max_consecutive_to_check, 
+                                                  axis=1)
+                
+                # Check if any window in each sequence has all True values
+                # windowed_mask shape: (N, num_windows, window_size)
+                # np.all(axis=2) checks if all values in each window are True
+                # np.any(axis=1) checks if any window in each sequence violates the condition
+                has_consecutive_violation = np.any(np.all(windowed_mask, axis=2), axis=1)
+                consecutive_condition = ~has_consecutive_violation
         
         # Combine conditions
         disorder = total_condition & consecutive_condition
@@ -119,16 +129,16 @@ def generate_seq_by_props(length,
                            exclude_residues=None,
                            num_attempts=1000,
                            strict_disorder=False,
-                           hydropathy_tolerance = 0.05,
-                           kappa_tolerance=0.03,
-                           disorder_cutoff=0.5,
+                           hydropathy_tolerance = parameters.HYDRO_ERROR,
+                           kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR,
+                           disorder_cutoff=parameters.DISORDER_THRESHOLD,
                            max_consecutive_ordered=3,
                            max_total_ordered=0.05,
-                           metapredict_version=3,
+                           metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                            return_all_sequences=False,
-                           use_weighted_probabilities=True,
+                           use_weighted_probabilities=False,
                            chosen_probabilities=None,
-                           batch_size=100):
+                           batch_size=None):
     """
     Generate sequences with specific properties and check for disorder.
     
@@ -154,9 +164,11 @@ def generate_seq_by_props(length,
     hydropathy_tolerance : float
         Tolerance for hydropathy optimization
         default is 0.05
+        set by parameters.HYDRO_ERROR
     kappa_tolerance : float
         Tolerance for kappa optimization
         default is 0.03
+        set by parameters.MAXIMUM_KAPPA_ERROR
     disorder_cutoff : float
         Cutoff for disorder. Above this value is considered disordered.
     max_consecutive_ordered : int
@@ -179,12 +191,54 @@ def generate_seq_by_props(length,
         Only used if use_weighted_probabilities is True.
     batch_size : int
         Number of sequences to generate in each batch
-        default is 100
+
     Returns
     -------
     list
         List of sequences that meet the criteria
     """
+    # set batch size based on what is specified.
+    if batch_size is None:
+        if hydropathy is not None:
+            if hydropathy > 5.69:
+                batch_size = 1500
+                required_hydro_batch_size = 256
+                required_kappa_batch_size = 25
+            elif hydropathy >5.4:
+                batch_size = 50
+                required_hydro_batch_size = 10
+                required_kappa_batch_size = 1
+            elif hydropathy > 4.5:
+                batch_size = 5
+                required_hydro_batch_size = 1
+                required_kappa_batch_size = 1
+            else:
+                batch_size=10
+                required_hydro_batch_size = 2
+                required_kappa_batch_size = 1
+        else:
+            if kappa is not None:
+                batch_size=40
+                required_hydro_batch_size = 1
+                required_kappa_batch_size = 1
+            else:
+                batch_size = 5
+                required_hydro_batch_size = 1
+                required_kappa_batch_size = 1
+    else:
+        if batch_size < 1:
+            raise goose_exceptions.GooseFail('Batch size must be at least 1!')
+        # if batch size is specified, use it.
+        if batch_size < 2:
+            required_hydro_batch_size = 1
+            required_kappa_batch_size = 1
+        else:
+            required_hydro_batch_size = int(batch_size/10)
+            if required_hydro_batch_size < 2:
+                required_hydro_batch_size = 2
+            required_kappa_batch_size = int(required_hydro_batch_size/10)
+            if required_kappa_batch_size < 1:
+                required_kappa_batch_size = 1
 
     # initialize the sequence generators
     seq_gen = SequenceGenerator( 
@@ -209,32 +263,31 @@ def generate_seq_by_props(length,
             seqs = optimize_hydropathy_vectorized(seqs, hydropathy,
                                                 preserve_charged=preserve_charge, 
                                                 tolerance=hydropathy_tolerance,
-                                                return_when_num_hit=250,
+                                                return_when_num_hit=required_hydro_batch_size,
                                                 only_return_within_tolernace=True,
                                                 exclude_residues=exclude_residues)
         # make sure we still have sequences
         if len(seqs) == 0:
             continue
 
-        # cap number needed for kappa. 
-        if len(seqs) < 25:
-            num_for_kappa = len(seqs)
-        else:
-            num_for_kappa=25
-
-        if len(seqs) > 250:
-            seqs=seqs[:250]
-
 
         # see if we need to optimize kappa
         if kappa is not None:
+            # iterate over sequences that have made it this far. 
             # get first successful kappa seq. This is needed because kappa is computationally intensive. 
-            seqs = optimize_kappa_vectorized(seqs, kappa, return_when_num_hit=25, only_return_within_tolerance=True,
+            seqs = optimize_kappa_vectorized(seqs, kappa, 
+                                             return_when_num_hit=required_kappa_batch_size, 
+                                             only_return_within_tolerance=True,
                                              tolerance=kappa_tolerance)
-
+        
         # make sure we still have sequences
         if len(seqs) == 0:
             continue
+        
+        # mapping sequences to ternarized values requires converting to sequences, so if we have kappa, we don't need to convert back to sequences.
+        if kappa is None:
+            # if not, convert matrix back to sequences 
+            seqs = matrices_to_sequences(seqs)
 
         # finally, check for disorder.
         seqs = check_disorder_vectorized(seqs, strict_disorder=strict_disorder,

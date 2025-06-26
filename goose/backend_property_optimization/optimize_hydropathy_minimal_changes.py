@@ -6,11 +6,13 @@ but the objective is to minimize changes not to optimize efficiency.
 
 import numpy as np
 from sparrow.protein import Protein
+from goose import parameters
 
 AA_hydro = {"A": 6.3,  "R": 0.0,  "N": 1.0,  "D": 1.0,  "C": 7.0,  "Q": 1.0,  "E": 1.0,  "G": 4.1,  "H": 1.3,  "I": 9.0,  "L": 8.3,  "K": 0.6,  "M": 6.4,  "F": 7.3,  "P": 2.9,  "S": 3.7,  "T": 3.8,  "W": 3.6,  "Y": 3.2,  "V": 8.7  }
 
 
-def optimize_hydropathy_minimal_changes(input_sequence, target_hydropathy, max_iterations=100, tolerance=0.01, preserve_charged=True):
+def optimize_hydropathy_minimal_changes(input_sequence, target_hydropathy, max_iterations=100, 
+                                        tolerance=parameters.HYDRO_ERROR, preserve_charged=True):
     """
     Optimize hydropathy of a sequence by making minimal changes to achieve a target hydropathy value.
     
@@ -27,6 +29,7 @@ def optimize_hydropathy_minimal_changes(input_sequence, target_hydropathy, max_i
         Maximum number of optimization iterations.
     tolerance : float
         Acceptable difference between achieved and target hydropathy.
+        set by parameters.HYDRO_ERROR
     preserve_charged : bool
         If True, charged residues (D, E, K, R) will not be modified.
 

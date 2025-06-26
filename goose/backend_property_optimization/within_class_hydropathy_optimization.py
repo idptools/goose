@@ -17,6 +17,7 @@ Classes:
 
 import numpy as np
 from typing import List, Union
+from goose import parameters
 from goose.backend_property_calculation.calculate_properties_vectorized import calculate_hydropathy_batch, sequences_to_matrices, matrices_to_sequences
 
 
@@ -25,7 +26,7 @@ def optimize_hydropathy_within_class_vectorized(
     target_hydropathy: float, 
     min_batch_size: int = 5,
     max_iterations: int = 5000,
-    tolerance: float = 0.05,
+    tolerance: float = parameters.HYDRO_ERROR,
     batch_size: int = 10, 
     only_return_within_tolerance: bool = True,
     return_when_num_hit=None) -> List[str]:

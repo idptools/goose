@@ -210,7 +210,8 @@ class FractionBasedSequenceGenerator:
                           length: Optional[int] = None,
                           fractions: Optional[Dict[str, float]] = None,
                           strict: Optional[bool] = None,
-                          default_remaining_probabilities: Optional[Dict[str, float]] = None) -> List[str]:
+                          default_remaining_probabilities: Optional[Dict[str, float]] = None,
+                          convert_to_amino_acids: bool = True) -> List[str]:
         """
         Generate protein sequences using the specified amino acid fractions.
         
@@ -221,6 +222,7 @@ class FractionBasedSequenceGenerator:
             strict (bool, optional): Whether to strictly enforce specified fractions
             default_remaining_probabilities (Dict[str, float], optional): Probability
                 distribution used for unspecified amino acids
+            convert_to_amino_acids (bool): Whether to convert indices back to amino acid strings
             
         Returns:
             List[str]: List of generated protein sequences
@@ -335,7 +337,12 @@ class FractionBasedSequenceGenerator:
                 np.random.shuffle(aa_pool)
                 
                 # Convert to string
-                sequences.append(''.join(aa_pool))
+                if convert_to_amino_acids:
+                    sequences.append(''.join(aa_pool))
+                else:
+                    # Convert to indices if not converting to amino acids
+                    sequence_indices = [self.aa_to_idx[aa] for aa in aa_pool]
+                    sequences.append(sequence_indices)
         else:
             # Probabilistic approach for non-strict mode
             # Get normalized fractions as array
@@ -351,7 +358,11 @@ class FractionBasedSequenceGenerator:
                 )
                 
                 # Convert indices to amino acids
-                sequence = ''.join(AMINO_ACIDS[idx] for idx in indices)
+                if convert_to_amino_acids:
+                    sequence = ''.join(AMINO_ACIDS[idx] for idx in indices)
+                else:
+                    sequence = indices
+
                 sequences.append(sequence)
             
         return sequences
