@@ -127,7 +127,7 @@ def generate_seq_by_props(length,
                            hydropathy=None, 
                            kappa=None, 
                            exclude_residues=None,
-                           num_attempts=1000,
+                           num_attempts=5000,
                            strict_disorder=False,
                            hydropathy_tolerance = parameters.HYDRO_ERROR,
                            kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR,
@@ -199,7 +199,17 @@ def generate_seq_by_props(length,
     """
     # set batch size based on what is specified.
     if batch_size is None:
-        if hydropathy is not None:
+        if hydropathy is not None and kappa is not None:
+            if hydropathy < 4.5:
+                batch_size=250
+                required_hydro_batch_size=25
+                required_kappa_batch_size=5
+            else:
+                batch_size=500
+                required_hydro_batch_size=50
+                required_kappa_batch_size=10
+        # if just hydropathy, focus on that. 
+        if hydropathy is not None and kappa is None:
             if hydropathy > 5.69:
                 batch_size = 1500
                 required_hydro_batch_size = 256
@@ -208,9 +218,9 @@ def generate_seq_by_props(length,
                 batch_size = 50
                 required_hydro_batch_size = 10
                 required_kappa_batch_size = 1
-            elif hydropathy > 4.5:
-                batch_size = 5
-                required_hydro_batch_size = 1
+            elif hydropathy >= 4.5:
+                batch_size = 25
+                required_hydro_batch_size = 5
                 required_kappa_batch_size = 1
             else:
                 batch_size=10

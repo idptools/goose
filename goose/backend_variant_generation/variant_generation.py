@@ -3,21 +3,17 @@ Updated code for variant generation. Going to rewrite a lot
 of the functionality to use numpy vectorized operations for efficiency.
 '''
 import numpy as np
+import random
 
 from sparrow.protein import Protein
 
+from goose import parameters
 from goose.backend_sequence_generation.sequence_generation_vectorized import generate_seq_by_props
-from goose.backend_property_calculation.calculate_kappa import kappa
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa_vectorized
 from goose.backend_sequence_generation.create_sequence_by_class import create_sequence_by_class
-from goose.backend_sequence_generation.seq_by_probability_vectorized import SequenceGenerator
-from goose import parameters
 from goose.backend_property_optimization.optimize_hydropathy_minimal_changes import optimize_hydropathy_minimal_changes
 from goose.backend_property_optimization.within_class_hydropathy_optimization import optimize_hydropathy_within_class_vectorized
-from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy_vectorized 
-from goose.backend_variant_generation.helper_functions import needed_charged_residues, change_all_residues_within_class, optimize_hydropathy_avoid_original_residues, calculate_amino_acid_class_fractions
-
-
+from goose.backend_variant_generation.helper_functions import needed_charged_residues, change_all_residues_within_class, optimize_hydropathy_avoid_original_residues, calculate_amino_acid_class_fractions, decrease_res_asymmetry, increase_res_asymmetry, find_hydro_range_constant_class
 
 
 def generate_constant_class_variant(input_sequence: str) -> str:
@@ -315,7 +311,41 @@ def generate_excluded_shuffle_variant(input_sequence: str,
     
     return ''.join(seq_list)
 
-def generate_new_seq_constant_class_var(sequence: str,
+def generate_targeted_shuffle_variant(input_sequence: str,
+                                      target_residues: list):
+    '''
+    function that will only shuffle residues specified. All
+    other residues will remain in their original positions.
+    
+    Parameters:
+    ----------
+    input_sequence : str
+        The input protein sequence to be modified.
+    target_residues : list
+        List of residues to shuffle within their positions.
+    
+    Returns:
+    --------
+    str
+        Protein sequence with specified residues shuffled.
+    '''
+    # Convert input sequence to a list for easier manipulation
+    seq_list = list(input_sequence)
+    
+    # Get indices of target residues
+    indices_to_shuffle = [i for i, aa in enumerate(seq_list) if aa in target_residues]
+    
+    # Shuffle the residues at the target indices
+    shuffled_region = np.random.permutation([seq_list[i] for i in indices_to_shuffle])
+    
+    # Place shuffled residues back into the sequence
+    for idx, new_aa in zip(indices_to_shuffle, shuffled_region):
+        seq_list[idx] = new_aa
+    
+    return ''.join(seq_list)
+
+
+def generate_new_seq_constant_class_variant(sequence: str,
                                         kappa_tolerance: float = parameters.MAXIMUM_KAPPA_ERROR,
                                         hydropathy_tolerance: float = parameters.HYDRO_ERROR) -> str:
     '''
@@ -384,7 +414,7 @@ def generate_new_seq_constant_class_var(sequence: str,
 
     return new_sequence
 
-def generate_constant_properties_var(sequence: str,
+def generate_constant_properties_variant(sequence: str,
                                      hydropathy_tolerance=parameters.HYDRO_ERROR,
                                      kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR) -> str:
     '''
@@ -416,7 +446,7 @@ def generate_constant_properties_var(sequence: str,
         kappa=original_kappa
         )
 
-def generate_constant_residue_var(sequence: str,
+def generate_constant_residue_variant(sequence: str,
                                   constant_residues: list,
                                   hydropathy_tolerance=parameters.HYDRO_ERROR,
                                   kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR) -> str:
@@ -451,8 +481,6 @@ def generate_constant_residue_var(sequence: str,
     if len(modified_sequence) == 0:
         return sequence  # Return original sequence if nothing to vary
     
-    # get constant_residue_indices
-    constant_residue_indices = [i for i, aa in enumerate(sequence) if aa in constant_residues]
     # get properties for the modified sequence
     protein = Protein(modified_sequence)
     original_hydropathy = protein.hydrophobicity
@@ -554,4 +582,450 @@ def generate_constant_residue_var(sequence: str,
         )[0]
     
     return final_sequence
+
+def generate_asymmetry_variant(sequence: str,
+                                target_residues: list,
+                                num_changes: int = 1,
+                                increase_or_decrease='increase') -> str:
+    """
+    Variant where a class of residues (see below for classes) 
+    or a user-specified list of residues is changed to become
+    more asymmetrically or less asymmetrically distributed 
+    throughout the sequence. Does NOT change sequence composition.
     
+    Parameters:
+    ----------
+    sequence : str
+        The input protein sequence to be modified.
+    target_residues : list
+        List of residues to change to increase or decrease asymmetry.
+    num_changes : int, default=1
+        Number of residues to change in the sequence.
+    increase_or_decrease : str, default='increase'
+        Whether to increase or decrease asymmetry. Options are 'increase' or 'decrease'.
+    
+    Returns:
+    --------
+    str
+        Protein sequence with specified residues changed to increase or decrease asymmetry. 
+    """
+    '''
+    look at strategies for kappa and implement them here. 
+    '''
+    for _ in range(num_changes):
+        if increase_or_decrease == 'increase':
+            sequence = increase_res_asymmetry(sequence, target_residues)
+        elif increase_or_decrease == 'decrease':
+            sequence = decrease_res_asymmetry(sequence, target_residues)
+        else:
+            raise ValueError("increase_or_decrease must be 'increase' or 'decrease'")
+    
+    return sequence
+    
+def generate_hydro_class_variant(sequence: str,
+                                 target_hydropathy: float,
+                                 tolerance: float = parameters.HYDRO_ERROR):
+    '''
+    Generate a variant with altered hydropathy while keeping the same order
+    and number of residues by class.
+    
+    Parameters:
+    ----------
+    sequence : str
+        The input protein sequence to be modified.
+    target_hydropathy : float
+        Target hydropathy value to achieve.
+    tolerance : float, default=0.05
+        Acceptable difference for hydropathy optimization.
+    
+    Returns:
+    --------
+    str
+        Protein sequence with altered hydropathy while maintaining class structure. 
+    '''
+    # check range that is possible
+    hydro_range = find_hydro_range_constant_class(sequence)
+    if target_hydropathy < hydro_range[0] or target_hydropathy > hydro_range[1]:
+        raise ValueError(f"Target hydropathy {target_hydropathy} is outside the possible range {hydro_range} for this sequence.")
+    
+    # optimize the sequence using the within class hydropathy optimization
+    optimized_sequence = optimize_hydropathy_within_class_vectorized(
+        [sequence],
+        target_hydropathy=target_hydropathy,
+        max_iterations=5000,
+        tolerance=tolerance,
+        only_return_within_tolerance=True
+    )[0]
+    
+    return optimized_sequence
+
+
+def generate_fcr_class_variant(sequence: str,
+                               target_FCR: float,
+                               target_NCPR: float = None,
+                               hydropathy_tolerance: float = parameters.HYDRO_ERROR,
+                               kappa_tolerance: float = parameters.MAXIMUM_KAPPA_ERROR) -> str:
+    '''
+    Generate a variant with altered FCR while keeping the same order
+    and number of residues by class as much as is possible.
+    
+    Parameters:
+    ----------
+    sequence : str
+        The input protein sequence to be modified.
+    target_FCR : float
+        Target FCR value to achieve.
+    target_NCPR : float, optional
+        Target NCPR value to achieve. If None, will use the original NCPR.
+    hydropathy_tolerance : float, default=0.05
+        Acceptable difference for hydropathy optimization.
+    kappa_tolerance : float, default=0.03
+        Acceptable difference for kappa optimization.
+    
+    Returns:
+    --------
+    str
+        Protein sequence with altered FCR while maintaining class structure. 
+    '''
+    # set order to change residues in sequence that minimizes changes in major chemistries
+    order_to_change = ['Q', 'N', 'S', 'T', 'G', 'A', 'M', 'L', 'V', 'I', 'P', 'C', 'H', 'Y', 'W', 'F']
+
+    # get original NCPR
+    if target_NCPR is None:
+        starting_NCPR = Protein(sequence).NCPR
+    else:
+        starting_NCPR = target_NCPR
+    starting_hydropathy = Protein(sequence).hydrophobicity
+    starting_kappa = Protein(sequence).kappa
+
+    # if target FCR is correct and target ncpr is correct just return the sequence
+    if round(target_FCR,8) == Protein(sequence).FCR and round(starting_NCPR,8) == Protein(sequence).NCPR:
+        return sequence
+
+    # prioritize FCR.
+    if round(target_FCR,8) == 0:
+        starting_NCPR=0
+
+    # get num residues needed for fcr and ncpr
+    charged_residues = needed_charged_residues(
+        length=len(sequence),
+        fraction=target_FCR,
+        net_charge=starting_NCPR
+    )
+
+    # get current number of charged residues
+    current_positive = sum(1 for aa in sequence if aa in ['K', 'R'])
+    current_negative = sum(1 for aa in sequence if aa in ['D', 'E'])
+
+    # calculate how many residues we need to add or remove
+    num_positive_to_add = charged_residues['positive'] - current_positive
+    num_negative_to_add = charged_residues['negative'] - current_negative
+
+    # if we need to add positive residues, we will add them in the order specified
+    for _ in range(abs(num_positive_to_add)):
+        if num_positive_to_add > 0:
+            for aa in order_to_change:
+                indices = [i for i, x in enumerate(sequence) if x == aa]
+                if indices:
+                    index_to_change = np.random.choice(indices)
+                    sequence = sequence[:index_to_change] + np.random.choice(['K', 'R']) + sequence[index_to_change + 1:]
+                    break   
+        else:
+            # if we need to remove positive residues, we will remove them in the order specified
+            for aa in ['K', 'R']:
+                indices = [i for i, x in enumerate(sequence) if x == aa]
+                if indices:
+                    index_to_change = np.random.choice(indices)
+                    sequence = sequence[:index_to_change] + np.random.choice(['Q', 'N', 'S', 'T']) + sequence[index_to_change + 1:]
+                    break
+
+    # if we need to add negative residues, we will add them in the order specified
+    for _ in range(abs(num_negative_to_add)):
+        if num_negative_to_add > 0:
+            for aa in order_to_change:
+                indices = [i for i, x in enumerate(sequence) if x == aa]
+                if indices:
+                    index_to_change = np.random.choice(indices)
+                    sequence = sequence[:index_to_change] + np.random.choice(['D', 'E']) + sequence[index_to_change + 1:]
+                    break
+        else:
+            # if we need to remove negative residues, we will remove them in the order specified
+            for aa in ['D', 'E']:
+                indices = [i for i, x in enumerate(sequence) if x == aa]
+                if indices:
+                    index_to_change = np.random.choice(indices)
+                    sequence = sequence[:index_to_change] + np.random.choice(['Q', 'N', 'S', 'T']) + sequence[index_to_change + 1:]
+                    break
+
+    # now optimize the hydropathy within class
+    sequence = optimize_hydropathy_within_class_vectorized(
+        [sequence],
+        target_hydropathy=starting_hydropathy,
+        max_iterations=1000,
+        tolerance=hydropathy_tolerance,
+        only_return_within_tolerance=False
+    )[0]
+
+    # check if the sequence is within the tolerance of the target hydropathy. If not, take additional steps.
+    final_hydropathy = Protein(sequence).hydrophobicity
+    if abs(final_hydropathy - starting_hydropathy) > hydropathy_tolerance:
+        # This will try to find the minimum number of changes needed to get to the target hydropathy.
+        sequence = optimize_hydropathy_minimal_changes(
+            sequence,
+            target_hydropathy=starting_hydropathy,
+            max_iterations=1000,
+            tolerance=hydropathy_tolerance,
+            preserve_charged=True
+        )
+    
+    # make sure we can have a non negative kappa value. 
+    if Protein(sequence).FCR != 0:
+        if round(abs(Protein(sequence).NCPR),8) != round(Protein(sequence).FCR,8):
+            # finally, optimize kappa to get it to the original kappa
+            sequence = optimize_kappa_vectorized(
+                [sequence],
+                target_kappa=starting_kappa,
+                num_iterations=5000,
+                convert_input_seq_to_matrix=True,
+                inputting_matrix=False,
+                tolerance=kappa_tolerance,
+                return_when_num_hit=1,
+                avoid_shuffle=True,
+                num_copies=10
+            )[0]
+
+    return sequence
+
+
+def generate_ncpr_class_variant(sequence: str,
+                                target_NCPR: float,
+                               hydropathy_tolerance: float = parameters.HYDRO_ERROR,
+                               kappa_tolerance: float = parameters.MAXIMUM_KAPPA_ERROR) -> str:
+    '''
+    Generate a variant with altered NCPR while keeping the same order
+    and number of residues by class as much as is possible.
+    
+    Parameters:
+    ----------
+    sequence : str
+        The input protein sequence to be modified.
+    target_NCPR : float
+        Target NCPR value to achieve.
+    hydropathy_tolerance : float, default=0.05
+        Acceptable difference for hydropathy optimization.
+    kappa_tolerance : float, default=0.03
+        Acceptable difference for kappa optimization.
+    
+    Returns:
+    --------
+    str
+        Protein sequence with altered NCPR while maintaining class structure. 
+    '''
+    starting_FCR = Protein(sequence).FCR
+    seq=generate_fcr_class_variant(sequence,
+                               target_FCR=starting_FCR,
+                               target_NCPR=target_NCPR,
+                               hydropathy_tolerance=hydropathy_tolerance,
+                               kappa_tolerance=kappa_tolerance)
+    return seq
+
+def generate_kappa_variant(sequence,
+                           target_kappa,
+                           kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR):
+    '''
+    Generate a sequence with a different kappa value. 
+
+    Parameters:
+    ----------
+    sequence : str
+        The input protein sequence to be modified.
+    target_kappa : float
+        Target kappa value to achieve.
+    kappa_tolerance : float, default=0.03
+        Acceptable difference for kappa optimization.
+    '''
+    # get FCR and NCPR.
+    protein = Protein(sequence)
+    starting_FCR = protein.FCR
+    starting_NCPR = protein.NCPR
+    if round(abs(starting_NCPR),8)==round(starting_FCR,8):
+        return sequence
+    # use kappa optimzer
+    sequence = optimize_kappa_vectorized(
+        [sequence],
+        target_kappa=target_kappa,
+        num_iterations=5000,
+        convert_input_seq_to_matrix=True,
+        inputting_matrix=False,
+        tolerance=kappa_tolerance,
+        return_when_num_hit=1,
+        avoid_shuffle=True,
+        num_copies=10
+    )[0]
+    return sequence
+
+def generate_all_props_class_var(sequence,
+                                 target_FCR: float = None,
+                                 target_NCPR: float = None,
+                                 target_hydropathy: float = None,
+                                 target_kappa: float = None,
+                                 hydropathy_tolerance: float = parameters.HYDRO_ERROR,
+                                 kappa_tolerance: float = parameters.MAXIMUM_KAPPA_ERROR,
+                                 max_iterations: int = 1000) -> str:
+    '''
+    Generate a variant with altered FCR, NCPR, hydropathy, and kappa while keeping the same order
+    and number of residues by class as much as is possible.
+    
+    Parameters:
+    ----------
+    sequence : str
+        The input protein sequence to be modified.
+    target_FCR : float, optional
+        Target FCR value to achieve. If None, will not change FCR.
+    target_NCPR : float, optional
+        Target NCPR value to achieve. If None, will not change NCPR.
+    target_hydropathy : float, optional
+        Target hydropathy value to achieve. If None, will not change hydropathy.
+    target_kappa : float, optional
+        Target kappa value to achieve. If None, will not change kappa.
+    hydropathy_tolerance : float, default=0.05
+        Acceptable difference for hydropathy optimization.
+    kappa_tolerance : float, default=0.03
+        Acceptable difference for kappa optimization.
+    max_iterations : int, default=1000
+        Maximum number of iterations for optimization algorithms.
+    
+    Returns:
+    --------
+    str
+        Protein sequence with altered properties while maintaining class structure. 
+    '''
+    
+    # Step 1: Calculate initial properties
+    initial_protein = Protein(sequence)
+    if target_FCR is None:
+        target_FCR = initial_protein.FCR
+    if target_NCPR is None:
+        target_NCPR = initial_protein.NCPR
+
+    # use fcr variant function.
+    sequence = generate_fcr_class_variant(sequence,
+                                           target_FCR=target_FCR,
+                                           target_NCPR=target_NCPR,
+                                           hydropathy_tolerance=hydropathy_tolerance,
+                                           kappa_tolerance=kappa_tolerance)
+    
+    # get current hydropathy
+    current_hydropathy = Protein(sequence).hydrophobicity
+    if target_hydropathy is None:
+        target_hydropathy = initial_protein.hydrophobicity
+    if abs(current_hydropathy-target_hydropathy) > hydropathy_tolerance:
+        # Modify hydropathy using withn class optimization
+        sequence = optimize_hydropathy_within_class_vectorized(
+            [sequence],
+            target_hydropathy=target_hydropathy,
+            max_iterations=max_iterations,
+            tolerance=hydropathy_tolerance,
+            only_return_within_tolerance=False
+        )[0]
+    # get current hydropathy
+    current_hydropathy= Protein(sequence).hydrophobicity
+    if abs(current_hydropathy-target_hydropathy) > hydropathy_tolerance:
+        # This will try to find the minimum number of changes needed to get to the target hydropathy.
+        sequence = optimize_hydropathy_minimal_changes(
+            sequence,
+            target_hydropathy=target_hydropathy,
+            max_iterations=max_iterations,
+            tolerance=hydropathy_tolerance,
+            preserve_charged=True
+        )  
+    
+    # now optimize kappa
+    # get current kappa
+    current_kappa = Protein(sequence).kappa
+    if target_kappa is None:
+        target_kappa = initial_protein.kappa
+
+    if abs(current_kappa-target_kappa) > kappa_tolerance:
+        # make sure we have charged residues otherwise no reason to optimzie kappa
+        if Protein(sequence).FCR != 0:
+            # make sure sequence has a net charge not equal to fraction charge.
+            if round(abs(Protein(sequence).NCPR),8) != round(Protein(sequence).FCR,8):
+                # optimize kappa
+                # use kappa optimzer
+                sequence = optimize_kappa_vectorized(
+                    [sequence],
+                    target_kappa=target_kappa,
+                    max_iterations=max_iterations,
+                    tolerance=kappa_tolerance,
+                    return_when_num_hit=1
+                )[0]
+    # return sequence
+    return sequence
+
+def gen_weighted_shuffle_variant(sequence, target_aas, shuffle_weight):
+    '''
+    function that will let you perform a weighted shuffle a sequence by 
+    specifying residues or classes of residues to shuffle and a weight that
+    corresponds to the degree of shuffling that you want to perform. 
+    The weight is a number between 0.0-1.0 and corresponds to the probability
+    of moving a residue during shuffling. If you specify target amino acids, only
+    those amino acids are included in the shuffling and weighting can still be 
+    applied to only those target amino acids.
+    parameters
+    ----------
+    sequence : str
+        the amino acid sequence as a string
+    target_aas : str or list
+        a list of amino acids to target for shuffling
+        or a class of amino acids to target for shuffling
+        Possible target classes:
+            charged : DEKR
+            polar : QNST
+            aromatic : FYW
+            aliphatic : IVLAM
+            negative: DE
+            positive : KR
+            
+    shuffle_weight : float
+        a weight between 0.0-1.0 representing the probability of 
+        moving a residue during shuffling
+    attempts : int
+        the number of times to try to make the sequence
+    disorder_threshold : float
+        the threshold value required for an amino acid
+        to be considered disordered
+    strict_disorder : Bool
+        whether or not to require all disorder values to be 
+        over threshold or if it is okay to use the values
+        from the input sequence
+    '''
+    # dict of classes that are possible to choose
+
+    # define probabilities of not relocating a residue and relocating a residue, respectively
+    shuffle_weights=[1-shuffle_weight, shuffle_weight]
+
+    # get list of target amino acids from the sequence
+    target_aa_list = [aa for aa in sequence if aa in target_aas]
+
+    # perform weighted sample to determine residues to shuffle
+    target_mask = random.choices([False, True], weights=shuffle_weights, k=len(target_aa_list))
+    mask = [target_mask.pop(0) if aa in target_aas else False for aa in sequence]
+
+    # gather positions and identities of residues to shuffle
+    orig_scramble_positions = [i for i, val in enumerate(mask) if val == True]
+    orig_aas = [sequence[i] for i in orig_scramble_positions]
+
+    # perform Fisher-Yates shuffle only with target_aas marked for shuffling
+    for i in range(len(orig_aas) - 1, 0, -1):
+        remaining_reposition_sites = orig_scramble_positions[:i]
+
+        # randomly select new position for relocation of the target aa
+        new_position = random.choice(remaining_reposition_sites)
+        new_position_index = remaining_reposition_sites.index(new_position)
+
+        # swap positions with another target aa marked for shuffling
+        orig_aas[i], orig_aas[new_position_index] = orig_aas[new_position_index], orig_aas[i]
+
+    # build final seq. Uses shuffled residues at sites marked for repositioning. Otherwise, uses the original residue at that site
+    return ''.join( [orig_aas.pop(0) if i in orig_scramble_positions else aa for i, aa in enumerate(sequence)] )

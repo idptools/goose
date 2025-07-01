@@ -244,7 +244,13 @@ def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='
     else:
         dis_list_to_use=lists.dims_over_80
 
-
+    # which list to use
+    if reduce_pos_charged==True:
+        dis_list_to_use=disordered_list_reduced_charge
+        bias_dim_dict={'collapse':['W','Y', 'G', 'F', 'Q', 'N'], 'expand':['D', 'E', 'P', 'S', 'T']}
+    else:
+        dis_list_to_use=disordered_list
+        bias_dim_dict={'collapse':['W','Y', 'G', 'F', 'Q', 'N'], 'expand':['D', 'E', 'K', 'P', 'S', 'T']}
     # see if we need to get rid of anything. This makes a dict that counts 
     # the number of everything then removes from the dict so we don't have to
     # check the list a ton of times. 

@@ -93,19 +93,26 @@ def optimize_hydropathy_vectorized(
     # Precompute replacement options for each amino acid (using sets for faster lookups)
     forbidden_indices = charged_indices.union(excluded_indices)
     
-    better_options = {}  # aa -> (increase_options, decrease_options)
-    for aa in range(20):
-        current_hydro = HYDROPATHY_SCALE[aa]
-        
-        # Options that increase hydropathy
-        increase_opts = [i for i in range(20) 
-                        if HYDROPATHY_SCALE[i] > current_hydro and i not in forbidden_indices]
-        
-        # Options that decrease hydropathy  
-        decrease_opts = [i for i in range(20)
-                        if HYDROPATHY_SCALE[i] < current_hydro and i not in forbidden_indices]
-        
-        better_options[aa] = (np.array(increase_opts), np.array(decrease_opts))
+    # determine better options for each amino acid. 
+    if preserve_charged==False and len(excluded_indices) == 0:
+        better_options = {0: (np.array([ 1, 4, 7, 9, 10, 17]), np.array([ 2, 3, 5, 6, 8, 11, 12, 13, 14, 15, 16, 18, 19])), 1: (np.array([ 4, 7, 9, 17]), np.array([ 0, 2, 3, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 18, 19])), 2: (np.array([ 0, 1, 4, 5, 6, 7, 9, 10, 12, 15, 16, 17, 18, 19]), np.array([ 8, 14])), 3: (np.array([ 0, 1, 4, 5, 6, 7, 9, 10, 12, 15, 16, 17, 18, 19]), np.array([ 8, 14])), 4: (np.array([ 7, 9, 17]), np.array([ 0, 1, 2, 3, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 18, 19])), 5: (np.array([ 0, 1, 4, 7, 9, 10, 17]), np.array([ 2, 3, 6, 8, 11, 12, 13, 14, 15, 16, 18, 19])), 6: (np.array([ 0, 1, 4, 5, 7, 9, 10, 12, 15, 16, 17, 18, 19]), np.array([ 2, 3, 8, 11, 13, 14])), 7: (np.array([], dtype=np.int8), np.array([ 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])), 8: (np.array([ 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19]), np.array([14])), 9: (np.array([ 7, 17]), np.array([ 0, 1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 18, 19])), 10: (np.array([ 1, 4, 7, 9, 17]), np.array([ 0, 2, 3, 5, 6, 8, 11, 12, 13, 14, 15, 16, 18, 19])), 11: (np.array([ 0, 1, 4, 5, 6, 7, 9, 10, 12, 15, 16, 17, 18, 19]), np.array([ 8, 14])), 12: (np.array([ 0, 1, 4, 5, 7, 9, 10, 15, 16, 17, 18, 19]), np.array([ 2, 3, 6, 8, 11, 13, 14])), 13: (np.array([ 0, 1, 4, 5, 6, 7, 9, 10, 12, 15, 16, 17, 18, 19]), np.array([ 8, 14])), 14: (np.array([ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19]), np.array([], dtype=np.int8)), 15: (np.array([ 0, 1, 4, 5, 7, 9, 10, 16, 17]), np.array([ 2, 3, 6, 8, 11, 12, 13, 14, 18, 19])), 16: (np.array([ 0, 1, 4, 5, 7, 9, 10, 17]), np.array([ 2, 3, 6, 8, 11, 12, 13, 14, 15, 18, 19])), 17: (np.array([7]), np.array([ 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19])), 18: (np.array([ 0, 1, 4, 5, 7, 9, 10, 15, 16, 17]), np.array([ 2, 3, 6, 8, 11, 12, 13, 14, 19])), 19: (np.array([ 0, 1, 4, 5, 7, 9, 10, 15, 16, 17, 18]), np.array([ 2, 3, 6, 8, 11, 12, 13, 14]))}
+    elif preserve_charged==True and len(excluded_indices) == 0:
+        better_options = {0: (np.array([ 1,  4,  7,  9, 10, 17]), np.array([ 5,  6, 11, 12, 13, 15, 16, 18, 19])), 1: (np.array([ 4,  7,  9, 17]), np.array([ 0,  5,  6, 10, 11, 12, 13, 15, 16, 18, 19])), 2: (np.array([ 0,  1,  4,  5,  6,  7,  9, 10, 12, 15, 16, 17, 18, 19]), np.array([], dtype=np.int8)), 3: (np.array([ 0,  1,  4,  5,  6,  7,  9, 10, 12, 15, 16, 17, 18, 19]), np.array([], dtype=np.int8)), 4: (np.array([ 7,  9, 17]), np.array([ 0,  1,  5,  6, 10, 11, 12, 13, 15, 16, 18, 19])), 5: (np.array([ 0,  1,  4,  7,  9, 10, 17]), np.array([ 6, 11, 12, 13, 15, 16, 18, 19])), 6: (np.array([ 0,  1,  4,  5,  7,  9, 10, 12, 15, 16, 17, 18, 19]), np.array([11, 13])), 7: (np.array([], dtype=np.int8), np.array([ 0,  1,  4,  5,  6,  9, 10, 11, 12, 13, 15, 16, 17, 18, 19])), 8: (np.array([ 0,  1,  4,  5,  6,  7,  9, 10, 11, 12, 13, 15, 16, 17, 18, 19]), np.array([], dtype=np.int8)), 9: (np.array([ 7, 17]), np.array([ 0,  1,  4,  5,  6, 10, 11, 12, 13, 15, 16, 18, 19])), 10: (np.array([ 1,  4,  7,  9, 17]), np.array([ 0,  5,  6, 11, 12, 13, 15, 16, 18, 19])), 11: (np.array([ 0,  1,  4,  5,  6,  7,  9, 10, 12, 15, 16, 17, 18, 19]), np.array([], dtype=np.int8)), 12: (np.array([ 0,  1,  4,  5,  7,  9, 10, 15, 16, 17, 18, 19]), np.array([ 6, 11, 13])), 13: (np.array([ 0,  1,  4,  5,  6,  7,  9, 10, 12, 15, 16, 17, 18, 19]), np.array([], dtype=np.int8)), 14: (np.array([ 0,  1,  4,  5,  6,  7,  9, 10, 11, 12, 13, 15, 16, 17, 18, 19]), np.array([], dtype=np.int8)), 15: (np.array([ 0,  1,  4,  5,  7,  9, 10, 16, 17]), np.array([ 6, 11, 12, 13, 18, 19])), 16: (np.array([ 0,  1,  4,  5,  7,  9, 10, 17]), np.array([ 6, 11, 12, 13, 15, 18, 19])), 17: (np.array([7]), np.array([ 0,  1,  4,  5,  6,  9, 10, 11, 12, 13, 15, 16, 18, 19])), 18: (np.array([ 0,  1,  4,  5,  7,  9, 10, 15, 16, 17]), np.array([ 6, 11, 12, 13, 19])), 19: (np.array([ 0,  1,  4,  5,  7,  9, 10, 15, 16, 17, 18]), np.array([ 6, 11, 12, 13]))}
+    else:
+        better_options = {}  # aa -> (increase_options, decrease_options)
+        for aa in range(20):
+            current_hydro = HYDROPATHY_SCALE[aa]
+            
+            # Options that increase hydropathy
+            increase_opts = [i for i in range(20) 
+                            if HYDROPATHY_SCALE[i] > current_hydro and i not in forbidden_indices]
+            
+            # Options that decrease hydropathy  
+            decrease_opts = [i for i in range(20)
+                            if HYDROPATHY_SCALE[i] < current_hydro and i not in forbidden_indices]
+            
+            better_options[aa] = (np.array(increase_opts), np.array(decrease_opts))
+    
     
     # Calculate initial hydropathy and track which sequences need work
     current_hydro = calculate_hydropathy_batch(seq_matrices)
@@ -121,7 +128,7 @@ def optimize_hydropathy_vectorized(
         mutable_positions_cache[seq_idx] = mutable_pos
     
     # Main optimization loop with smart early termination
-    for iteration in range(max_iterations):
+    for _ in range(max_iterations):
         # Check convergence
         delta = current_hydro - target_hydropathy
         within_tolerance_mask = np.abs(delta) <= tolerance
@@ -139,36 +146,86 @@ def optimize_hydropathy_vectorized(
         if not active_sequences:
             break
             
-        # Process only active sequences in batches
+        # Process only active sequences in batches - fully vectorized version
         sequences_to_recalc = set()
         
-        for seq_idx in active_sequences:
-            current_delta = delta[seq_idx]
+        if active_sequences:
+            # Convert to numpy array for vectorized operations
+            active_indices = np.array(active_sequences)
+            active_deltas = delta[active_indices]
             
-            # Skip if already within tolerance (shouldn't happen but safety check)
-            if abs(current_delta) <= tolerance:
-                continue
-                
-            mutable_pos = mutable_positions_cache[seq_idx]
-            if len(mutable_pos) == 0:
-                continue
-                
-            # Determine direction and select positions
-            need_increase = current_delta < -tolerance
-            num_to_modify = min(batch_size, len(mutable_pos))
-            positions_to_modify = np.random.choice(mutable_pos, size=num_to_modify, replace=False)
+            # Filter out sequences already within tolerance
+            valid_mask = np.abs(active_deltas) > tolerance
+            valid_indices = active_indices[valid_mask]
             
-            # Make modifications
-            for pos in positions_to_modify:
-                current_aa = seq_matrices[seq_idx, pos]
-                increase_opts, decrease_opts = better_options[current_aa]
+            # Further filter sequences that have mutable positions
+            sequences_with_mutable = []
+            for seq_idx in valid_indices:
+                if len(mutable_positions_cache[seq_idx]) > 0:
+                    sequences_with_mutable.append(seq_idx)
+            
+            if sequences_with_mutable:
+                sequences_with_mutable = np.array(sequences_with_mutable)
+                need_increase_mask = delta[sequences_with_mutable] < -tolerance
                 
-                candidates = increase_opts if need_increase else decrease_opts
+                # Determine the number of modifications for each sequence
+                num_to_modify_per_seq = [min(batch_size, len(mutable_positions_cache[seq_idx])) for seq_idx in sequences_with_mutable]
+                total_modifications = sum(num_to_modify_per_seq)
+
+                if total_modifications > 0:
+                    # Pre-allocate arrays
+                    all_seq_indices = np.empty(total_modifications, dtype=np.int32)
+                    all_positions = np.empty(total_modifications, dtype=np.int32)
+                    all_need_increase = np.empty(total_modifications, dtype=bool)
+
+                    # Fill arrays more efficiently
+                    all_seq_indices = np.repeat(sequences_with_mutable, num_to_modify_per_seq)
+                    all_need_increase = np.repeat(need_increase_mask, num_to_modify_per_seq)
+                    
+                    # Efficiently choose positions to modify
+                    positions_to_modify_list = [np.random.choice(mutable_positions_cache[seq_idx], size=num, replace=False) 
+                                                for seq_idx, num in zip(sequences_with_mutable, num_to_modify_per_seq)]
+                    all_positions = np.concatenate(positions_to_modify_list)
+
+                    # Get current amino acids at selected positions
+                    all_current_aas = seq_matrices[all_seq_indices, all_positions]
                 
-                if len(candidates) > 0:
-                    replacement = np.random.choice(candidates)
-                    seq_matrices[seq_idx, pos] = replacement
-                    sequences_to_recalc.add(seq_idx)
+                    # Vectorized replacement selection
+                    all_replacements = np.full(total_modifications, -1, dtype=np.int32)
+                    
+                    # Vectorized replacement selection without looping through unique amino acids
+                    increase_mask = all_need_increase
+                    decrease_mask = ~all_need_increase
+
+                    # Process increases
+                    if np.any(increase_mask):
+                        increase_indices = np.where(increase_mask)[0]
+                        increase_aas = all_current_aas[increase_indices]
+                        for aa in np.unique(increase_aas):
+                            increase_opts = better_options[aa][0]
+                            if len(increase_opts) > 0:
+                                aa_specific_mask = (increase_aas == aa)
+                                n_increase = np.sum(aa_specific_mask)
+                                replacements = np.random.choice(increase_opts, size=n_increase)
+                                all_replacements[increase_indices[aa_specific_mask]] = replacements
+
+                    # Process decreases
+                    if np.any(decrease_mask):
+                        decrease_indices = np.where(decrease_mask)[0]
+                        decrease_aas = all_current_aas[decrease_indices]
+                        for aa in np.unique(decrease_aas):
+                            decrease_opts = better_options[aa][1]
+                            if len(decrease_opts) > 0:
+                                aa_specific_mask = (decrease_aas == aa)
+                                n_decrease = np.sum(aa_specific_mask)
+                                replacements = np.random.choice(decrease_opts, size=n_decrease)
+                                all_replacements[decrease_indices[aa_specific_mask]] = replacements
+                    
+                    # Apply only valid replacements
+                    valid_mask = all_replacements >= 0
+                    if np.any(valid_mask):
+                        seq_matrices[all_seq_indices[valid_mask], all_positions[valid_mask]] = all_replacements[valid_mask]
+                        sequences_to_recalc.update(np.unique(all_seq_indices[valid_mask]))
         
         # Recalculate hydropathy only for modified sequences
         if sequences_to_recalc:
