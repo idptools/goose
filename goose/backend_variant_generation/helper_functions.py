@@ -3,6 +3,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 import numpy as np
 from goose.data.defined_aa_classes import aa_classes, aa_classes_by_aa, aa_class_indices, min_class_hydro, max_class_hydro
 from goose.backend_property_calculation.calculate_properties_single_sequence import sequence_to_array, array_to_sequence, calculate_hydropathy_single_sequence, calculate_ncpr_single_sequence, calculate_fcr_single_sequence
+import metapredict as meta
 
 def check_properties(
         variant_sequence,
@@ -601,3 +602,97 @@ def find_hydro_range_constant_class(
     max_hydro = sum([max_class_hydro[a] for a in input_sequence])/len(input_sequence)
     return round(min_hydro,5), round(max_hydro,5)
 
+
+
+def check_variant_disorder_vectorized(
+                              original_sequence,
+                              sequences, 
+                              strict_disorder=False,
+                              disorder_cutoff=0.5,
+                              metapredict_version=3,
+                              return_best_sequence=False):
+    """
+    Check disorder of sequences using vectorized operations.
+    This function defaults to comparing against a starting variant sequence. 
+    By default, the sequence needs to either be above 0.5 or the variant value at that position
+    to be disordered. It is the min of these values, so if the variant sequence (original_sequence)
+    has a value below 0.5, that will be allowed. However, you can require that the sequence is
+    disordered based on a cutoff value.
+
+    Parameters
+    ----------
+    original_sequence : str
+        The original sequence to compare against.
+        This is used to determine if the sequence is disordered.
+        If the sequence is the same as the original sequence, it is considered disordered.
+    sequences : list, str, dict
+        list, str, or dict of sequences to check for disorder
+    strict_disorder : bool
+        If True, all residues must be above the disorder cutoff to be considered disordered.
+        default is False
+    disorder_cutoff : float
+        Cutoff for disorder. Above this value is considered disordered.
+    metapredict_version : int
+        Version of MetaPredict to use (1, 2, or 3)
+        default is 3
+    return_best_sequence : bool
+        If True, return the sequence with the best disorder score
+        default is False
+    
+    Returns
+    -------
+    list
+        List of sequences that are disordered
+    """
+    # if sequences are a numpy array, convert to list
+    if isinstance(sequences, np.ndarray):
+        sequences = sequences.tolist()
+    # convert to list if str
+    if isinstance(sequences, str):
+        sequences = [sequences]
+    # check if sequences is a dict
+    if isinstance(sequences, dict):
+        sequences = list(sequences.values())
+
+    # predict disorder for sequences
+    disorder_predictions = meta.predict_disorder(sequences, version=metapredict_version)
+
+    # separate out sequences and predictions into their own lists.
+    seqs = [seq[0] for seq in disorder_predictions]
+    disorder_scores = np.array([pred[1] for pred in disorder_predictions])
+
+    # if strict_disorder is True, check if all residues are above the cutoff
+    if strict_disorder:
+        disorder = np.all(disorder_scores > disorder_cutoff, axis=1)
+
+    # if strict_disorder is False, we need to get the disorder of the original sequence
+    else:
+        # get disorder of original sequence
+        original_disorder = meta.predict_disorder([original_sequence], version=metapredict_version)
+        original_disorder_scores = np.array(original_disorder[0][1])
+
+        # replace values in original_disorder_scores that are above disorder_cutoff with disorder_cutoff
+        original_disorder_scores[original_disorder_scores > disorder_cutoff] = disorder_cutoff
+        
+        # Create binary mask where True means that the values in the disorder_scores
+        # are greater than original_disorder_scores
+        mask = disorder_scores > original_disorder_scores
+
+        # now get sequences that have all values above the original disorder scores
+        disorder = np.all(mask, axis=1)
+
+    # return sequences that are disordered
+    disordered_seqs=[seqs[i] for i in range(len(seqs)) if disorder[i]]
+
+    # if no disorderd sequences and return_best_sequence is True,
+    # return the sequence with the highest mean disorder score
+    if return_best_sequence and len(disordered_seqs) == 0:
+        # return the sequence with the highest mean disorder score
+        best_index = np.argmax(np.mean(disorder_scores, axis=1))
+        return seqs[best_index]
+    
+    if disordered_seqs == []:
+        # if no disordered sequences, return None
+        return None
+    # return disordered_seqs
+    return disordered_seqs

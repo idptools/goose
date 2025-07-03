@@ -13,7 +13,7 @@ from goose.backend_property_optimization.optimize_kappa import optimize_kappa_ve
 from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy_vectorized
 from goose.backend_sequence_generation.seq_by_probability_vectorized import SequenceGenerator
 from goose.backend_sequence_generation.seq_by_fractions_vectorized import FractionBasedSequenceGenerator
-
+from goose.backend_property_optimization.optimize_disorder import optimize_disorder
 
 
 def check_disorder_vectorized(sequences, 
@@ -21,7 +21,8 @@ def check_disorder_vectorized(sequences,
                               disorder_cutoff=0.5,
                               max_consecutive_ordered=3,
                               max_total_ordered=0.05,
-                              metapredict_version=3):
+                              metapredict_version=3,
+                              return_best_sequence=False):
     """
     Check disorder of sequences using vectorized operations.
     
@@ -42,6 +43,9 @@ def check_disorder_vectorized(sequences,
     metapredict_version : int
         Version of MetaPredict to use (1, 2, or 3)
         default is 3
+    return_best_sequence : bool
+        If True, return the sequence with the best disorder score
+        default is False
     
     Returns
     -------
@@ -117,7 +121,16 @@ def check_disorder_vectorized(sequences,
         disorder = total_condition & consecutive_condition
 
     # return sequences that are disordered
-    return [seqs[i] for i in range(len(seqs)) if disorder[i]]
+    disordered_seqs=[seqs[i] for i in range(len(seqs)) if disorder[i]]
+
+    # if no disorderd sequences and return_best_sequence is True,
+    # return the sequence with the highest mean disorder score
+    if return_best_sequence and len(disordered_seqs) == 0:
+        # return the sequence with the highest mean disorder score
+        best_index = np.argmax(np.mean(disorder_scores, axis=1))
+        return seqs[best_index]
+    # return disordered_seqs
+    return disordered_seqs
 
 
 # make function to generate sequences with specific properties
@@ -199,43 +212,20 @@ def generate_seq_by_props(length,
     """
     # set batch size based on what is specified.
     if batch_size is None:
-        if hydropathy is not None and kappa is not None:
-            if hydropathy < 4.5:
-                batch_size=250
-                required_hydro_batch_size=25
-                required_kappa_batch_size=5
-            else:
-                batch_size=500
-                required_hydro_batch_size=50
-                required_kappa_batch_size=10
-        # if just hydropathy, focus on that. 
-        if hydropathy is not None and kappa is None:
-            if hydropathy > 5.69:
-                batch_size = 1500
-                required_hydro_batch_size = 256
-                required_kappa_batch_size = 25
-            elif hydropathy >5.4:
-                batch_size = 50
-                required_hydro_batch_size = 10
-                required_kappa_batch_size = 1
-            elif hydropathy >= 4.5:
-                batch_size = 25
-                required_hydro_batch_size = 5
-                required_kappa_batch_size = 1
-            else:
-                batch_size=10
-                required_hydro_batch_size = 2
-                required_kappa_batch_size = 1
-        else:
-            if kappa is not None:
-                batch_size=40
-                required_hydro_batch_size = 1
-                required_kappa_batch_size = 1
-            else:
-                batch_size = 5
-                required_hydro_batch_size = 1
-                required_kappa_batch_size = 1
+        # dynamic batch size. Basically slowly increases until it reaches a maximum size.
+        # idea here is to increase the odds of a batch having a disordered sequence. However,
+        # larger batches take longer, so if we can use a smaller batch size, we will.
+        use_dynamic_batching = True
+        dynamic_batch_sizes = [(10, 2, 1), (10, 2, 1), (10, 2, 1), (10, 2, 1),  (10, 2, 1), 
+                             (20, 4, 1), (20, 6, 1), (20, 4, 1), (20, 4, 1),
+                             (40, 8, 2), (40, 8, 2),(40, 8, 2),
+                             (50, 10, 3),(50, 10, 3),
+                             (100, 20, 6), 
+                             (200, 40, 12),
+                             (300, 60, 24), 
+                             (400, 80, 48)]
     else:
+        use_dynamic_batching = False
         if batch_size < 1:
             raise goose_exceptions.GooseFail('Batch size must be at least 1!')
         # if batch size is specified, use it.
@@ -254,8 +244,17 @@ def generate_seq_by_props(length,
     seq_gen = SequenceGenerator( 
                  use_weighted_probabilities=use_weighted_probabilities)
     
+
     # iterate over the number of attempts
+    batch_to_use = 0
     for _ in range(num_attempts):
+        if use_dynamic_batching:
+            # set batch size based on the number of attempts
+            if batch_to_use < len(dynamic_batch_sizes):
+                batch_size, required_hydro_batch_size, required_kappa_batch_size = dynamic_batch_sizes[batch_to_use]
+            else:
+                batch_size, required_hydro_batch_size, required_kappa_batch_size = dynamic_batch_sizes[-1]
+            batch_to_use += 1
         # generate starter sequences with specified properties
         seqs = seq_gen.generate_sequences_vectorized(length, fcr=fcr, ncpr=ncpr, 
                                                      hydropathy=hydropathy, num_sequences=batch_size,
@@ -298,23 +297,39 @@ def generate_seq_by_props(length,
         if kappa is None:
             # if not, convert matrix back to sequences 
             seqs = matrices_to_sequences(seqs)
-
-        # finally, check for disorder.
-        seqs = check_disorder_vectorized(seqs, strict_disorder=strict_disorder,
-                                        disorder_cutoff=disorder_cutoff,
-                                        max_consecutive_ordered=max_consecutive_ordered,
-                                        max_total_ordered=max_total_ordered,
-                                        metapredict_version=metapredict_version)
-        
-        if len(seqs) == 0:
-            continue
-
-        # if return_all_sequences, return seqs
-        if return_all_sequences:
-            return seqs
+            # set charge preservation for disorder optimization
+            preserve_charge_placement = False
         else:
-            # return a single sequence
-            return random.choice(seqs)
+            preserve_charge_placement = True
+
+        seqs = check_disorder_vectorized(seqs, strict_disorder=strict_disorder,
+                                    disorder_cutoff=disorder_cutoff,
+                                    max_consecutive_ordered=max_consecutive_ordered,
+                                    max_total_ordered=max_total_ordered,
+                                    metapredict_version=metapredict_version,
+                                    return_best_sequence=True)
+        
+        # if we still have a string, try to optimize it
+        if isinstance(seqs, str):
+            # only use optimization when we have failed to make a sequence consistently. 
+            if batch_size >= 100:
+                seqs=optimize_disorder(seqs, disorder_cutoff=disorder_cutoff,
+                        max_iterations=50, 
+                        preserve_charge_placement=preserve_charge_placement,
+                        metapredict_version=metapredict_version)
+                # check if the optimized sequence meets the disorder cutoffa
+                cur_disorder = meta.predict_disorder(seqs, version=metapredict_version)
+                if np.min(cur_disorder) >= disorder_cutoff:
+                    return seqs  
+            else:
+                continue
+        else:
+            # if return_all_sequences, return seqs
+            if return_all_sequences:
+                return seqs
+            else:
+                # return a single sequence
+                return random.choice(seqs)
 
     # if we get here, we didn't find any sequences that met the criteria
     raise goose_exceptions.GooseFail('Failed to generate sequence!')
@@ -331,7 +346,7 @@ def generate_seq_by_fractions(length,
                                 disorder_cutoff=0.5,
                                 max_consecutive_ordered=3,
                                 max_total_ordered=0.05,
-                                metapredict_version=3,
+                                metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                                 return_all_sequences=False,
                                 batch_size=None):
     """"
@@ -375,10 +390,13 @@ def generate_seq_by_fractions(length,
     """
     # if batch size not specified, set it based on metapredict version
     if batch_size is None:
-        if metapredict_version==3:
-            batch_size=256
-        else:
-            batch_size=32
+        # use dynamic batching
+        use_dynamic_batching = True
+        dynamic_batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+    else:
+        use_dynamic_batching = False
+        if batch_size < 1:
+            raise goose_exceptions.GooseFail('Batch size must be at least 1!')
 
     # initialize the sequence generators
     seq_gen = FractionBasedSequenceGenerator(length=length,
@@ -386,20 +404,61 @@ def generate_seq_by_fractions(length,
                                                 randomize_unspecified=randomize_unspecified,
                                                 default_remaining_probabilities=remaining_probabilities)
 
+    cur_batch_num=0
     # iterate over the number of attempts
     for _ in range(num_attempts):
+        if use_dynamic_batching:
+            # set batch size based on the number of attempts
+            cur_batch_size = dynamic_batch_sizes[cur_batch_num]
+            if cur_batch_num < len(dynamic_batch_sizes) - 1:
+                cur_batch_num += 1
+        else:
+            cur_batch_size = batch_size
+    
         # generate starter sequences with specified properties
-        seqs = seq_gen.generate_sequences(num_sequences=batch_size)
+        seqs = seq_gen.generate_sequences(num_sequences=cur_batch_size)
 
         # finally, check for disorder.
         seqs = check_disorder_vectorized(seqs, strict_disorder=strict_disorder,
                                         disorder_cutoff=disorder_cutoff,
                                         max_consecutive_ordered=max_consecutive_ordered,
                                         max_total_ordered=max_total_ordered,
-                                        metapredict_version=metapredict_version)
+                                        metapredict_version=metapredict_version,
+                                        return_best_sequence=True)
         
-        if len(seqs) == 0:
-            continue
+        # the check_disordered_vectorized only returns a string if the sequence doesn't make
+        # the cutoff for bieng disordered. Try to optimize it. 
+        if isinstance(seqs, str):
+            # means we got back a single sequence as a string and therefore have 
+            # a sequence not disordered. Try to optimize. 
+            # first try making 100 shuffles of the sequence we got back and checking disorder for that.
+            # this is a bit of a hack, but it works.
+            shuff_seqs = [seqs]
+            seqs=list(seqs) # convert to list for consistency
+            
+            # shuffle the sequence 512 times
+            for _ in range(256):
+                # shuffle the sequence
+                random.shuffle(seqs)
+                shuff_seqs.append(''.join(seqs))
+
+            # check disorder
+            seqs = check_disorder_vectorized(shuff_seqs, strict_disorder=strict_disorder,
+                                        disorder_cutoff=disorder_cutoff,
+                                        max_consecutive_ordered=max_consecutive_ordered,
+                                        max_total_ordered=max_total_ordered,
+                                        metapredict_version=metapredict_version,
+                                        return_best_sequence=True)
+            
+            # if we still have a string, try to optimize it
+            if isinstance(seqs, str):
+                seqs=optimize_disorder(seqs, disorder_cutoff=disorder_cutoff,
+                        max_iterations=500, preserve_charge_placement=False,
+                        metapredict_version=metapredict_version)
+                # check if the optimized sequence meets the disorder cutoffa
+                cur_disorder = meta.predict_disorder(seqs, version=metapredict_version)
+                if np.min(cur_disorder) >= disorder_cutoff:
+                    return seqs  
 
         # if return_all_sequences, return seqs
         if return_all_sequences:

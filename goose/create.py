@@ -254,6 +254,8 @@ def seq_fractions(length, **kwargs):
                                  'H','I','K','L','M','N','P','Q','R','S','T',
                                  'V','W','Y', 'return_all_sequences', 'metapredict_version'])
 
+    
+
     # First correct kwargs. Do this first because
     # the next function that looks over kwargs values
     # can only take in corrected kwargs.
@@ -266,6 +268,7 @@ def seq_fractions(length, **kwargs):
 
     # now make sure that the input vals are within appropriate bounds
     _check_fracs_parameters(**kwargs)
+    
 
     generated_seq = _generate_disordered_seq_by_fractions(length,fractions=fractions,
                                                           disorder_cutoff=kwargs['cutoff'],

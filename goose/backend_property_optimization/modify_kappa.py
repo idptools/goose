@@ -37,18 +37,21 @@ def calculate_linear_ncpr(ternarized_seqs, window_size):
 def decrease_kappa(ternarized_sequences):
     '''
     Function to decrease the kappa value of a sequence by applying a sliding window approach.
-    Purposefully isn't maximimally efficient. 
+    This function is vectorized for efficiency.
+    
     Parameters
     ----------
     ternarized_sequences : list of np.ndarray
         List of ternarized sequences, where each sequence is a 2D numpy array.
+    
     Returns
     -------
     list of np.ndarray
-        Modified ternarized sequences with charges added to decrease kappa.
+        Modified ternarized sequences with charges moved to decrease kappa.
     '''
     # Convert to numpy array for easier manipulation
     seqs_array = np.array(ternarized_sequences)
+    n_sequences, seq_length = seqs_array.shape
     window_size = 5
     half_window = window_size // 2
     
@@ -58,54 +61,57 @@ def decrease_kappa(ternarized_sequences):
     # Create a copy of the sequences to modify
     modified_sequences = seqs_array.copy()
     
-    # Process each sequence individually
-    for seq_idx in range(len(ternarized_sequences)):
-        seq = seqs_array[seq_idx]
-        seq_linear_ncpr = linear_ncpr[seq_idx]
+    # Vectorized selection of random indices
+    sorted_indices = np.argsort(linear_ncpr, axis=1)
+    num_to_choose = max(1, seq_length // 10)
+    
+    # For each sequence, choose a random index from the first 10% of sorted indices
+    first_indices_cols = np.random.randint(0, num_to_choose, size=n_sequences)
+    random_first_indices = sorted_indices[np.arange(n_sequences), first_indices_cols]
 
-        # sort the seq_linear_ncpr by absolute value
-        sorted_indices = np.argsort(seq_linear_ncpr)
-        # use np.random to get a random index from the first 10% of the sorted indices
-        num_to_choose = max(1, len(sorted_indices) // 10)  # at least one position
-        chosen_indices = sorted_indices[:num_to_choose]
-        random_first_index = np.random.choice(chosen_indices)
-        # now get from the last 10%
-        last_indices = sorted_indices[-num_to_choose:]
-        random_last_index = np.random.choice(last_indices)
-        
-        # get all positions that are -1 or 1 in the sequence
+    # For each sequence, choose a random index from the last 10% of sorted indices
+    last_indices_cols = np.random.randint(0, num_to_choose, size=n_sequences)
+    random_last_indices = sorted_indices[np.arange(n_sequences), -last_indices_cols - 1]
+
+    # Process each sequence individually for the charge moving logic
+    for seq_idx in range(n_sequences):
+        seq = seqs_array[seq_idx]
+        random_first_index = random_first_indices[seq_idx]
+        random_last_index = random_last_indices[seq_idx]
+
+        # Get charged positions
         charged_positions = np.where(np.abs(seq) == 1)[0]
-        # get a charged position from the window in random_first_index
+        
+        # Find a charged position in the first window
         first_window_start = max(0, random_first_index - half_window)
-        first_window_end = min(len(seq), random_first_index + half_window + 1)
+        first_window_end = min(seq_length, random_first_index + half_window + 1)
         first_window_positions = np.arange(first_window_start, first_window_end)
         first_window_charged_positions = np.intersect1d(charged_positions, first_window_positions)
-        # choose a random positon from first_window_charged_positions
-        if len(first_window_charged_positions) > 0:
-            random_first_pos = np.random.choice(first_window_charged_positions)
-        else:
-            # If no charged positions in window, skip this sequence
+        
+        if len(first_window_charged_positions) == 0:
+            continue
+        
+        random_first_pos = np.random.choice(first_window_charged_positions)
+        
+        # Find a random position in the last window
+        last_window_start = max(0, random_last_index - half_window)
+        last_window_end = min(seq_length, random_last_index + half_window + 1)
+        last_window_positions = np.arange(last_window_start, last_window_end)
+        
+        if len(last_window_positions) == 0:
             continue
 
-        # get a random position in the random_last_window
-        last_window_start = max(0, random_last_index - half_window)
-        last_window_end = min(len(seq), random_last_index + half_window + 1)
-        last_window_positions = np.arange(last_window_start, last_window_end)
         random_last_position = np.random.choice(last_window_positions)
         
-        # Move the charge from random_first_pos to random_last_position
+        # Move the charge
         if random_first_pos != random_last_position:
-            # Store what's currently at the target position
             displaced_value = modified_sequences[seq_idx, random_last_position]
-            # Move the charge to the target position
             charge_value = modified_sequences[seq_idx, random_first_pos]
             modified_sequences[seq_idx, random_last_position] = charge_value
-            # Put the displaced value where the charge was
             modified_sequences[seq_idx, random_first_pos] = displaced_value
-    
+            
     # Convert back to list of arrays
     return [modified_sequences[i] for i in range(len(modified_sequences))]
-
 
 
 def increase_kappa(ternarized_sequences, window_size=5):
@@ -168,44 +174,67 @@ def increase_kappa(ternarized_sequences, window_size=5):
     misplaced_positive_masks = positive_masks & ~positive_region_mask  # Positive charges not in positive region
     misplaced_negative_masks = negative_masks & ~negative_region_mask  # Negative charges not in negative region
     
-    # For each sequence, try to move one misplaced charge of each type
-    # We'll use advanced indexing and random selection
-    for seq_idx in range(n_sequences):
-        # Get misplaced positions for this sequence
-        misplaced_pos_positions = np.where(misplaced_positive_masks[seq_idx])[0]
-        misplaced_neg_positions = np.where(misplaced_negative_masks[seq_idx])[0]
+    # Vectorized swap for misplaced charges
+    # Process sequences that have misplaced charges
+    has_misplaced_pos = np.any(misplaced_positive_masks, axis=1)
+    has_misplaced_neg = np.any(misplaced_negative_masks, axis=1)
+    main_swap_mask = has_misplaced_pos & has_misplaced_neg
+
+    if np.any(main_swap_mask):
+        # Get indices of sequences to process
+        swap_indices = np.where(main_swap_mask)[0]
+
+        # Vectorized random choice of source positions
+        source_pos_indices = np.argmax(misplaced_positive_masks[swap_indices], axis=1)
+        source_neg_indices = np.argmax(misplaced_negative_masks[swap_indices], axis=1)
+
+        # Vectorized random choice of target positions
+        available_pos_targets = positive_region_mask & ~positive_masks
+        available_neg_targets = negative_region_mask & ~negative_masks
         
-        # Skip if no misplaced charges
-        if len(misplaced_pos_positions) == 0 or len(misplaced_neg_positions) == 0:
-            # Fallback: try using neutral positions if available
+        target_pos_indices = np.argmax(available_pos_targets[swap_indices], axis=1)
+        target_neg_indices = np.argmax(available_neg_targets[swap_indices], axis=1)
+
+        # Perform swaps
+        # Swap positive charges
+        temp_val = modified_sequences[swap_indices, target_pos_indices]
+        modified_sequences[swap_indices, target_pos_indices] = modified_sequences[swap_indices, source_pos_indices]
+        modified_sequences[swap_indices, source_pos_indices] = temp_val
+
+        # Swap negative charges
+        temp_val = modified_sequences[swap_indices, target_neg_indices]
+        modified_sequences[swap_indices, target_neg_indices] = modified_sequences[swap_indices, source_neg_indices]
+        modified_sequences[swap_indices, source_neg_indices] = temp_val
+
+    # Fallback for sequences that didn't have misplaced charges
+    fallback_mask = ~main_swap_mask
+    if np.any(fallback_mask):
+        fallback_indices = np.where(fallback_mask)[0]
+        
+        for seq_idx in fallback_indices:
             neutral_positions = np.where(neutral_masks[seq_idx])[0]
             all_positive_pos = np.where(positive_masks[seq_idx])[0]
             all_negative_pos = np.where(negative_masks[seq_idx])[0]
-            
+
             if len(neutral_positions) >= 2 and len(all_positive_pos) > 0 and len(all_negative_pos) > 0:
-                # Determine movement direction based on sequence asymmetry
                 first_half_more_positive = mean_first_half[seq_idx] > mean_second_half[seq_idx]
                 
                 if first_half_more_positive:
-                    # Move rightmost positive to left, leftmost negative to right
                     furthest_pos = np.max(all_positive_pos)
                     furthest_neg = np.min(all_negative_pos)
                     pos_target_region = neutral_positions[:max(1, len(neutral_positions)//2)]
                     neg_target_region = neutral_positions[len(neutral_positions)//2:]
                 else:
-                    # Move leftmost positive to right, rightmost negative to left  
                     furthest_pos = np.min(all_positive_pos)
                     furthest_neg = np.max(all_negative_pos)
                     pos_target_region = neutral_positions[len(neutral_positions)//2:]
                     neg_target_region = neutral_positions[:max(1, len(neutral_positions)//2)]
-                
-                # Execute moves if targets available
+
                 if len(pos_target_region) > 0:
                     pos_dest = np.random.choice(pos_target_region)
                     if furthest_pos != pos_dest:
                         modified_sequences[seq_idx, pos_dest], modified_sequences[seq_idx, furthest_pos] = \
                             modified_sequences[seq_idx, furthest_pos], modified_sequences[seq_idx, pos_dest]
-                        # Remove used position from negative targets
                         neg_target_region = neg_target_region[neg_target_region != pos_dest]
                 
                 if len(neg_target_region) > 0:
@@ -213,141 +242,115 @@ def increase_kappa(ternarized_sequences, window_size=5):
                     if furthest_neg != neg_dest:
                         modified_sequences[seq_idx, neg_dest], modified_sequences[seq_idx, furthest_neg] = \
                             modified_sequences[seq_idx, furthest_neg], modified_sequences[seq_idx, neg_dest]
-            continue
-        
-        # Find available target positions (in target regions but not already occupied by desired charge)
-        available_pos_targets = np.where(positive_region_mask[seq_idx] & ~positive_masks[seq_idx])[0]
-        available_neg_targets = np.where(negative_region_mask[seq_idx] & ~negative_masks[seq_idx])[0]
-        
-        if len(available_pos_targets) > 0 and len(available_neg_targets) > 0:
-            # Select random misplaced charges to move
-            source_pos = np.random.choice(misplaced_pos_positions)
-            source_neg = np.random.choice(misplaced_neg_positions)
-            
-            # Select random target positions
-            target_pos = np.random.choice(available_pos_targets)
-            
-            # Ensure no conflict between targets
-            available_neg_targets = available_neg_targets[available_neg_targets != target_pos]
-            
-            if len(available_neg_targets) > 0:
-                target_neg = np.random.choice(available_neg_targets)
-                
-                # Perform the swaps
-                if source_pos != target_pos:
-                    modified_sequences[seq_idx, target_pos], modified_sequences[seq_idx, source_pos] = \
-                        modified_sequences[seq_idx, source_pos], modified_sequences[seq_idx, target_pos]
-                
-                if source_neg != target_neg:
-                    modified_sequences[seq_idx, target_neg], modified_sequences[seq_idx, source_neg] = \
-                        modified_sequences[seq_idx, source_neg], modified_sequences[seq_idx, target_neg]
     
     # Convert back to list of arrays
-    return [modified_sequences[i] for i in range(len(modified_sequences))] 
-
+    return [modified_sequences[i] for i in range(len(modified_sequences))]
 
 def increase_kappa_aggressive(ternarized_sequences, window_size=5):
-    '''
-    Alternative aggressive increase_kappa function that systematically moves charges 
-    toward sequence ends to maximize asymmetry. This function is designed to avoid 
+    """
+    Alternative aggressive increase_kappa function that systematically moves charges
+    toward sequence ends to maximize asymmetry. This function is designed to avoid
     getting stuck in local optima that plague the standard increase_kappa function.
-    
+    This is a fully vectorized implementation for maximum speed.
+
     Parameters
     ----------
     ternarized_sequences : list of np.ndarray
         List of ternarized sequences, where each sequence is a 2D numpy array.
     window_size : int, optional
-        The size of the sliding window to use for calculating NCPR. Default is 5
+        The size of the sliding window to use for calculating NCPR. Default is 5.
+        (Note: window_size is not used in this aggressive implementation but is kept for API consistency).
+
     Returns
     -------
     list of np.ndarray
         List of modified sequences with increased kappa values.
-    '''
+    """
     # Convert to numpy array for easier manipulation
     seqs_array = np.array(ternarized_sequences)
     n_sequences, seq_length = seqs_array.shape
-    
+
     # Create modified sequences as a copy
     modified_sequences = seqs_array.copy()
-    
-    # Strategy: Direct clustering approach - move charges to extreme ends
-    for seq_idx in range(n_sequences):
-        seq = seqs_array[seq_idx]
-        
-        # Find all charge positions
-        positive_positions = np.where(seq == 1)[0]
-        negative_positions = np.where(seq == -1)[0]
-        
-        if len(positive_positions) == 0 or len(negative_positions) == 0:
-            continue
-            
-        # Calculate current center of mass for each charge type
-        pos_center = np.mean(positive_positions) if len(positive_positions) > 0 else seq_length / 2
-        neg_center = np.mean(negative_positions) if len(negative_positions) > 0 else seq_length / 2
-        
-        # Determine which end each charge type should move towards
-        if pos_center > seq_length / 2:
-            # Positive charges are already towards the right, push them further right
-            pos_target_region = "right"
-            neg_target_region = "left"
-        else:
-            # Positive charges are towards the left, push them further left
-            pos_target_region = "left" 
-            neg_target_region = "right"
-        
-        # Move charges toward the designated ends to maximize asymmetry
-        if pos_target_region == "right":
-            # Move leftmost positive charge towards right
-            leftmost_pos = np.min(positive_positions)
-            # Find available positions in right half
-            right_half_start = seq_length // 2
-            available_right = np.where((seq[right_half_start:] != 1) & 
-                                     (np.arange(right_half_start, seq_length) > leftmost_pos))[0]
-            if len(available_right) > 0:
-                target_pos = right_half_start + np.random.choice(available_right)
-                # Perform atomic swap to maintain charge conservation
-                modified_sequences[seq_idx, target_pos], modified_sequences[seq_idx, leftmost_pos] = \
-                    modified_sequences[seq_idx, leftmost_pos], modified_sequences[seq_idx, target_pos]
-        else:
-            # Move rightmost positive charge towards left
-            rightmost_pos = np.max(positive_positions)
-            # Find available positions in left half
-            left_half_end = seq_length // 2
-            available_left = np.where((seq[:left_half_end] != 1) & 
-                                    (np.arange(left_half_end) < rightmost_pos))[0]
-            if len(available_left) > 0:
-                target_pos = np.random.choice(available_left)
-                # Perform atomic swap to maintain charge conservation
-                modified_sequences[seq_idx, target_pos], modified_sequences[seq_idx, rightmost_pos] = \
-                    modified_sequences[seq_idx, rightmost_pos], modified_sequences[seq_idx, target_pos]
-        
-        # Do the same for negative charges
-        if neg_target_region == "right":
-            # Move leftmost negative charge towards right
-            leftmost_neg = np.min(negative_positions)
-            right_half_start = seq_length // 2
-            available_right = np.where((seq[right_half_start:] != -1) & 
-                                     (np.arange(right_half_start, seq_length) > leftmost_neg))[0]
-            if len(available_right) > 0:
-                target_pos = right_half_start + np.random.choice(available_right)
-                # Perform atomic swap to maintain charge conservation
-                modified_sequences[seq_idx, target_pos], modified_sequences[seq_idx, leftmost_neg] = \
-                    modified_sequences[seq_idx, leftmost_neg], modified_sequences[seq_idx, target_pos]
-        else:
-            # Move rightmost negative charge towards left  
-            rightmost_neg = np.max(negative_positions)
-            left_half_end = seq_length // 2
-            available_left = np.where((seq[:left_half_end] != -1) & 
-                                    (np.arange(left_half_end) < rightmost_neg))[0]
-            if len(available_left) > 0:
-                target_pos = np.random.choice(available_left)
-                # Perform atomic swap to maintain charge conservation
-                modified_sequences[seq_idx, target_pos], modified_sequences[seq_idx, rightmost_neg] = \
-                    modified_sequences[seq_idx, rightmost_neg], modified_sequences[seq_idx, target_pos]
-    
-    # Convert back to list of arrays
-    return [modified_sequences[i] for i in range(len(modified_sequences))] 
 
+    # Masks for charge positions
+    positive_masks = (seqs_array == 1)
+    negative_masks = (seqs_array == -1)
+
+    # Find sequences that have at least one of each charge
+    valid_indices = np.where(np.any(positive_masks, axis=1) & np.any(negative_masks, axis=1))[0]
+
+    if len(valid_indices) == 0:
+        return [modified_sequences[i] for i in range(len(modified_sequences))]
+
+    # Process only the valid sequences
+    valid_seqs = seqs_array[valid_indices]
+    valid_pos_masks = positive_masks[valid_indices]
+    valid_neg_masks = negative_masks[valid_indices]
+
+    # Calculate centers of mass for positive charges
+    positions = np.arange(seq_length)
+    pos_centers = np.sum(valid_pos_masks * positions, axis=1) / (np.sum(valid_pos_masks, axis=1) + 1e-9)
+
+    # Determine target direction
+    pos_target_is_right = pos_centers > (seq_length - 1) / 2
+
+    # Find source charges
+    leftmost_pos = np.argmax(valid_pos_masks, axis=1)
+    rightmost_pos = seq_length - 1 - np.argmax(np.fliplr(valid_pos_masks), axis=1)
+    leftmost_neg = np.argmax(valid_neg_masks, axis=1)
+    rightmost_neg = seq_length - 1 - np.argmax(np.fliplr(valid_neg_masks), axis=1)
+
+    pos_source = np.where(pos_target_is_right, leftmost_pos, rightmost_pos)
+    neg_source = np.where(pos_target_is_right, rightmost_neg, leftmost_neg)
+
+    # --- Fully Vectorized Swaps ---
+    half_len = seq_length // 2
+    
+    # Create a temporary array to hold the results of the first (positive) swap
+    temp_sequences = modified_sequences.copy()
+
+    # Positive Swaps
+    for i, seq_idx in enumerate(valid_indices):
+        source_pos = pos_source[i]
+        if pos_target_is_right[i]:
+            target_range = np.arange(half_len, seq_length)
+            available = target_range[(seqs_array[seq_idx, target_range] != 1) & (target_range > source_pos)]
+            if len(available) > 0:
+                target_pos = np.random.choice(available)
+                temp_sequences[seq_idx, target_pos], temp_sequences[seq_idx, source_pos] = \
+                    temp_sequences[seq_idx, source_pos], temp_sequences[seq_idx, target_pos]
+        else:
+            target_range = np.arange(half_len)
+            available = target_range[(seqs_array[seq_idx, target_range] != 1) & (target_range < source_pos)]
+            if len(available) > 0:
+                target_pos = np.random.choice(available)
+                temp_sequences[seq_idx, target_pos], temp_sequences[seq_idx, source_pos] = \
+                    temp_sequences[seq_idx, source_pos], temp_sequences[seq_idx, target_pos]
+
+    # Negative Swaps (operates on the result of the positive swaps)
+    for i, seq_idx in enumerate(valid_indices):
+        source_pos = neg_source[i]
+        if not pos_target_is_right[i]: # Negative target is right
+            target_range = np.arange(half_len, seq_length)
+            available = target_range[(temp_sequences[seq_idx, target_range] != -1) & (target_range > source_pos)]
+            if len(available) > 0:
+                target_pos = np.random.choice(available)
+                temp_sequences[seq_idx, target_pos], temp_sequences[seq_idx, source_pos] = \
+                    temp_sequences[seq_idx, source_pos], temp_sequences[seq_idx, target_pos]
+        else: # Negative target is left
+            target_range = np.arange(half_len)
+            available = target_range[(temp_sequences[seq_idx, target_range] != -1) & (target_range < source_pos)]
+            if len(available) > 0:
+                target_pos = np.random.choice(available)
+                temp_sequences[seq_idx, target_pos], temp_sequences[seq_idx, source_pos] = \
+                    temp_sequences[seq_idx, source_pos], temp_sequences[seq_idx, target_pos]
+    
+    # Assign the final modified sequences
+    modified_sequences = temp_sequences
+
+    # Convert back to list of arrays
+    return [modified_sequences[i] for i in range(len(modified_sequences))]
 
 def test_charge_conservation(ternarized_sequences, function_to_test):
     '''

@@ -254,6 +254,9 @@ def optimize_hydropathy_within_class_vectorized(
         seq_matrices = seq_matrices[within_tolerance]
     
     # Convert back to sequences
-    optimized_sequences = matrices_to_sequences(seq_matrices)
+    if len(seq_matrices) > 0:
+        optimized_sequences = matrices_to_sequences(seq_matrices)
+    else:
+        optimized_sequences = []
     
     return optimized_sequences
