@@ -266,8 +266,8 @@ def calculate_amino_acid_class_fractions(sequence: str) -> dict:
         'aliphatic': set(['A', 'I', 'L', 'M', 'V']),
         'aromatic': set(['F', 'W', 'Y']),
         'polar': set(['S', 'T', 'N', 'Q']),
-        'positive': set(['D', 'E']),
-        'negative': set(['K', 'R']),
+        'negative': set(['D', 'E']),
+        'positive': set(['K', 'R']),
         'glycine': set(['G']),
         'cysteine': set(['C']),
         'proline': set(['P']),
@@ -694,5 +694,6 @@ def check_variant_disorder_vectorized(
     if disordered_seqs == []:
         # if no disordered sequences, return None
         return None
+    
     # return disordered_seqs
     return disordered_seqs

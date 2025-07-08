@@ -151,7 +151,8 @@ def generate_seq_by_props(length,
                            return_all_sequences=False,
                            use_weighted_probabilities=False,
                            chosen_probabilities=None,
-                           batch_size=None):
+                           batch_size=None,
+                           check_disorder=True):
     """
     Generate sequences with specific properties and check for disorder.
     
@@ -204,6 +205,9 @@ def generate_seq_by_props(length,
         Only used if use_weighted_probabilities is True.
     batch_size : int
         Number of sequences to generate in each batch
+    check_disorder : bool
+        If True, check the generated sequences for disorder
+        default is True
 
     Returns
     -------
@@ -302,37 +306,45 @@ def generate_seq_by_props(length,
         else:
             preserve_charge_placement = True
 
-        seqs = check_disorder_vectorized(seqs, strict_disorder=strict_disorder,
-                                    disorder_cutoff=disorder_cutoff,
-                                    max_consecutive_ordered=max_consecutive_ordered,
-                                    max_total_ordered=max_total_ordered,
-                                    metapredict_version=metapredict_version,
-                                    return_best_sequence=True)
-        
-        # if we still have a string, try to optimize it
-        if isinstance(seqs, str):
-            # only use optimization when we have failed to make a sequence consistently. 
-            if batch_size >= 100:
-                seqs=optimize_disorder(seqs, disorder_cutoff=disorder_cutoff,
-                        max_iterations=50, 
-                        preserve_charge_placement=preserve_charge_placement,
-                        metapredict_version=metapredict_version)
-                # check if the optimized sequence meets the disorder cutoffa
-                cur_disorder = meta.predict_disorder(seqs, version=metapredict_version)
-                if np.min(cur_disorder) >= disorder_cutoff:
-                    return seqs  
+        # if we are checking disorder, do that. 
+        if check_disorder:
+            seqs = check_disorder_vectorized(seqs, strict_disorder=strict_disorder,
+                                        disorder_cutoff=disorder_cutoff,
+                                        max_consecutive_ordered=max_consecutive_ordered,
+                                        max_total_ordered=max_total_ordered,
+                                        metapredict_version=metapredict_version,
+                                        return_best_sequence=True)
+            
+            # if we still have a string, try to optimize it
+            if isinstance(seqs, str):
+                # only use optimization when we have failed to make a sequence consistently. 
+                if batch_size >= 100:
+                    seqs=optimize_disorder(seqs, disorder_cutoff=disorder_cutoff,
+                            max_iterations=50, 
+                            preserve_charge_placement=preserve_charge_placement,
+                            metapredict_version=metapredict_version)
+                    # check if the optimized sequence meets the disorder cutoffa
+                    cur_disorder = meta.predict_disorder(seqs, version=metapredict_version)
+                    if np.min(cur_disorder) >= disorder_cutoff:
+                        return seqs  
+                else:
+                    continue
             else:
-                continue
+                if seqs == []:
+                    continue
+                else:
+                    # if return_all_sequences, return seqs
+                    if return_all_sequences:
+                        return seqs
+                    else:
+                        # return a single sequence
+                        return random.choice(seqs)
         else:
-            # if return_all_sequences, return seqs
-            if return_all_sequences:
-                return seqs
-            else:
-                # return a single sequence
-                return random.choice(seqs)
+            # return all the sequences. 
+            return seqs
 
     # if we get here, we didn't find any sequences that met the criteria
-    raise goose_exceptions.GooseFail('Failed to generate sequence!')
+    return None
 
 
 
@@ -458,8 +470,15 @@ def generate_seq_by_fractions(length,
                 # check if the optimized sequence meets the disorder cutoffa
                 cur_disorder = meta.predict_disorder(seqs, version=metapredict_version)
                 if np.min(cur_disorder) >= disorder_cutoff:
-                    return seqs  
-
+                    return seqs 
+                else:
+                    # if we still have a string, we failed to make a sequence that meets the disorder cutoff
+                    continue
+        
+        # if we have a list of sequences, check if they are empty
+        if seqs == []:
+            continue
+        
         # if return_all_sequences, return seqs
         if return_all_sequences:
             return seqs
@@ -468,4 +487,4 @@ def generate_seq_by_fractions(length,
             return random.choice(seqs)
     
     # if we get here, we didn't find any sequences that met the criteria
-    raise goose_exceptions.GooseFail('Failed to generate sequence!')
+    return None

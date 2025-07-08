@@ -40,8 +40,11 @@ def sequences_to_matrices(sequences):
     numpy.ndarray
         2D array of shape (n_sequences, max_length) with integer amino acid codes
     """
-    if not sequences:
-        return np.array([])
+    if isinstance(sequences, np.ndarray):
+        sequences = sequences.tolist()
+
+    if sequences==None or len(sequences) == 0:
+        return [np.array([])]
     
     # Get dimensions
     n_sequences = len(sequences)

@@ -243,6 +243,8 @@ def optimize_hydropathy_vectorized(
         final_hydro = calculate_hydropathy_batch(seq_matrices)
         sorted_indices = np.argsort(np.abs(final_hydro - target_hydropathy))
         seq_matrices = seq_matrices[sorted_indices]
+    else:
+        return None
 
     # Convert back to sequences
     if convert_back_to_sequences:

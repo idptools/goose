@@ -12,7 +12,6 @@ def optimize_disorder_within_class(
                       input_sequence, disorder_cutoff=0.5,
                       max_iterations=100,
                       metapredict_version=3,
-                      allowed_fraction_below_cutoff=0.01,
                       num_iter_without_improvement_stop=20):
     '''
     Function to optimize the disorder of a sequence. 
@@ -31,8 +30,6 @@ def optimize_disorder_within_class(
         Maximum number of optimization iterations. Default is 100.
     metapredict_version : int
         The version of metapredict to use for disorder prediction. Default is 3.
-    allowed_fraction_below_cutoff : float
-        Fraction of residues that can be below the disorder cutoff to allow optimization. Default is 0.01.
     num_iter_without_improvement_stop : int
         Number of iterations without improvement before stopping optimization. Default is 20.
 
@@ -46,8 +43,6 @@ def optimize_disorder_within_class(
     str
         Optimized sequence with improved disorder score.
     '''
-    
-    allowed_res_below_cutoff = int(len(input_sequence) * allowed_fraction_below_cutoff)
 
     # make sequence a copy of input_sequence
     sequence = input_sequence
@@ -56,7 +51,6 @@ def optimize_disorder_within_class(
     # get initial disorder score and full disorder profile
     initial_disorder = meta.predict_disorder(sequence, version=metapredict_version)
     best_disorder_score = np.min(initial_disorder)
-    best_mean_disorder = np.mean(initial_disorder)
 
     # convert sequence to numpy array for vectorized operations
     sequence_array = np.array(list(sequence))
@@ -153,20 +147,16 @@ def optimize_disorder_within_class(
         new_sequence = ''.join(sequence_list)
         cur_disorder = meta.predict_disorder(new_sequence, version=metapredict_version)
         new_disorder_min = np.min(cur_disorder)
-        new_disorder_mean = np.mean(cur_disorder)
         
         # if minimum disorder is above cutoff, return immediately
         if new_disorder_min >= disorder_cutoff:
             return new_sequence
         
-        # use vectorized operation to count residues below cutoff
-        residues_below_cutoff = np.sum(cur_disorder < disorder_cutoff)
-        
-        # improved acceptance criteria: consider both min and mean disorder
+        # improved acceptance criteria: consider min
         improvement_found = False
         if new_disorder_min > best_disorder_score:
             improvement_found = True
-        elif new_disorder_min == best_disorder_score and new_disorder_mean > best_mean_disorder:
+        elif new_disorder_min == best_disorder_score:
             improvement_found = True
         
         # update sequence if improvement is found
@@ -174,12 +164,8 @@ def optimize_disorder_within_class(
             sequence = new_sequence
             best_sequence = new_sequence
             best_disorder_score = new_disorder_min
-            best_mean_disorder = new_disorder_mean
             no_improvement = 0
             
-            # if the number of residues below cutoff is within allowed fraction, return
-            if residues_below_cutoff <= allowed_res_below_cutoff:
-                return new_sequence
         else:
             no_improvement += 1
             

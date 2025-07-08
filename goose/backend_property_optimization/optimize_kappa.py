@@ -221,6 +221,8 @@ def optimize_kappa_vectorized(sequence, target_kappa,
         sorted_indices = np.argsort(np.abs(kappa_values - target_kappa))
         # return those within tolerance in sorted order
         modified_amino_sequences = [modified_amino_sequences[i] for i in sorted_indices if abs(kappa_values[i] - target_kappa) <= tolerance]
+        if modified_amino_sequences == []:
+            return None
     return modified_amino_sequences
 
 

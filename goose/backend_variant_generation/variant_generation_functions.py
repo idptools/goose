@@ -12,6 +12,7 @@ from goose.parameters import get_min_re, get_max_re, get_min_rg, get_max_rg
 from goose.backend_sequence_generation.sequence_generation_vectorized import generate_seq_by_props
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa_vectorized
 from goose.backend_sequence_generation.seq_by_class_vectorized import create_sequence_by_class
+from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy_vectorized
 from goose.backend_property_optimization.optimize_hydropathy_minimal_changes import optimize_hydropathy_minimal_changes
 from goose.backend_property_optimization.within_class_hydropathy_optimization import optimize_hydropathy_within_class_vectorized
 from goose.backend_variant_generation.helper_functions import needed_charged_residues, change_all_residues_within_class, optimize_hydropathy_avoid_original_residues, calculate_amino_acid_class_fractions, decrease_res_asymmetry, increase_res_asymmetry, find_hydro_range_constant_class
@@ -116,6 +117,8 @@ def generate_minimal_variant(input_sequence: str,
     initial_hydropathy = protein.hydrophobicity
     initial_kappa = protein.kappa
     initial_FCR = protein.FCR
+    if target_kappa is None:
+        target_kappa = initial_kappa
 
 
     # step 2. Modify FCR. We want to change as few residues as possible. 
@@ -227,9 +230,8 @@ def generate_minimal_variant(input_sequence: str,
             tolerance=hydropathy_tolerance,
             only_return_within_tolerance=False
         )[0]
-
-    # check if the sequence is within the tolerance of the target hydropathy. If not, take additional steps.
-    if target_hydropathy is not None:
+        
+        # check hydropathy
         final_hydropathy = Protein(input_sequence).hydrophobicity
         if abs(final_hydropathy - target_hydropathy) > hydropathy_tolerance:
             # This will try to find the minimum number of changes needed to get to the target hydropathy.
@@ -240,6 +242,27 @@ def generate_minimal_variant(input_sequence: str,
                 tolerance=hydropathy_tolerance,
                 preserve_charged=True
             )
+        
+        # check hydropathy again after minimal changes
+        final_hydropathy = Protein(input_sequence).hydrophobicity
+        if abs(final_hydropathy - target_hydropathy) > hydropathy_tolerance:
+           # use optimize_hydropathy function
+            input_sequence = optimize_hydropathy_vectorized(
+                [input_sequence],
+                target_hydropathy=target_hydropathy,
+                max_iterations=max_iterations,
+                tolerance=hydropathy_tolerance,
+                preserve_charged=True,
+                convert_input_seq_to_matrix=True,
+                return_when_num_hit=1,
+                avoid_shuffle=True,
+                num_copies=10,
+                convert_back_to_sequences= True,
+                need_to_convert_seqs=True
+            )
+            if input_sequence is None:
+                return None
+            input_sequence = input_sequence[0]  # Get the first sequence from the list
 
     # Step 5: Optimize kappa
     if target_kappa is not None:
@@ -253,8 +276,11 @@ def generate_minimal_variant(input_sequence: str,
             return_when_num_hit=1,
             avoid_shuffle=True,
             num_copies=10
-        )[0]
-
+        )
+        if input_sequence is None:
+            return None
+        input_sequence = input_sequence[0]
+    
     return input_sequence
 
 
@@ -284,7 +310,7 @@ def generate_region_shuffle_variant(input_sequence: str,
     return input_sequence
 
 def generate_excluded_shuffle_variant(input_sequence: str,
-                             exclude_indices: list) -> str:
+                             excluded_residues: list) -> str:
     """
     Generate a variant of the input sequence by shuffling residues not specified in exclude_indices.
     
@@ -292,8 +318,8 @@ def generate_excluded_shuffle_variant(input_sequence: str,
     ----------
     input_sequence : str
         The input protein sequence to be modified.
-    exclude_indices : list
-        List of indices to exclude from shuffling.
+    excluded_residues : list
+        List of residues to exclude from shuffling.
 
     Returns:
     --------
@@ -303,10 +329,13 @@ def generate_excluded_shuffle_variant(input_sequence: str,
     # Convert input sequence to a list for easier manipulation
     seq_list = list(input_sequence)
     
-    # Get indices that are not excluded
-    indices_to_shuffle = [i for i in range(len(seq_list)) if i not in exclude_indices]
+    # Get indices of target residues
+    indices_to_shuffle = [i for i, aa in enumerate(seq_list) if aa not in excluded_residues]
+    # If no residues to shuffle, return original sequence
+    if not indices_to_shuffle:
+        return input_sequence
     
-    # Shuffle the residues at the non-excluded indices
+    # Shuffle the residues at the target indices
     shuffled_region = np.random.permutation([seq_list[i] for i in indices_to_shuffle])
     
     # Place shuffled residues back into the sequence
@@ -391,20 +420,34 @@ def generate_new_seq_constant_class_variant(sequence: str,
         proline_fraction=class_fractions['proline'],
         cysteine_fraction=class_fractions['cysteine'],
         histidine_fraction=class_fractions['histidine'],
-        num_sequences=1,
+        num_sequences=5,
         convert_to_amino_acids=True
     )
 
-    print(new_sequence)
-
     # now use within class hydropathy optimization to get the hydropathy correct.
     new_sequence = optimize_hydropathy_within_class_vectorized(
-        [new_sequence],
+        new_sequence,
         target_hydropathy=original_hydropathy,
         max_iterations=1000,
         tolerance=hydropathy_tolerance,
         only_return_within_tolerance=False
     )[0]
+
+    # make sure new_sequence hydropathy is within tolerance
+    final_hydropathy = Protein(new_sequence).hydrophobicity
+    if abs(final_hydropathy - original_hydropathy) > hydropathy_tolerance:
+        # if not, try hydropathy optimization one more time. 
+        new_sequence = optimize_hydropathy_within_class_vectorized(
+                        [new_sequence],
+                        target_hydropathy=original_hydropathy,
+                        max_iterations=1000,
+                        tolerance=hydropathy_tolerance,
+                        only_return_within_tolerance=False
+                        )[0]
+        final_hydropathy = Protein(new_sequence).hydrophobicity
+        if abs(final_hydropathy - original_hydropathy) > hydropathy_tolerance:
+            # if still not within tolerance, return None
+            return None
 
     # finally, optimize kappa to get it to the original kappa
     new_sequence = optimize_kappa_vectorized(
@@ -416,39 +459,13 @@ def generate_new_seq_constant_class_variant(sequence: str,
         tolerance=kappa_tolerance
     )[0]
 
+    # check if kappa is within tolerance
+    final_kappa = Protein(new_sequence).kappa
+    if abs(final_kappa - original_kappa) > kappa_tolerance:
+        # if not, return None
+        return None
     return new_sequence
 
-def generate_constant_properties_variant(sequence: str,
-                                     hydropathy_tolerance=parameters.HYDRO_ERROR,
-                                     kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR) -> str:
-    '''
-    Generate a new sequence with the same hydropathy, 
-    FCR, NCPR, and kappa as the input sequence.
-    
-    Parameters:
-    ----------
-    sequence : str
-        The input protein sequence to be modified.
-    
-    Returns:
-    --------
-    str
-        A new protein sequence with the same hydropathy, FCR, NCPR, and kappa as the input sequence.
-    '''
-    # get starting properties
-    protein = Protein(sequence)
-    original_hydropathy = protein.hydrophobicity
-    original_kappa = protein.kappa
-    original_FCR = protein.FCR
-    original_NCPR = protein.NCPR
-    length = len(sequence)
-    return generate_seq_by_props(
-        length=length,
-        fcr=original_FCR,
-        ncpr=original_NCPR,
-        hydropathy=original_hydropathy,
-        kappa=original_kappa
-        )
 
 def generate_constant_residue_variant(sequence: str,
                                   constant_residues: list,
@@ -493,99 +510,108 @@ def generate_constant_residue_variant(sequence: str,
     original_NCPR = protein.NCPR
     length = len(modified_sequence)
 
-   # Generate a new sequence with the same properties
-    new_sequence = generate_seq_by_props(
-        length=length,
-        fcr=original_FCR,
-        ncpr=original_NCPR,
-        hydropathy=original_hydropathy,
-        kappa=original_kappa
-    )
+    # Generate a new sequence with the same properties
+    for i in range(10):
+        new_sequences = generate_seq_by_props(
+            length=length,
+            fcr=original_FCR,
+            ncpr=original_NCPR,
+            hydropathy=original_hydropathy,
+            kappa=original_kappa,
+            check_disorder=False,
+            batch_size=200,
+            exclude_residues=constant_residues
+        )
+        if new_sequences != None:
+            break
 
-    # Create final sequence by inserting constant residues back at their original positions
-    final_sequence = list(sequence)  # Start with original sequence as template
-    new_seq_index = 0  # Index for the new sequence (without constant residues)
-    
-    # Iterate through each position in the original sequence
-    for i, original_aa in enumerate(sequence):
-        if original_aa not in constant_residues:
-            # Replace with amino acid from new sequence
-            final_sequence[i] = new_sequence[new_seq_index]
-            new_seq_index += 1
-        else:
-            # Keep the constant residue in place
-            final_sequence[i] = original_aa
-    
-    # if constant residues specified as charged, we cannot use kappa optimzation because it will
-    # move the charged residues around.
-    constant_charged = [aa for aa in constant_residues if aa in ['D', 'E', 'K', 'R']]
-    if constant_charged != []:
-        charged_residues = ['D', 'E', 'K', 'R']
-        positive_residues = ['K', 'R']
-        negative_residues = ['D', 'E']
+    if isinstance(new_sequences, str):
+        new_sequences = [new_sequences]  # Convert to list for consistency
+
+    if new_sequences is None or len(new_sequences) == 0:
+        return None
+
+    all_sequences=[]
+    for new_sequence in new_sequences:
+        # Create final sequence by inserting constant residues back at their original positions
+        final_sequence = list(sequence)  # Start with original sequence as template
+        new_seq_index = 0  # Index for the new sequence (without constant residues)
         
-        # Identify which charged residue types can be varied (not in constant_residues)
-        variable_positive_residues = [aa for aa in positive_residues if aa not in constant_residues]
-        variable_negative_residues = [aa for aa in negative_residues if aa not in constant_residues]
+        # Iterate through each position in the original sequence
+        for i, original_aa in enumerate(sequence):
+            if original_aa not in constant_residues:
+                # Replace with amino acid from new sequence
+                final_sequence[i] = new_sequence[new_seq_index]
+                new_seq_index += 1
+            else:
+                # Keep the constant residue in place
+                final_sequence[i] = original_aa
         
-        # Find positions of variable charged residues in original sequence
-        original_variable_positive_positions = [i for i, aa in enumerate(sequence) 
+        # if constant residues specified as charged, we cannot use kappa optimzation because it will
+        # move the charged residues around.
+        constant_charged = [aa for aa in constant_residues if aa in ['D', 'E', 'K', 'R']]
+        if constant_charged != []:
+            charged_residues = ['D', 'E', 'K', 'R']
+            positive_residues = ['K', 'R']
+            negative_residues = ['D', 'E']
+            
+            # Identify which charged residue types can be varied (not in constant_residues)
+            variable_positive_residues = [aa for aa in positive_residues if aa not in constant_residues]
+            variable_negative_residues = [aa for aa in negative_residues if aa not in constant_residues]
+            
+            # Find positions of variable charged residues in original sequence
+            original_variable_positive_positions = [i for i, aa in enumerate(sequence) 
+                                                if aa in variable_positive_residues]
+            original_variable_negative_positions = [i for i, aa in enumerate(sequence) 
+                                                if aa in variable_negative_residues]
+            
+            # Find variable charged residues in final sequence
+            final_variable_positive_residues = [aa for aa in final_sequence 
                                             if aa in variable_positive_residues]
-        original_variable_negative_positions = [i for i, aa in enumerate(sequence) 
+            final_variable_negative_residues = [aa for aa in final_sequence 
                                             if aa in variable_negative_residues]
-        
-        # Find variable charged residues in final sequence
-        final_variable_positive_residues = [aa for aa in final_sequence 
-                                        if aa in variable_positive_residues]
-        final_variable_negative_residues = [aa for aa in final_sequence 
-                                        if aa in variable_negative_residues]
-        
-        # If there are variable charged residues, we need to rearrange them
-        if original_variable_positive_positions or original_variable_negative_positions:
-            # Remove all variable charged residues from their current positions
-            for i in range(len(final_sequence)):
-                if (final_sequence[i] in variable_positive_residues or 
-                    final_sequence[i] in variable_negative_residues):
-                    final_sequence[i] = None  # Mark for replacement
             
-            # Shuffle the collected variable charged residues to randomize their assignment
-            np.random.shuffle(final_variable_positive_residues)
-            np.random.shuffle(final_variable_negative_residues)
-            
-            # Place variable positive residues back at original variable positive positions
-            for i, pos in enumerate(original_variable_positive_positions):
-                if i < len(final_variable_positive_residues):
-                    final_sequence[pos] = final_variable_positive_residues[i]
-            
-            # Place variable negative residues back at original variable negative positions
-            for i, pos in enumerate(original_variable_negative_positions):
-                if i < len(final_variable_negative_residues):
-                    final_sequence[pos] = final_variable_negative_residues[i]
-            
-            # Fill any remaining None positions with non-charged amino acids
-            non_charged_from_new = [aa for aa in new_sequence if aa not in charged_residues]
-            non_charged_index = 0
-            
-            for i in range(len(final_sequence)):
-                if final_sequence[i] is None:
-                    if non_charged_index < len(non_charged_from_new):
-                        final_sequence[i] = non_charged_from_new[non_charged_index]
-                        non_charged_index += 1
-        # make string
-        final_sequence = ''.join(final_sequence)
+            # If there are variable charged residues, we need to rearrange them
+            if original_variable_positive_positions or original_variable_negative_positions:
+                # Remove all variable charged residues from their current positions
+                for i in range(len(final_sequence)):
+                    if (final_sequence[i] in variable_positive_residues or 
+                        final_sequence[i] in variable_negative_residues):
+                        final_sequence[i] = None  # Mark for replacement
+                
+                # Shuffle the collected variable charged residues to randomize their assignment
+                np.random.shuffle(final_variable_positive_residues)
+                np.random.shuffle(final_variable_negative_residues)
+                
+                # Place variable positive residues back at original variable positive positions
+                for i, pos in enumerate(original_variable_positive_positions):
+                    if i < len(final_variable_positive_residues):
+                        final_sequence[pos] = final_variable_positive_residues[i]
+                
+                # Place variable negative residues back at original variable negative positions
+                for i, pos in enumerate(original_variable_negative_positions):
+                    if i < len(final_variable_negative_residues):
+                        final_sequence[pos] = final_variable_negative_residues[i]
+                
+                # Fill any remaining None positions with non-charged amino acids
+                non_charged_from_new = [aa for aa in new_sequence if aa not in charged_residues]
+                non_charged_index = 0
+                
+                for i in range(len(final_sequence)):
+                    if final_sequence[i] is None:
+                        if non_charged_index < len(non_charged_from_new):
+                            final_sequence[i] = non_charged_from_new[non_charged_index]
+                            non_charged_index += 1
+            # make string
+            final_sequence = ''.join(final_sequence)
+        else:
+            final_sequence = ''.join(final_sequence)
+        all_sequences.append(final_sequence)
 
-    else:
-        # If no constant charged residues, we can optimize kappa
-        final_sequence = optimize_kappa_vectorized(
-            [''.join(final_sequence)],
-            target_kappa=original_kappa,
-            num_iterations=1000,
-            convert_input_seq_to_matrix=True,
-            inputting_matrix=False,
-            tolerance=kappa_tolerance
-        )[0]
-    
-    return final_sequence
+    if all_sequences==[]:
+        return None
+
+    return all_sequences
 
 def generate_asymmetry_variant(sequence: str,
                                 target_residues: list,
@@ -659,7 +685,10 @@ def generate_hydro_class_variant(sequence: str,
         max_iterations=5000,
         tolerance=tolerance,
         only_return_within_tolerance=True
-    )[0]
+    )
+    if optimized_sequence is None or len(optimized_sequence) == 0:
+        return None
+    optimized_sequence = optimized_sequence[0]  # Get the first sequence from the list
     
     return optimized_sequence
 
@@ -796,7 +825,10 @@ def generate_fcr_class_variant(sequence: str,
                 return_when_num_hit=1,
                 avoid_shuffle=True,
                 num_copies=10
-            )[0]
+            )
+            if sequence is None or len(sequence) == 0:
+                return None
+            sequence = sequence[0]
 
     return sequence
 
@@ -960,9 +992,11 @@ def generate_all_props_class_var(sequence,
                 sequence = optimize_kappa_vectorized(
                     [sequence],
                     target_kappa=target_kappa,
-                    max_iterations=max_iterations,
                     tolerance=kappa_tolerance,
-                    return_when_num_hit=1
+                    return_when_num_hit=1,
+                    inputting_matrix=False,
+                    convert_input_seq_to_matrix=True,
+                    num_copies=10
                 )[0]
     # return sequence
     return sequence
