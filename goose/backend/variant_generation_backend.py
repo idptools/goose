@@ -13,7 +13,7 @@ from goose.backend import lists
 from goose.backend.amino_acids import AminoAcid
 from goose.backend import parameters
 from goose.backend.ginell_clustering_parameter import calculate_average_inverse_distance_from_sequence as clustering_param
-from goose.backend_property_optimization.optimize_kappa import optimize_kappa_vectorized
+from goose.backend_property_optimization.optimize_kappa import optimize_kappa
 
 def return_num_for_class(sequence):
     '''
@@ -1304,7 +1304,7 @@ def create_kappa_variant(sequence, kappa, allowed_kappa_error = parameters.MAXIM
     '''
 
     num_iterations = 20*attempts
-    new_seq = optimize_kappa_vectorized([sequence], target_kappa=kappa, 
+    new_seq = optimize_kappa([sequence], target_kappa=kappa, 
                               tolerance=allowed_kappa_error, num_iterations=num_iterations, 
                               max_change_iterations=20,
                               early_stopping=True,

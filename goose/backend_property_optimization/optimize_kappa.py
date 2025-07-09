@@ -9,15 +9,15 @@ The optimization is done by moving the charged residues in the sequence.
 
 import random
 import numpy as np
-from typing import List, Union, Optional, Tuple
+from typing import List
 from goose import parameters
 from goose.backend_property_calculation.calculate_kappa import charge_matrix_to_ternary, kappa
-from goose.backend_property_calculation.calculate_properties_vectorized import sequences_to_matrices, matrices_to_sequences
-from goose.backend_property_optimization.shuffle_sequences_in_matrix import shuffle_sequence_return_matrix
+from goose.backend_property_calculation.calculate_properties_batch import sequences_to_matrices, matrices_to_sequences
+from goose.backend_property_optimization.helper_functions import shuffle_sequence_return_matrix
 from goose.backend_property_optimization.minimize_kappa import efficient_kappa_minimization
 from goose.backend_property_optimization.modify_kappa import increase_kappa, decrease_kappa, increase_kappa_aggressive
 
-def optimize_kappa_vectorized(sequence, target_kappa, 
+def optimize_kappa(sequence, target_kappa, 
                               num_copies: int = 10,
                               max_change_iterations: int = 10,
                               tolerance=parameters.MAXIMUM_KAPPA_ERROR, 

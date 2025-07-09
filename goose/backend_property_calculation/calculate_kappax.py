@@ -366,7 +366,7 @@ def vectorized_kappa_x(sequences, group1, group2, window_size, flatten=False, te
 
 
 
-def vectorized_dual_window_kappa_x(sequences, group1, group2, flatten=False, ternarize=True):
+def kappa_x(sequences, group1, group2, flatten=False, ternarize=True):
     """
     Highly optimized kappa_x calculation that computes the average of window sizes 5 and 6
     in a single pass, eliminating redundant calculations.

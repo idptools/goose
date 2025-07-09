@@ -2,10 +2,9 @@
 Code for kappa minimzation. Going to attempt a different strategy
 because the current one is insufficient. 
 '''
-import random
 import numpy as np
-from goose.backend_property_calculation.calculate_kappa import global_asymmetry, patterning_asymmetry, charge_matrix_to_ternary, kappa, analytical_deltamax
-from goose.backend_property_calculation.calculate_properties_vectorized import sequences_to_matrices
+from goose.backend_property_calculation.calculate_kappa import global_asymmetry, kappa
+
 
 def calc_global_sigma(ternarized_seqs):
     """

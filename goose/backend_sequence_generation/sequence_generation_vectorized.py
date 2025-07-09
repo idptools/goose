@@ -8,9 +8,9 @@ import metapredict as meta
 from numpy.lib.stride_tricks import sliding_window_view
 from goose import parameters
 from goose import goose_exceptions
-from goose.backend_property_calculation.calculate_properties_vectorized import sequences_to_matrices, matrices_to_sequences
-from goose.backend_property_optimization.optimize_kappa import optimize_kappa_vectorized
-from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy_vectorized
+from goose.backend_property_calculation.calculate_properties_batch import sequences_to_matrices, matrices_to_sequences
+from goose.backend_property_optimization.optimize_kappa import optimize_kappa
+from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy
 from goose.backend_sequence_generation.seq_by_probability_vectorized import SequenceGenerator
 from goose.backend_sequence_generation.seq_by_fractions_vectorized import FractionBasedSequenceGenerator
 from goose.backend_property_optimization.optimize_disorder import optimize_disorder
@@ -273,7 +273,7 @@ def generate_seq_by_props(length,
                 preserve_charge=True
             if ncpr is not None:
                 preserve_charge=True
-            seqs = optimize_hydropathy_vectorized(seqs, hydropathy,
+            seqs = optimize_hydropathy(seqs, hydropathy,
                                                 preserve_charged=preserve_charge, 
                                                 tolerance=hydropathy_tolerance,
                                                 return_when_num_hit=required_hydro_batch_size,
@@ -288,7 +288,7 @@ def generate_seq_by_props(length,
         if kappa is not None:
             # iterate over sequences that have made it this far. 
             # get first successful kappa seq. This is needed because kappa is computationally intensive. 
-            seqs = optimize_kappa_vectorized(seqs, kappa, 
+            seqs = optimize_kappa(seqs, kappa, 
                                              return_when_num_hit=required_kappa_batch_size, 
                                              only_return_within_tolerance=True,
                                              tolerance=kappa_tolerance)

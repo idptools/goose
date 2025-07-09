@@ -1,8 +1,6 @@
 from sparrow.protein import Protein
-from numpy.lib.stride_tricks import sliding_window_view
 import numpy as np
-from goose.data.defined_aa_classes import aa_classes, aa_classes_by_aa, aa_class_indices, min_class_hydro, max_class_hydro
-from goose.backend_property_calculation.calculate_properties_single_sequence import sequence_to_array, array_to_sequence, calculate_hydropathy_single_sequence, calculate_ncpr_single_sequence, calculate_fcr_single_sequence
+from goose.data.defined_aa_classes import aa_classes_by_aa, min_class_hydro, max_class_hydro
 import metapredict as meta
 
 def check_properties(
@@ -177,74 +175,34 @@ def change_all_residues_within_class(input_sequence):
     seq_list = [np.random.choice(aa_classes_by_aa[aa]) for aa in input_sequence]
     return ''.join(seq_list)
 
-def optimize_hydropathy_avoid_original_residues(
-        original_sequence,
-        variant_sequence,
-        target_hydropathy,
-        max_iterations=1000,
-        tolerance=0.05):
+
+def check_hydropathy(variant_sequence: str,
+                     target_hydropathy: float,
+                     hydropathy_tolerance: float) -> bool:
     """
-    Optimize hydropathy of a sequence while avoiding original residues.
+    Check if the hydropathy of a variant sequence is within the specified tolerance
+    of the target hydropathy.
 
     Parameters:
     -----------
-    original_sequence : str
-        The original sequence to avoid.
+    original_hydropathy : float
+        The hydropathy of the original sequence.
+        
     variant_sequence : str
-        The sequence to optimize.
+        The sequence to check.
+        
     target_hydropathy : float
-        Target mean hydropathy value to achieve.
-    max_iterations : int
-        Maximum number of optimization iterations.
-    tolerance : float
-        Acceptable difference between achieved and target hydropathy.
-
+        The target hydropathy value.
+        
+    hydropathy_tolerance : float
+        The acceptable deviation from the target hydropathy.
     Returns:
     --------
-    str
-        Optimized sequence with hydropathy close to the target.
+    bool
+        True if the variant sequence's hydropathy is within the tolerance of the target,
+        False otherwise.
     """
-    
-    # Convert sequences to numpy arrays for vectorized operations
-    original_seq = sequence_to_array(original_sequence)
-    variant_seq = sequence_to_array(variant_sequence)
-    
-    # set mutable residues. Can't change D,E,K,R,H,G,C,P
-    mutable_residues=[0, 4, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19]
-    
-    current_hydropathy = calculate_hydropathy_single_sequence(variant_seq)
-    
-    for _ in range(max_iterations):
-        if abs(current_hydropathy - target_hydropathy) < tolerance:
-            break
-        
-        # Find positions that can be changed
-        changeable_positions = [i for i in range(len(variant_seq)) if variant_seq[i] in mutable_residues]
-        
-        if not changeable_positions:
-            return ''.join(array_to_sequence(variant_seq))
-        
-        # Randomly select a position to change
-        pos_to_change = np.random.choice(changeable_positions)
-        
-        # Find the best replacement amino acid
-        current_aa = variant_seq[pos_to_change]
-        best_hydro_error = np.inf
-        
-        for aa in aa_class_indices[current_aa]:
-            if aa not in original_seq:  # Avoid original residues
-                new_seq = variant_seq.copy()
-                new_seq[pos_to_change] = aa
-                new_hydro = calculate_hydropathy_single_sequence(new_seq)
-
-                if abs(new_hydro-target_hydropathy) < best_hydro_error:
-                    best_hydro_error = abs(new_hydro - target_hydropathy)
-                    variant_seq = new_seq.copy()
-                    if best_hydro_error < tolerance:
-                        # If we found a suitable amino acid, break early
-                        break
-    return array_to_sequence(variant_seq)
-
+    return abs(Protein(variant_sequence).hydrophobicity - target_hydropathy) <= hydropathy_tolerance
 
 
 def calculate_amino_acid_class_fractions(sequence: str) -> dict:
@@ -381,7 +339,7 @@ def get_linear_profile(sequence: str,
     
     return profile
 
-def decrease_res_asymmetry(sequence, residues):
+def decrease_res_asymmetry(sequence, residues, num_attempts=100):
     '''
     function to decrease how asymmetrrically specific residues
     are distributed in a sequence. 
@@ -392,95 +350,119 @@ def decrease_res_asymmetry(sequence, residues):
         The input sequence to modify.
     residues : list
         List of residues to consider for modification.
+    num_attempts : int
+        Number of attempts to reduce asymmetry. Default is 100.
         
     Returns
     --------
     str
         Modified sequence with reduced asymmetry in residue distribution.
     '''
-    # Convert to numpy array for easier manipulation
-    window_size = 5
-    half_window = window_size // 2
-    
-    # Calculate the linear NCPR for each sequence
-    linear_profile, seqs_array = get_linear_profile(sequence, 
-                                        residues, 
-                                        window_size=window_size,
-                                        return_binarized_seq=True)
-    
-    # get residues in order that are in or not in residues
-    target_residues = [a for a in sequence if a in residues]
-    other_residues = [a for a in sequence if a not in residues]
+    # calculate IWD of original protein. 
+    starting_IWD = Protein(sequence).compute_iwd(target_residues=residues)
 
-    # sort the linear_profile by absolute value
-    sorted_indices = np.argsort(linear_profile, axis=0)[::-1]
+    for _ in range(num_attempts):
+        # Convert to numpy array for easier manipulation
+        # determine window size based on number of residues in sequence that are specified in residues.
+        target_window_size = int(len(sequence)/len([a for a in sequence if a in residues]))+1
+        window_size = max(5, target_window_size)
+        # make a list of window sizes that are + and - 3 from window_size
+        window_sizes = [window_size + i for i in range(-3, 4) if window_size + i > 3]
+        if window_sizes == []:
+            window_sizes = [5]  # fallback to minimum window size if no valid sizes
+        # randomly choose a window size from the list
+        window_size = np.random.choice(window_sizes)
+        print(window_size)
+        # Calculate half window size
+        half_window = window_size // 2
+        
+        # Calculate the linear NCPR for each sequence
+        linear_profile, seqs_array = get_linear_profile(sequence, 
+                                            residues, 
+                                            window_size=window_size,
+                                            return_binarized_seq=True)
+        
+        # get residues in order that are in or not in residues
+        target_residues = [a for a in sequence if a in residues]
+        other_residues = [a for a in sequence if a not in residues]
 
-    # use np.random to get a random index from the first 10% of the sorted indices
-    num_to_choose = max(1, len(sorted_indices) // 10)  # at least one position
-    chosen_indices = sorted_indices[:num_to_choose]
-    random_first_index = np.random.choice(chosen_indices)
-    # now get from the last 10%
-    last_indices = sorted_indices[-num_to_choose:]
-    random_last_index = np.random.choice(last_indices)
-    
-    # get all positions that are 1 in the sequence
-    target_positions = np.where(seqs_array == 1)[0]
+        # sort the linear_profile by absolute value
+        sorted_indices = np.argsort(linear_profile, axis=0)[::-1]
 
-    # get a charged position from the window in random_first_index
-    first_window_start = max(0, random_first_index - half_window)
-    first_window_end = min(len(sequence), random_first_index + half_window + 1)
-    first_window_positions = np.arange(first_window_start, first_window_end)
-    first_window_target_positions = np.intersect1d(target_positions, first_window_positions)
-    # choose a random positon from first_window_target_positions
-    if len(first_window_target_positions) > 0:
-        random_first_pos = np.random.choice(first_window_target_positions)
-    else:
-        # If no target positions in window, return the sequence
-        return sequence
-    
-    # get a random position in the random_last_window
-    last_window_start = max(0, random_last_index - half_window)
-    last_window_end = min(len(sequence), random_last_index + half_window + 1)
-    last_window_positions = np.arange(last_window_start, last_window_end)
-    random_last_position = np.random.choice(last_window_positions)
-    
-    # Move the charge from random_first_pos to random_last_position
-    if random_first_pos != random_last_position:
-        # Store what's currently at the target position
-        displaced_value = seqs_array[random_last_position]
-        # Move the charge to the target position
-        charge_value = seqs_array[random_first_pos]
-        seqs_array[random_last_position] = charge_value
-        # Put the displaced value where the charge was
-        seqs_array[random_first_pos] = displaced_value
+        # use np.random to get a random index from the first 10% of the sorted indices
+        num_to_choose = max(1, len(sorted_indices) // 10)  # at least one position
+        chosen_indices = sorted_indices[:num_to_choose]
+        random_first_index = np.random.choice(chosen_indices)
+        # now get from the last 10%
+        last_indices = sorted_indices[-num_to_choose:]
+        random_last_index = np.random.choice(last_indices)
+        
+        # get all positions that are 1 in the sequence
+        target_positions = np.where(seqs_array == 1)[0]
 
-    # Convert back to sequence using improved mapping
-    # Collect all target and non-target residues from original sequence
-    target_residues = [aa for aa in sequence if aa in residues]
-    other_residues = [aa for aa in sequence if aa not in residues]
-    
-    # Build the final sequence based on the modified binary array
-    final_sequence = []
-    target_idx = 0
-    other_idx = 0
-    
-    for position_value in seqs_array:
-        if position_value == 1:
-            if target_idx < len(target_residues):
-                final_sequence.append(target_residues[target_idx])
-                target_idx += 1
+        # get a charged position from the window in random_first_index
+        first_window_start = max(0, random_first_index - half_window)
+        first_window_end = min(len(sequence), random_first_index + half_window + 1)
+        first_window_positions = np.arange(first_window_start, first_window_end)
+        first_window_target_positions = np.intersect1d(target_positions, first_window_positions)
+        # choose a random positon from first_window_target_positions
+        if len(first_window_target_positions) > 0:
+            random_first_pos = np.random.choice(first_window_target_positions)
         else:
-            if other_idx < len(other_residues):
-                final_sequence.append(other_residues[other_idx])
-                other_idx += 1
+            # If no target positions in window, return the sequence
+            return sequence
+        
+        # get a random position in the random_last_window
+        last_window_start = max(0, random_last_index - half_window)
+        last_window_end = min(len(sequence), random_last_index + half_window + 1)
+        last_window_positions = np.arange(last_window_start, last_window_end)
+        random_last_position = np.random.choice(last_window_positions)
+        
+        # Move the charge from random_first_pos to random_last_position
+        if random_first_pos != random_last_position:
+            # Store what's currently at the target position
+            displaced_value = seqs_array[random_last_position]
+            # Move the charge to the target position
+            charge_value = seqs_array[random_first_pos]
+            seqs_array[random_last_position] = charge_value
+            # Put the displaced value where the charge was
+            seqs_array[random_first_pos] = displaced_value
 
-    if len(final_sequence) != len(sequence):
-        raise ValueError("Final sequence length does not match original sequence length.")
+        # Convert back to sequence using improved mapping
+        # Collect all target and non-target residues from original sequence
+        target_residues = [aa for aa in sequence if aa in residues]
+        other_residues = [aa for aa in sequence if aa not in residues]
+        
+        # Build the final sequence based on the modified binary array
+        final_sequence = []
+        target_idx = 0
+        other_idx = 0
+        
+        for position_value in seqs_array:
+            if position_value == 1:
+                if target_idx < len(target_residues):
+                    final_sequence.append(target_residues[target_idx])
+                    target_idx += 1
+            else:
+                if other_idx < len(other_residues):
+                    final_sequence.append(other_residues[other_idx])
+                    other_idx += 1
+
+        if len(final_sequence) != len(sequence):
+            raise ValueError("Final sequence length does not match original sequence length.")
     
-    # Join the final sequence into a string  
-    return ''.join(final_sequence)
+        # Calculate the IWD of the modified sequence
+        final_sequence = ''.join(final_sequence)
+        final_IWD = Protein(final_sequence).compute_iwd(target_residues=residues)
+    
+        # If the IWD has not changed, return the original sequence
+        if final_IWD < starting_IWD:
+            return final_sequence
 
-def increase_res_asymmetry(sequence, residues):
+    # if we failed to reduce asymmetry after all attempts, return None
+    return None
+
+def increase_res_asymmetry(sequence, residues, num_attempts=100):
     '''
     Function to increase how asymmetrically specific residues
     are distributed in a sequence by moving them toward sequence ends.
@@ -491,21 +473,24 @@ def increase_res_asymmetry(sequence, residues):
         The input sequence to modify.
     residues : list
         List of residues to consider for modification.
+    num_attempts : int
+        Number of attempts to increase asymmetry. Default is 100.
         
     Returns
     --------
     str
         Modified sequence with increased asymmetry in residue distribution.
     '''
+    # calculate IWD of original protein. 
+    starting_IWD = Protein(sequence).compute_iwd(target_residues=residues)
+
     # Convert to numpy array for easier manipulation
     window_size = 5
     half_window = window_size // 2
     
-    # Calculate the linear profile for the sequence
-    linear_profile, seqs_array = get_linear_profile(sequence, 
-                                        residues, 
-                                        window_size=window_size,
-                                        return_binarized_seq=True)
+    # binarize sequences
+    original_array = binarize_sequence_by_residues(sequence, residues)
+    seqs_array = np.copy(original_array)
     
     # Collect all target and non-target residues from original sequence
     target_residues = [aa for aa in sequence if aa in residues]
@@ -519,67 +504,83 @@ def increase_res_asymmetry(sequence, residues):
     target_center = np.mean(target_positions)
     seq_length = len(sequence)
     
-    # Determine which end to push target residues towards
-    # If center of mass is already in right half, push further right
-    # If center of mass is in left half, push further left
-    if target_center > seq_length / 2:
-        # Push target residues further right (toward end)
-        # Find leftmost target residue to move right
-        leftmost_target_pos = np.min(target_positions)
-        
-        # Find available positions in right half that don't already have target residues
-        right_half_start = seq_length // 2
-        available_right_positions = []
-        for i in range(right_half_start, seq_length):
-            if seqs_array[i] == 0 and i > leftmost_target_pos:
-                available_right_positions.append(i)
-        
-        if available_right_positions:
-            # Choose random position from available right positions
-            target_pos = np.random.choice(available_right_positions)
-            
-            # Perform the swap
-            seqs_array[target_pos] = 1
-            seqs_array[leftmost_target_pos] = 0
-    else:
-        # Push target residues further left (toward beginning)
-        # Find rightmost target residue to move left
-        rightmost_target_pos = np.max(target_positions)
-        
-        # Find available positions in left half that don't already have target residues
-        left_half_end = seq_length // 2
-        available_left_positions = []
-        for i in range(left_half_end):
-            if seqs_array[i] == 0 and i < rightmost_target_pos:
-                available_left_positions.append(i)
-        
-        if available_left_positions:
-            # Choose random position from available left positions
-            target_pos = np.random.choice(available_left_positions)
-            
-            # Perform the swap
-            seqs_array[target_pos] = 1
-            seqs_array[rightmost_target_pos] = 0
-    
-    # Convert back to sequence using the same mapping as decrease_res_asymmetry
-    final_sequence = []
-    target_idx = 0
-    other_idx = 0
-    
-    for position_value in seqs_array:
-        if position_value == 1:
-            if target_idx < len(target_residues):
-                final_sequence.append(target_residues[target_idx])
-                target_idx += 1
-        else:
-            if other_idx < len(other_residues):
-                final_sequence.append(other_residues[other_idx])
-                other_idx += 1
 
-    if len(final_sequence) != len(sequence):
-        raise ValueError("Final sequence length does not match original sequence length.")
-    
-    return ''.join(final_sequence)
+
+    for _ in range(num_attempts):
+        # Determine which end to push target residues towards
+        # If center of mass is already in right half, push further right
+        # If center of mass is in left half, push further left
+        if target_center > seq_length / 2:
+            # Push target residues further right (toward end)
+            # Find leftmost target residue to move right
+            leftmost_target_pos = np.min(target_positions)
+            
+            # Find available positions in right half that don't already have target residues
+            right_half_start = seq_length // 2
+            available_right_positions = []
+            for i in range(right_half_start, seq_length):
+                if seqs_array[i] == 0 and i > leftmost_target_pos:
+                    available_right_positions.append(i)
+            
+            if available_right_positions:
+                # Choose random position from available right positions
+                target_pos = np.random.choice(available_right_positions)
+                
+                # Perform the swap
+                seqs_array[target_pos] = 1
+                seqs_array[leftmost_target_pos] = 0
+        else:
+            # Push target residues further left (toward beginning)
+            # Find rightmost target residue to move left
+            rightmost_target_pos = np.max(target_positions)
+            
+            # Find available positions in left half that don't already have target residues
+            left_half_end = seq_length // 2
+            available_left_positions = []
+            for i in range(left_half_end):
+                if seqs_array[i] == 0 and i < rightmost_target_pos:
+                    available_left_positions.append(i)
+            
+            if available_left_positions:
+                # Choose random position from available left positions
+                target_pos = np.random.choice(available_left_positions)
+                
+                # Perform the swap
+                seqs_array[target_pos] = 1
+                seqs_array[rightmost_target_pos] = 0
+        
+        # Convert back to sequence using the same mapping as decrease_res_asymmetry
+        final_sequence = []
+        target_idx = 0
+        other_idx = 0
+        
+        for position_value in seqs_array:
+            if position_value == 1:
+                if target_idx < len(target_residues):
+                    final_sequence.append(target_residues[target_idx])
+                    target_idx += 1
+            else:
+                if other_idx < len(other_residues):
+                    final_sequence.append(other_residues[other_idx])
+                    other_idx += 1
+
+        if len(final_sequence) != len(sequence):
+            raise ValueError("Final sequence length does not match original sequence length.")
+        
+        # Calculate the IWD of the modified sequence
+        final_sequence = ''.join(final_sequence)
+        final_IWD = Protein(final_sequence).compute_iwd(target_residues=residues)
+        
+        # If the IWD has increased, return the modified sequence
+        if final_IWD > starting_IWD:
+            return final_sequence
+        else:
+            # If not, reset seqs_array to original state for next attempt
+            seqs_array = np.copy(original_array)
+
+    # if we failed to increase asymmetry after all attempts, return None
+    return None
+
 
 
 def find_hydro_range_constant_class(

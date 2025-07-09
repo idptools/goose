@@ -6,7 +6,7 @@ to match user-specified kappa, FCR, NCPR, and hydropathy values.
 import numpy as np
 import random
 from goose.backend.amino_acids import AminoAcid
-from goose.backend_property_calculation.calculate_properties_vectorized import (
+from goose.backend_property_calculation.calculate_properties_batch import (
     sequences_to_matrices, calculate_fcr_batch, calculate_ncpr_batch, calculate_hydropathy_batch
 )
 from goose.backend_property_calculation.calculate_kappa import kappa as batch_calculate_kappa

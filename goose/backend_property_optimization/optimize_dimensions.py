@@ -1,12 +1,10 @@
 import random
-import numpy as np
 
 from sparrow.predictors import batch_predict
 from sparrow.protein import Protein
 
 from goose.backend import parameters
-from goose.backend.parameters import re_error, rg_error, rg_re_attempt_num
-from goose.backend import lists
+from goose.backend.parameters import rg_re_attempt_num
 from goose.backend.lists import disordered_list, disordered_list_reduced_charge
 
 def predict_rg(sequence): return Protein(sequence).predictor.radius_of_gyration(use_scaled=True)
