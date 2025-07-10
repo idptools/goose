@@ -338,7 +338,7 @@ def residue_optimize_hydropathy_within_class(sequence, objective_hydropathy, tar
     return build_sequence  
 
 
-def optimize_hydropathy_within_class(sequence, objective_hydropathy, allowed_hydro_error = parameters.HYDRO_ERROR):
+def optimize_hydropathy_within_class(sequence, objective_hydropathy, allowed_hydro_error = parameters.MAXIMUM_HYDRO_ERROR):
     '''
     This function will optimie the hydropathy of a sequence such that it is
     within the allowed_hydro_error value.
@@ -629,7 +629,7 @@ def create_new_variant(sequence):
 
 
 
-def create_hydropathy_class_variant(sequence, hydro, allowed_hydro_error = parameters.HYDRO_ERROR):
+def create_hydropathy_class_variant(sequence, hydro, allowed_hydro_error = parameters.MAXIMUM_HYDRO_ERROR):
     '''
     function to take in a sequence and make a variant that adjusts the
     hydropathy while keeping the position and nuimber of amino acids the

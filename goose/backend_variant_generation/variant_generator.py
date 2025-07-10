@@ -1,11 +1,18 @@
 """
-VariantGenerator class that encapsulates all variant generation functions.
+VariantGenerator class that encapsulates all variant generation functions from variant_sequence_generation.py.
 Allows setting common parameters once and reusing them across different methods.
+This works as follows:
+    1. The variant is attempted to be generated using the specified method.
+    2. If the generated sequence does not meet the disorder criteria, it is discarded.
+    3. The process is repeated for a specified number of attempts until a valid sequence is found or all attempts are exhausted.
+    4. If a valid sequence is found, it is checked for disorder.
+    5. If the sequence is disordered, it is returned. If not, the function tries again.
 """
+
 from sparrow.protein import Protein
-from goose.backend_sequence_generation.sequence_generation_vectorized import generate_seq_by_props
+from goose.backend_sequence_generation.sequence_generation import by_properties
 from goose.backend_variant_generation.helper_functions import check_variant_disorder_vectorized
-from goose.backend_variant_generation import variant_generation_functions as vgf
+from goose.backend_variant_generation import variant_sequence_generation as vsg
 from goose.backend import parameters
 
 
@@ -22,7 +29,7 @@ class VariantGenerator:
                  strict_disorder: bool = False,
                  disorder_cutoff: float = 0.5,
                  metapredict_version: int = 3,
-                 hydropathy_tolerance: float = parameters.HYDRO_ERROR,
+                 hydropathy_tolerance: float = parameters.MAXIMUM_HYDRO_ERROR,
                  kappa_tolerance: float = parameters.MAXIMUM_KAPPA_ERROR):
         """
         Initialize the VariantGenerator with default parameters.
@@ -43,7 +50,7 @@ class VariantGenerator:
             Default is 3
         hydropathy_tolerance : float
             Acceptable difference between achieved and target hydropathy.
-            Default is parameters.HYDRO_ERROR
+            Default is parameters.MAXIMUM_HYDRO_ERROR
         kappa_tolerance : float
             Acceptable difference between achieved and target kappa.
             Default is parameters.MAXIMUM_KAPPA_ERROR
@@ -88,8 +95,369 @@ class VariantGenerator:
             disordered_sequence = disordered_sequence[0]
         
         return disordered_sequence
+
     
-    def gen_constant_class_variant(self, input_sequence: str) -> str:
+    def shuffle_specific_regions(self,
+                                  input_sequence: str,
+                                  shuffle_regions: list) -> str:
+        """
+        Generate a variant sequence by shuffling specified regions of the input sequence.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        shuffle_regions : list
+            List of tuples specifying regions to shuffle. Each tuple should contain
+            (start_index, end_index) for the region to shuffle.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence with specified regions shuffled.
+        """
+        for _ in range(self.num_attempts):
+            shuffle_vars = []
+            for _ in range(10):
+                shuffle_vars.append(vsg.shuffle_specific_regions_sequence(input_sequence, shuffle_regions))
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, shuffle_vars)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+    
+    def shuffle_except_specific_regions(self,
+                                        input_sequence: str,
+                                        excluded_regions: list) -> str:
+        """
+        Generate a variant sequence by shuffling all regions except specified ones.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        excluded_regions : list
+            List of tuples specifying regions to exclude from shuffling.
+            Each tuple should contain (start_index, end_index) for the region to exclude.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence with specified regions excluded from shuffling.
+        """
+        for _ in range(self.num_attempts):
+            shuffle_vars = []
+            for _ in range(10):
+                shuffle_vars.append(vsg.shuffle_except_specific_regions_sequence(input_sequence, excluded_regions))
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, shuffle_vars)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+    
+    def shuffle_specific_residues(self,
+                                   input_sequence: str,
+                                   target_residues: list) -> str:
+        """
+        Generate a variant sequence by shuffling residues within a specified target residues.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        target_residues : list
+            List of residues to shuffle within the sequence.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence with specified residues shuffled.
+        """
+        for _ in range(self.num_attempts):
+            shuff_seqs = []
+            for _ in range(10):
+                shuff_seqs.append(vsg.shuffle_specific_residues_sequence(input_sequence, target_residues))
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, shuff_seqs)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+
+    def shuffle_except_specific_residues(self,
+                                   input_sequence: str,
+                                   excluded_residues: list) -> str:
+        """
+        Generate a variant sequence by shuffling residues not specified in excluded_residues.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        excluded_residues : list
+            List of residues to exclude from shuffling.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence with specified residues excluded from shuffling.
+        """
+        for _ in range(self.num_attempts):
+            shuff_seqs = []
+            for _ in range(10):
+                shuff_seqs.append(vsg.shuffle_except_specific_residues_sequence(
+                    input_sequence, 
+                    excluded_residues=excluded_residues
+                ))
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, shuff_seqs)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+
+
+    def weighted_shuffle_specific_residues(self,
+                                     input_sequence: str,
+                                    target_residues: list,
+                                    shuffle_weight: float) -> str:
+        """
+        Generate a variant sequence by shuffling residues with a specified weight.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        target_residues : list
+            List of residues to shuffle within the sequence.
+        shuffle_weight : float
+            Weight for the shuffling process.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence with specified residues shuffled.
+        """
+        for _ in range(self.num_attempts):
+            variant_sequence = vsg.weighted_shuffle_specific_residues_sequence(
+                input_sequence,
+                target_aas=target_residues,
+                shuffle_weight=shuffle_weight
+            )
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+
+    def targeted_reposition_specific_residues(self,
+                                        input_sequence: str,
+                                        target_residues: list) -> str:
+        """
+        Generate a variant sequence by repositioning specified target residues.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        target_residues : list
+            List of residues to reposition within the sequence.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence with specified residues repositioned.
+        """
+        for _ in range(self.num_attempts):
+            variant_sequence = vsg.targeted_reposition_specific_residues_sequence(
+                input_sequence,
+                target_residues=target_residues
+            )
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+
+
+    def change_residue_asymmetry(self,
+                            input_sequence: str,
+                            target_residues: list,
+                            num_changes: int = 1,
+                            increase_or_decrease: str = 'increase') -> str:
+        """
+        Generate a variant sequence by introducing asymmetry in specified residues.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        target_residues : list
+            List of residues to introduce asymmetry in.
+        num_changes : int
+            Number of residues to change to make the sequence asymmetric.
+            Default is 1
+        increase_or_decrease : str
+            Whether to increase or decrease the asymmetry.
+            Default is 'increase'
+            
+        Returns
+        -------
+        str
+            A generated variant sequence with specified residues made asymmetric.
+        """
+        # Use a higher number of attempts for this method (as in original)
+        attempts = max(self.num_attempts, 50)
+        
+        for _ in range(attempts):
+            variant_sequence = vsg.change_residue_asymmetry_sequence(
+                input_sequence,
+                target_residues=target_residues,
+                num_changes=num_changes,
+                increase_or_decrease=increase_or_decrease
+            )
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+    
+    
+    def constant_properties(self,
+                       input_sequence: str,
+                       exclude_residues: list = None) -> str:
+        """
+        Generate a new variant where the sequence is constrained by hydropathy, 
+        NCPR, FCR, and kappa values.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        exclude_residues : list
+            List of residues to exclude from the variant generation.
+            If None, no residues are excluded.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence that meets the disorder criteria.
+        """
+        protein = Protein(input_sequence)
+        original_hydropathy = protein.hydrophobicity
+        original_kappa = protein.kappa
+        original_FCR = protein.FCR
+        original_NCPR = protein.NCPR
+        length = len(input_sequence)
+        
+        for _ in range(self.num_attempts):
+            seq = by_properties(
+                length, 
+                fcr=original_FCR, 
+                ncpr=original_NCPR, 
+                hydropathy=original_hydropathy, 
+                kappa=original_kappa, 
+                exclude_residues=exclude_residues,
+                num_attempts=5000,
+                hydropathy_tolerance=self.hydropathy_tolerance,
+                kappa_tolerance=self.kappa_tolerance,
+                metapredict_version=self.metapredict_version,
+                return_all_sequences=True,
+                check_sequence_disorder=False,
+                batch_size=200
+            )
+            if seq is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, seq)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+    
+
+    def constant_residues_and_properties(self,
+                                   input_sequence: str,
+                                   constant_residues: list) -> str:
+        """
+        Generate a variant sequence by keeping specified residues constant.
+        Hydropathy, kappa, ncpr and fcr are also held constant.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        constant_residues : list
+            List of residues to keep constant in the variant sequence.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence that meets the disorder criteria.
+        """
+        # Use a higher number of attempts for this method (as in original)
+        attempts = max(self.num_attempts, 50)
+        
+        for _ in range(attempts):
+            variant_sequence = vsg.constant_residues_and_properties_sequence(
+                input_sequence,
+                constant_residues=constant_residues,
+                hydropathy_tolerance=self.hydropathy_tolerance
+            )
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+    
+
+    def constant_properties_and_class(self, input_sequence: str) -> str:
+        """
+        Generate a new variant sequence by constant class mutation.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence that meets the disorder criteria.
+        """
+        # Use a higher number of attempts for this method (as in original)
+        attempts = max(self.num_attempts, 50)
+        
+        for _ in range(attempts):
+            variant_sequence = vsg.constant_properties_and_class_sequence(
+                input_sequence,
+                kappa_tolerance=self.kappa_tolerance,
+                hydropathy_tolerance=self.hydropathy_tolerance
+            )
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+
+    def constant_properties_and_class_by_order(self, input_sequence: str) -> str:
         """
         Generate a constant class variant of the input sequence.
         
@@ -104,7 +472,41 @@ class VariantGenerator:
             A generated variant sequence that meets the disorder criteria.
         """
         for _ in range(self.num_attempts):
-            variant_sequence = vgf.gen_constant_class_variant(input_sequence)
+            variant_sequence = vsg.constant_properties_and_class_by_order_sequence(input_sequence)
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+
+
+    def change_hydropathy_constant_class(self,
+                                   input_sequence: str,
+                                   target_hydropathy: float) -> str:
+        """
+        Generate a hydropathy class variant of the input sequence.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        target_hydropathy : float
+            Target mean hydropathy value to achieve.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence that meets the disorder criteria.
+        """
+        for _ in range(self.num_attempts):
+            variant_sequence = vsg.change_hydropathy_constant_class_sequence(
+                input_sequence,
+                target_hydropathy=target_hydropathy,
+                hydropathy_tolerance=self.hydropathy_tolerance
+            )
             if variant_sequence is None:
                 continue
             
@@ -114,7 +516,109 @@ class VariantGenerator:
         
         return None
     
-    def gen_minimal_variant(self,
+    def change_fcr_minimize_class_changes(self,
+                            input_sequence: str,
+                            target_FCR: float) -> str:
+        """
+        Generate a FCR class variant of the input sequence.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        target_FCR : float
+            Target FCR value to achieve.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence that meets the disorder criteria.
+        """
+        for _ in range(self.num_attempts):
+            variant_sequence = vsg.change_fcr_minimize_class_changes_sequence(
+                input_sequence,
+                target_FCR=target_FCR,
+                hydropathy_tolerance=self.hydropathy_tolerance,
+                kappa_tolerance=self.kappa_tolerance
+            )
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+    
+    def change_ncpr_constant_class(self,
+                             input_sequence: str,
+                             target_NCPR: float) -> str:
+        """
+        Generate a NCPR class variant of the input sequence.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        target_NCPR : float
+            Target NCPR value to achieve.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence that meets the disorder criteria.
+        """
+        for _ in range(self.num_attempts):
+            variant_sequence = vsg.change_ncpr_constant_class_sequence(
+                input_sequence,
+                target_NCPR=target_NCPR,
+                hydropathy_tolerance=self.hydropathy_tolerance,
+                kappa_tolerance=self.kappa_tolerance
+            )
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+    
+    def change_kappa(self,
+                        input_sequence: str,
+                        target_kappa: float) -> str:
+        """
+        Generate a kappa class variant of the input sequence.
+        
+        Parameters
+        ----------
+        input_sequence : str
+            The input sequence to generate a variant from.
+        target_kappa : float
+            Target kappa value to achieve.
+            
+        Returns
+        -------
+        str
+            A generated variant sequence that meets the kappa criteria.
+        """
+        for _ in range(self.num_attempts):
+            variant_sequence = vsg.change_kappa_sequence(
+                input_sequence,
+                target_kappa=target_kappa,
+                kappa_tolerance=self.kappa_tolerance
+            )
+            if variant_sequence is None:
+                continue
+            
+            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
+            if disordered_sequence is not None:
+                return disordered_sequence
+        
+        return None
+
+    
+    def change_properties_minimze_differences(self,
                            input_sequence: str,
                            target_hydropathy: float = None,
                            target_kappa: float = None,
@@ -146,7 +650,7 @@ class VariantGenerator:
             A generated variant sequence that meets the disorder criteria.
         """
         for _ in range(self.num_attempts):
-            variant_sequence = vgf.generate_minimal_variant(
+            variant_sequence = vsg.change_properties_minimze_differences_sequence(
                 input_sequence,
                 target_hydropathy=target_hydropathy,
                 target_kappa=target_kappa,
@@ -163,399 +667,9 @@ class VariantGenerator:
                 return disordered_sequence
         
         return None
-    
-    def gen_region_shuffle_variant(self,
-                                  input_sequence: str,
-                                  shuffle_regions: list) -> str:
-        """
-        Generate a variant sequence by shuffling specified regions of the input sequence.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        shuffle_regions : list
-            List of tuples specifying regions to shuffle. Each tuple should contain
-            (start_index, end_index) for the region to shuffle.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence with specified regions shuffled.
-        """
-        for _ in range(self.num_attempts):
-            shuffle_vars = []
-            for _ in range(10):
-                shuffle_vars.append(vgf.generate_region_shuffle_variant(input_sequence, shuffle_regions))
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, shuffle_vars)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_excluded_shuffle_variant(self,
-                                   input_sequence: str,
-                                   excluded_residues: list) -> str:
-        """
-        Generate a variant sequence by shuffling residues not specified in excluded_residues.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        excluded_residues : list
-            List of residues to exclude from shuffling.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence with specified residues excluded from shuffling.
-        """
-        for _ in range(self.num_attempts):
-            shuff_seqs = []
-            for _ in range(10):
-                shuff_seqs.append(vgf.generate_excluded_shuffle_variant(
-                    input_sequence, 
-                    excluded_residues=excluded_residues
-                ))
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, shuff_seqs)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_targeted_shuffle_variant(self,
-                                   input_sequence: str,
-                                   target_residues: list) -> str:
-        """
-        Generate a variant sequence by shuffling residues within a specified target residues.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        target_residues : list
-            List of residues to shuffle within the sequence.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence with specified residues shuffled.
-        """
-        for _ in range(self.num_attempts):
-            shuff_seqs = []
-            for _ in range(10):
-                shuff_seqs.append(vgf.generate_targeted_shuffle_variant(input_sequence, target_residues))
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, shuff_seqs)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_new_var_constant_class(self, input_sequence: str) -> str:
-        """
-        Generate a new variant sequence by constant class mutation.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence that meets the disorder criteria.
-        """
-        # Use a higher number of attempts for this method (as in original)
-        attempts = max(self.num_attempts, 50)
-        
-        for _ in range(attempts):
-            variant_sequence = vgf.generate_new_seq_constant_class_variant(
-                input_sequence,
-                kappa_tolerance=self.kappa_tolerance,
-                hydropathy_tolerance=self.hydropathy_tolerance
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_new_variant(self,
-                       input_sequence: str,
-                       exclude_residues: list = None) -> str:
-        """
-        Generate a new variant where the sequence is constrained by hydropathy, 
-        NCPR, FCR, and kappa values.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        exclude_residues : list
-            List of residues to exclude from the variant generation.
-            If None, no residues are excluded.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence that meets the disorder criteria.
-        """
-        protein = Protein(input_sequence)
-        original_hydropathy = protein.hydrophobicity
-        original_kappa = protein.kappa
-        original_FCR = protein.FCR
-        original_NCPR = protein.NCPR
-        length = len(input_sequence)
-        
-        for _ in range(self.num_attempts):
-            seq = generate_seq_by_props(
-                length, 
-                fcr=original_FCR, 
-                ncpr=original_NCPR, 
-                hydropathy=original_hydropathy, 
-                kappa=original_kappa, 
-                exclude_residues=exclude_residues,
-                num_attempts=5000,
-                hydropathy_tolerance=self.hydropathy_tolerance,
-                kappa_tolerance=self.kappa_tolerance,
-                metapredict_version=self.metapredict_version,
-                return_all_sequences=True,
-                check_disorder=False,
-                batch_size=200
-            )
-            if seq is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, seq)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_constant_residue_variant(self,
-                                   input_sequence: str,
-                                   constant_residues: list) -> str:
-        """
-        Generate a variant sequence by keeping specified residues constant.
-        Hydropathy, kappa, ncpr and fcr are also held constant.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        constant_residues : list
-            List of residues to keep constant in the variant sequence.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence that meets the disorder criteria.
-        """
-        # Use a higher number of attempts for this method (as in original)
-        attempts = max(self.num_attempts, 50)
-        
-        for _ in range(attempts):
-            variant_sequence = vgf.generate_constant_residue_variant(
-                input_sequence,
-                constant_residues=constant_residues,
-                hydropathy_tolerance=self.hydropathy_tolerance
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_asymmetry_variant(self,
-                            input_sequence: str,
-                            target_residues: list,
-                            num_changes: int = 1,
-                            increase_or_decrease: str = 'increase') -> str:
-        """
-        Generate a variant sequence by introducing asymmetry in specified residues.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        target_residues : list
-            List of residues to introduce asymmetry in.
-        num_changes : int
-            Number of residues to change to make the sequence asymmetric.
-            Default is 1
-        increase_or_decrease : str
-            Whether to increase or decrease the asymmetry.
-            Default is 'increase'
-            
-        Returns
-        -------
-        str
-            A generated variant sequence with specified residues made asymmetric.
-        """
-        # Use a higher number of attempts for this method (as in original)
-        attempts = max(self.num_attempts, 50)
-        
-        for _ in range(attempts):
-            variant_sequence = vgf.generate_asymmetry_variant(
-                input_sequence,
-                target_residues=target_residues,
-                num_changes=num_changes,
-                increase_or_decrease=increase_or_decrease
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_hydropathy_class_variant(self,
-                                   input_sequence: str,
-                                   target_hydropathy: float) -> str:
-        """
-        Generate a hydropathy class variant of the input sequence.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        target_hydropathy : float
-            Target mean hydropathy value to achieve.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence that meets the disorder criteria.
-        """
-        for _ in range(self.num_attempts):
-            variant_sequence = vgf.generate_hydro_class_variant(
-                input_sequence,
-                target_hydropathy=target_hydropathy,
-                hydropathy_tolerance=self.hydropathy_tolerance
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_fcr_class_variant(self,
-                            input_sequence: str,
-                            target_FCR: float) -> str:
-        """
-        Generate a FCR class variant of the input sequence.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        target_FCR : float
-            Target FCR value to achieve.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence that meets the disorder criteria.
-        """
-        for _ in range(self.num_attempts):
-            variant_sequence = vgf.generate_fcr_class_variant(
-                input_sequence,
-                target_FCR=target_FCR,
-                hydropathy_tolerance=self.hydropathy_tolerance,
-                kappa_tolerance=self.kappa_tolerance
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_ncpr_class_variant(self,
-                             input_sequence: str,
-                             target_NCPR: float) -> str:
-        """
-        Generate a NCPR class variant of the input sequence.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        target_NCPR : float
-            Target NCPR value to achieve.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence that meets the disorder criteria.
-        """
-        for _ in range(self.num_attempts):
-            variant_sequence = vgf.generate_ncpr_class_variant(
-                input_sequence,
-                target_NCPR=target_NCPR,
-                hydropathy_tolerance=self.hydropathy_tolerance,
-                kappa_tolerance=self.kappa_tolerance
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_kappa_variant(self,
-                        input_sequence: str,
-                        target_kappa: float) -> str:
-        """
-        Generate a kappa class variant of the input sequence.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        target_kappa : float
-            Target kappa value to achieve.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence that meets the kappa criteria.
-        """
-        for _ in range(self.num_attempts):
-            variant_sequence = vgf.generate_kappa_variant(
-                input_sequence,
-                target_kappa=target_kappa,
-                kappa_tolerance=self.kappa_tolerance
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-    
-    def gen_all_props_class_variant(self,
+
+
+    def change_any_properties(self,
                                   input_sequence: str,
                                   target_FCR: float,
                                   target_NCPR: float,
@@ -583,7 +697,7 @@ class VariantGenerator:
             A generated variant sequence that meets the disorder criteria.
         """
         for _ in range(self.num_attempts):
-            variant_sequence = vgf.generate_all_props_class_var(
+            variant_sequence = vsg.change_any_properties_sequence(
                 input_sequence,
                 target_FCR=target_FCR,
                 target_NCPR=target_NCPR,
@@ -601,83 +715,11 @@ class VariantGenerator:
         
         return None
 
-    def gen_weighted_shuffle_variant(self,
-                                     input_sequence: str,
-                                    target_residues: list,
-                                    shuffle_weight: float) -> str:
-        """
-        Generate a variant sequence by shuffling residues with a specified weight.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        target_residues : list
-            List of residues to shuffle within the sequence.
-        shuffle_weight : float
-            Weight for the shuffling process.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence with specified residues shuffled.
-        """
-        for _ in range(self.num_attempts):
-            variant_sequence = vgf.gen_weighted_shuffle_variant(
-                input_sequence,
-                target_aas=target_residues,
-                shuffle_weight=shuffle_weight
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
 
-    def gen_targeted_reposition_variant(self,
-                                        input_sequence: str,
-                                        target_residues: list) -> str:
-        """
-        Generate a variant sequence by repositioning specified target residues.
-        
-        Parameters
-        ----------
-        input_sequence : str
-            The input sequence to generate a variant from.
-        target_residues : list
-            List of residues to reposition within the sequence.
-            
-        Returns
-        -------
-        str
-            A generated variant sequence with specified residues repositioned.
-        """
-        for _ in range(self.num_attempts):
-            variant_sequence = vgf.generate_targeted_reposition_variant(
-                input_sequence,
-                target_residues=target_residues
-            )
-            if variant_sequence is None:
-                continue
-            
-            disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
-            if disordered_sequence is not None:
-                return disordered_sequence
-        
-        return None
-
-
-
-    def gen_rg_re_variant(self,
+    def change_dimensions(self,
                           input_sequence: str,
                           increase_or_decrease: str,
                           rg_or_re: str,
-                          return_all: bool = False,
-                          return_all_interval: float = 0.2,
-                          include_original: bool = False,
                           num_dim_attempts: int=5,
                           allowed_error = None,
                           reduce_pos_charged: bool = False,
@@ -694,14 +736,6 @@ class VariantGenerator:
             Whether to increase or decrease the Rg
         rg_or_re : {'rg', 're'}
             Whether to optimize for radius of gyration (Rg) or radius of elongation (Re)
-        return_all : bool, default=False
-            Whether to return all generated variants or just the best one
-        return_all_interval : float, default=0.2
-            Interval at which to return all generated variants
-        include_original : bool, default=False
-            Whether to include the original sequence in the output
-        num_attempts : int, default=5
-            Number of attempts to generate a valid variant
         allowed_error : float, optional
             If specified, the maximum allowed error for the generated Rg or Re compared to the original value
         reduce_pos_charged : bool, default=False
@@ -715,14 +749,11 @@ class VariantGenerator:
         The generated variant(s) of the input sequence
         """
         for _ in range(self.num_attempts):
-            variant_sequence = vgf.gen_dimensions_variant(
+            variant_sequence = vsg.change_dimensions_sequence(
                 input_sequence,
                 increase_or_decrease=increase_or_decrease,
                 rg_or_re=rg_or_re,
-                return_all=return_all,
-                return_all_interval=return_all_interval,
-                include_original=include_original,
-                num_dim_attempts=num_dim_attempts,
+                num_attempts=num_dim_attempts,
                 allowed_error=allowed_error,
                 reduce_pos_charged=reduce_pos_charged,
                 exclude_aas=exclude_aas

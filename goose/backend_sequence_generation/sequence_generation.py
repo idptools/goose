@@ -8,20 +8,23 @@ import metapredict as meta
 from numpy.lib.stride_tricks import sliding_window_view
 from goose import parameters
 from goose import goose_exceptions
-from goose.backend_property_calculation.calculate_properties_batch import sequences_to_matrices, matrices_to_sequences
+from goose.backend_property_calculation.calculate_properties_batch import matrices_to_sequences
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa
 from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy
-from goose.backend_sequence_generation.seq_by_probability_vectorized import SequenceGenerator
-from goose.backend_sequence_generation.seq_by_fractions_vectorized import FractionBasedSequenceGenerator
+from goose.backend_sequence_generation.sequence_by_probability import SequenceGenerator
+from goose.backend_sequence_generation.sequence_by_fractions import FractionBasedSequenceGenerator
+from goose.backend_sequence_generation.sequence_by_class import create_sequence_by_class
+from goose.backend_sequence_generation.sequence_by_dimensions import create_seq_by_dims
 from goose.backend_property_optimization.optimize_disorder import optimize_disorder
 
 
-def check_disorder_vectorized(sequences, 
+
+def check_disorder(sequences, 
                               strict_disorder=False,
-                              disorder_cutoff=0.5,
-                              max_consecutive_ordered=3,
-                              max_total_ordered=0.05,
-                              metapredict_version=3,
+                              disorder_cutoff=parameters.DISORDER_THRESHOLD,
+                              max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
+                              max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
+                              metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                               return_best_sequence=False):
     """
     Check disorder of sequences using vectorized operations.
@@ -129,12 +132,17 @@ def check_disorder_vectorized(sequences,
         # return the sequence with the highest mean disorder score
         best_index = np.argmax(np.mean(disorder_scores, axis=1))
         return seqs[best_index]
+    
+    # if disordered_seqs is empty, return None
+    if len(disordered_seqs) == 0:
+        return None
+    
     # return disordered_seqs
     return disordered_seqs
 
 
 # make function to generate sequences with specific properties
-def generate_seq_by_props(length, 
+def by_properties(length, 
                            fcr=None, 
                            ncpr=None, 
                            hydropathy=None, 
@@ -142,17 +150,17 @@ def generate_seq_by_props(length,
                            exclude_residues=None,
                            num_attempts=5000,
                            strict_disorder=False,
-                           hydropathy_tolerance = parameters.HYDRO_ERROR,
+                           hydropathy_tolerance = parameters.MAXIMUM_HYDRO_ERROR,
                            kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR,
                            disorder_cutoff=parameters.DISORDER_THRESHOLD,
-                           max_consecutive_ordered=3,
-                           max_total_ordered=0.05,
+                           max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
+                           max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
                            metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                            return_all_sequences=False,
                            use_weighted_probabilities=False,
                            chosen_probabilities=None,
                            batch_size=None,
-                           check_disorder=True):
+                           check_sequence_disorder=True):
     """
     Generate sequences with specific properties and check for disorder.
     
@@ -205,7 +213,7 @@ def generate_seq_by_props(length,
         Only used if use_weighted_probabilities is True.
     batch_size : int
         Number of sequences to generate in each batch
-    check_disorder : bool
+    check_sequence_disorder : bool
         If True, check the generated sequences for disorder
         default is True
 
@@ -307,8 +315,8 @@ def generate_seq_by_props(length,
             preserve_charge_placement = True
 
         # if we are checking disorder, do that. 
-        if check_disorder:
-            seqs = check_disorder_vectorized(seqs, strict_disorder=strict_disorder,
+        if check_sequence_disorder:
+            seqs = check_disorder(seqs, strict_disorder=strict_disorder,
                                         disorder_cutoff=disorder_cutoff,
                                         max_consecutive_ordered=max_consecutive_ordered,
                                         max_total_ordered=max_total_ordered,
@@ -349,15 +357,15 @@ def generate_seq_by_props(length,
 
 
 # similar function for sequence fractions
-def generate_seq_by_fractions(length,
+def by_fractions(length,
                                 fractions,
                                 randomize_unspecified=False,
                                 remaining_probabilities=None,
                                 num_attempts=100,
                                 strict_disorder=False,
-                                disorder_cutoff=0.5,
-                                max_consecutive_ordered=3,
-                                max_total_ordered=0.05,
+                                disorder_cutoff=parameters.DISORDER_THRESHOLD,
+                                max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
+                                max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
                                 metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                                 return_all_sequences=False,
                                 batch_size=None):
@@ -409,6 +417,10 @@ def generate_seq_by_fractions(length,
         use_dynamic_batching = False
         if batch_size < 1:
             raise goose_exceptions.GooseFail('Batch size must be at least 1!')
+        
+    if remaining_probabilities is not None:
+        # make sure randomize_unspecified is false
+        randomize_unspecified = False
 
     # initialize the sequence generators
     seq_gen = FractionBasedSequenceGenerator(length=length,
@@ -431,7 +443,7 @@ def generate_seq_by_fractions(length,
         seqs = seq_gen.generate_sequences(num_sequences=cur_batch_size)
 
         # finally, check for disorder.
-        seqs = check_disorder_vectorized(seqs, strict_disorder=strict_disorder,
+        seqs = check_disorder(seqs, strict_disorder=strict_disorder,
                                         disorder_cutoff=disorder_cutoff,
                                         max_consecutive_ordered=max_consecutive_ordered,
                                         max_total_ordered=max_total_ordered,
@@ -455,7 +467,7 @@ def generate_seq_by_fractions(length,
                 shuff_seqs.append(''.join(seqs))
 
             # check disorder
-            seqs = check_disorder_vectorized(shuff_seqs, strict_disorder=strict_disorder,
+            seqs = check_disorder(shuff_seqs, strict_disorder=strict_disorder,
                                         disorder_cutoff=disorder_cutoff,
                                         max_consecutive_ordered=max_consecutive_ordered,
                                         max_total_ordered=max_total_ordered,
@@ -488,3 +500,179 @@ def generate_seq_by_fractions(length,
     
     # if we get here, we didn't find any sequences that met the criteria
     return None
+
+
+    
+def by_class(seq_length,
+                            length: int,
+                            aromatic_fraction: float = 0.0,
+                            aliphatic_fraction: float = 0.0,
+                            polar_fraction: float = 0.0,
+                            positive_fraction: float = 0.0,
+                            negative_fraction: float = 0.0,
+                            glycine_fraction: float = 0.0,
+                            proline_fraction: float = 0.0,
+                            cysteine_fraction: float = 0.0,
+                            histidine_fraction: float = 0.0,
+                            num_attempts=10, strict_disorder=False,
+                            disorder_cutoff=parameters.DISORDER_THRESHOLD,
+                            metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
+                            max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
+                            max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION):
+    """
+    Generate a sequence of a specified length with specific amino acid class fractions.
+    Non-specified classes will be randomly filled in. 
+    
+    Parameters
+    ----------
+    seq_length : int
+        Length of the sequence to generate
+    aromatic_fraction : float, default=0.0
+        Fraction of aromatic amino acids (F, W, Y)
+    aliphatic_fraction : float, default=0.0
+        Fraction of aliphatic amino acids (A, I, L, V)
+    polar_fraction : float, default=0.0
+        Fraction of polar amino acids (N, Q, S, T)
+    positive_fraction : float, default=0.0
+        Fraction of positively charged amino acids (K, R)
+    negative_fraction : float, default=0.0
+        Fraction of negatively charged amino acids (D, E)
+    glycine_fraction : float, default=0.0
+        Fraction of glycine (G)
+    proline_fraction : float, default=0.0       
+        Fraction of proline (P)
+    cysteine_fraction : float, default=0.0
+        Fraction of cysteine (C)
+    histidine_fraction : float, default=0.0
+        Fraction of histidine (H)
+    num_attempts : int, default=10
+        Number of attempts to make the sequence
+    strict_disorder : bool, default=False
+        If True, applies strict disorder checks using MetaPredict
+    disorder_cutoff : float, default=parameters.DISORDER_THRESHOLD
+        Cutoff for disorder. Above this value is considered disordered.
+    metapredict_version : int, default=parameters.METAPREDICT_DEFAULT_VERSION
+        Version of MetaPredict to use (1, 2, or 3),
+    max_consecutive_ordered : int, default=3
+        Maximum number of consecutive residues allowed to be below the disorder cutoff
+    max_total_ordered : float or int, default=0.05
+        If float (0-1): Maximum fraction of residues allowed to be below the cutoff
+        If int (>1): Maximum absolute number of residues allowed to be below the cutoff
+
+    Returns
+    -------
+    str or None
+        Generated sequence that meets the target amino acid class fractions and is disordered.
+        If no suitable sequence is found, returns None.
+    """
+    for _ in range(num_attempts):
+        # Call the create_sequence_by_class function to
+        # generate the sequence with specified class fractions
+        seq = create_sequence_by_class(seq_length, length=length,
+                            aromatic_fraction=aromatic_fraction,
+                            aliphatic_fraction=aliphatic_fraction,
+                            polar_fraction=polar_fraction,
+                            positive_fraction=positive_fraction,
+                            negative_fraction=negative_fraction,
+                            glycine_fraction=glycine_fraction,
+                            proline_fraction=proline_fraction,
+                            cysteine_fraction=cysteine_fraction,
+                            histidine_fraction=histidine_fraction,
+                            num_sequences=32)
+        
+        # check disorder
+        disordered_seqs = check_disorder(seq, strict_disorder=strict_disorder,
+                                                        disorder_cutoff=disorder_cutoff,
+                                                        max_consecutive_ordered=max_consecutive_ordered,
+                                                        max_total_ordered=max_total_ordered,
+                                                        metapredict_version=metapredict_version)
+        # if we have a disordered sequence, return it
+        if disordered_seqs is not None:
+            return disordered_seqs[0]
+    
+    # if we get here, we didn't find any sequences that met the criteria
+    return None
+
+
+
+def by_dimensions(seq_length, objective_dim, rg_or_re='rg',
+                       allowed_error=parameters.MAXIMUM_RG_RE_ERROR,
+                       num_attempts_dimensions=parameters.RG_RE_ATTEMPT_NUMBER,
+                       reduce_pos_charged=True, exclude_aas=None,
+                       variants_per_iteration=64, mutation_fraction=0.0125,
+                       num_attempts=10, strict_disorder=False,
+                       disorder_cutoff=parameters.DISORDER_THRESHOLD,
+                       metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
+                       max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
+                       max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION):
+    """
+    Create a sequence of a specified length that meets a target radius of gyration (Rg)
+    or end-to-end distance (Re) with a given error tolerance.
+
+    Parameters
+    ----------
+    seq_length : int
+        Length of the sequence to generate
+    objective_dim : float
+        Target value for the specified dimensional property
+    rg_or_re : {'rg', 're'}
+        Target property: 'rg' for radius of gyration, 're' for end-to-end distance
+    allowed_error : float or 'default_error'
+        Maximum allowed deviation from target. If 'default_error', uses
+        backend parameter defaults (re_error or rg_error)
+    num_attempts_dimensions : int, default=rg_re_attempt_num
+        Maximum number of optimization iterations
+    reduce_pos_charged : bool, default=True
+        Whether to reduce positively charged residues (K, R) in the sequence.
+        Based on in vivo data suggesting positive charges may not drive expansion   
+        as predicted by current models.
+    exclude_aas : list of str, optional
+        Amino acids to exclude from the optimization process
+    variants_per_iteration : int, default=64
+        Number of sequence variants to generate per optimization iteration
+    mutation_fraction : float, default=0.0125
+        Fraction of sequence length to mutate per iteration (minimum 1 residue)
+    num_attempts : int, default=10
+        Number of iterations to attempt to make the sequence starting from random. 
+    strict_disorder : bool, default=False
+        If True, applies strict disorder checks using MetaPredict
+    disorder_cutoff : float, default=parameters.DISORDER_THRESHOLD
+        Cutoff for disorder. Above this value is considered disordered.
+    metapredict_version : int, default=parameters.METAPREDICT_DEFAULT_VERSION
+        Version of MetaPredict to use (1, 2, or 3)
+    max_consecutive_ordered : int, default=3
+        Maximum number of consecutive residues allowed to be below the disorder cutoff
+    max_total_ordered : float or int, default=0.05
+        If float (0-1): Maximum fraction of residues allowed to be below the cutoff
+        If int (>1): Maximum absolute number of residues allowed to be below the cutoff
+
+    Returns
+    -------
+    str or None
+        Generated sequence that meets the target dimensional property and is disordered.
+        If no suitable sequence is found, returns None.
+    """
+    for _ in range(num_attempts):
+        # Call the create_seq_by_dims function to generate the sequence
+        seq = create_seq_by_dims(seq_length, objective_dim, rg_or_re=rg_or_re,
+                                allowed_error=allowed_error,
+                                num_attempts_dimensions=num_attempts_dimensions,
+                                reduce_pos_charged=reduce_pos_charged,
+                                exclude_aas=exclude_aas,
+                                variants_per_iteration=variants_per_iteration,
+                                mutation_fraction=mutation_fraction)
+        
+        # note: the create_seq_dims function retruns a list or None. Therefore, we don't need
+        # to wrap seq in a list when predicting disorder.
+        # if seq is None, we didn't find a sequence that meets the criteria
+        # if seq is not None, check disorder
+        if seq is not None:
+            # check disorder of the sequence
+            disordered_seqs = check_disorder(seq, strict_disorder=strict_disorder,
+                                                        disorder_cutoff=disorder_cutoff,
+                                                        max_consecutive_ordered=max_consecutive_ordered,
+                                                        max_total_ordered=max_total_ordered,
+                                                        metapredict_version=metapredict_version)
+            # if we have a disordered sequence, return it
+            if disordered_seqs is not None:
+                return disordered_seqs[0]

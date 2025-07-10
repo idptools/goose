@@ -1,7 +1,7 @@
 '''
 Functionality to create a sequence from the class of amino acids. 
 '''
-from goose.backend_sequence_generation.seq_by_fractions_vectorized import FractionBasedSequenceGenerator
+from goose.backend_sequence_generation.sequence_by_fractions import FractionBasedSequenceGenerator
 from typing import Dict, List, Optional, Union
 import numpy as np
 from goose.data.defined_aa_classes import aa_classes, aa_classes_by_aa, aa_class_indices

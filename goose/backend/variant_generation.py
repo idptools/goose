@@ -585,7 +585,7 @@ def gen_new_variant(sequence, attempts=5,
 
 
 
-def gen_hydropathy_class_variant(sequence, hydropathy, allowed_hydro_error = parameters.HYDRO_ERROR,
+def gen_hydropathy_class_variant(sequence, hydropathy, allowed_hydro_error = parameters.MAXIMUM_HYDRO_ERROR,
     attempts=5, disorder_threshold = parameters.DISORDER_THRESHOLD, strict_disorder=False):
     '''
     function to take in a sequence and make a variant that adjusts the
@@ -1611,7 +1611,7 @@ def gen_minimal_variant(sequence,
                             tolerance_kappa=parameters.MAXIMUM_KAPPA_ERROR,
                             tolerance_FCR=0.001,
                             tolerance_NCPR=0.001,
-                            tolerance_hydropathy=parameters.HYDRO_ERROR,
+                            tolerance_hydropathy=parameters.MAXIMUM_HYDRO_ERROR,
                             max_iterations=1000,
                             protected_positions=None,
                             weights=None,

@@ -6,6 +6,8 @@ Can change parameters here and it will change paramters in GOOSE globally
 import statistics as stat
 
 METAPREDICT_DEFAULT_VERSION = 3
+ALLOWED_CONSECUTIVE_ORDERED = 3
+ALLOWED_TOTAL_ORDERED_FRACTION = 0.05
 
 MINIMUM_LENGTH = 10
 MAXIMUM_LENGTH = 10000
@@ -23,10 +25,9 @@ MINIMUM_KAPPA = 0.00
 MAXIMUM_KAPPA = 1
 
 # allowed error
-HYDRO_ERROR = 0.07
+MAXIMUM_HYDRO_ERROR = 0.07
 MAXIMUM_KAPPA_ERROR=0.03
-re_error=0.5
-rg_error=0.5
+MAXIMUM_RG_RE_ERROR=0.5
 
 # Empirically determined Rg / Re min and max based on length.
 def get_min_re(length):
@@ -45,7 +46,7 @@ MINIMUM_DISORDER = 0
 
 # attempts
 DEFAULT_ATTEMPTS = 200
-rg_re_attempt_num=200
+RG_RE_ATTEMPT_NUMBER=200
 
 # maximums for fractions of amino acids
 '''

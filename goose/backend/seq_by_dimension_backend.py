@@ -16,7 +16,6 @@ from sparrow.predictors import batch_predict
 
 from goose.backend.sequence_generation_backend import gen_sequence
 from goose.backend import parameters
-from goose.backend.parameters import re_error, rg_error, rg_re_attempt_num
 from goose.backend import lists
 from goose.backend.lists import disordered_list, disordered_list_reduced_charge
 from goose.goose_exceptions import GooseError, GooseInputError, GooseFail
@@ -43,7 +42,7 @@ def batch_predict_re(sequences, show_progress_bar=False, return_seq2prediction=F
 
 
 def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error='default_error',
-    num_attempts=rg_re_attempt_num, reduce_pos_charged=True, exclude_aas=None):
+    num_attempts=parameters.RG_RE_ATTEMPT_NUMBER, reduce_pos_charged=True, exclude_aas=None):
     '''
     Takes an input sequence and tries to optimize it such that it has the correct
     objective Re or Rg.
@@ -123,11 +122,11 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error='de
     if rg_or_re=='rg':
         start_dim = predict_rg(start_seq)
         if allowed_error == 'default_error':
-            allowed_error=rg_error
+            allowed_error=parameters.MAXIMUM_RG_RE_ERROR
     elif rg_or_re=='re':
         start_dim = predict_re(start_seq)
         if allowed_error == 'default_error':
-            allowed_error=re_error
+            allowed_error=parameters.MAXIMUM_RG_RE_ERROR
     else:
         raise GooseInputError('rg_or_re must be "rg" or "re"')
     if abs(start_dim - objective_dim)<=allowed_error:
@@ -176,7 +175,7 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error='de
 
 
 def build_seq_by_dimensions(seq_length, rg_or_re, objective_dim, allowed_error='default_error',
-    num_attempts=rg_re_attempt_num, num_sub_attempts=5, reduce_pos_charged=True, exclude_aas=None):
+    num_attempts=parameters.RG_RE_ATTEMPT_NUMBER, num_sub_attempts=5, reduce_pos_charged=True, exclude_aas=None):
     '''
     Builds a sequence of a given length with a given radius of gyration or Re
     by starting with a sequence that is weighted to be disordered and

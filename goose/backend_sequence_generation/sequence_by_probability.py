@@ -8,8 +8,8 @@ as well as the desired number of sequences and the sequence length.
 import numpy as np
 from goose.data import aa_list_probabilities as aa_probs
 
-from typing import List, Dict, Union, Tuple, Optional
-from dataclasses import dataclass, field
+from typing import List, Dict, Optional
+from dataclasses import dataclass
 
 # Constants
 AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
@@ -100,7 +100,7 @@ class SequenceGenerator:
                  ncpr=None,
                  hydropathy=None,
                  num_sequences: int = 1,
-                 use_weighted_probabilities: bool = True,
+                 use_weighted_probabilities: bool = False,
                  chosen_probabilities: Dict[str, float] = None,
                  exclude_residues: List[str] = None):
         """Initialize the sequence generator with specified parameters."""
@@ -111,13 +111,10 @@ class SequenceGenerator:
         self.num_sequences = num_sequences
         self.use_weighted_probabilities = use_weighted_probabilities
         self.chosen_probabilities = chosen_probabilities
+        self.exclude_residues = exclude_residues if exclude_residues is not None else []
         # If no probabilities are provided, use the default
         if chosen_probabilities is None:
             self.chosen_probabilities = DEFAULT_PROBABILITIES
-        else:
-            self.use_weighted_probabilities = False
-
-
 
         # Initialize the amino acid to integer and integer to amino acid mappings
         self.aa_to_int={'A': 0, 'C': 1, 'D': 2, 'E': 3, 'F': 4, 'G': 5, 'H': 6, 'I': 7, 'K': 8, 'L': 9, 'M': 10, 'N': 11, 'P': 12, 'Q': 13, 'R': 14, 'S': 15, 'T': 16, 'V': 17, 'W': 18, 'Y': 19}
@@ -129,6 +126,12 @@ class SequenceGenerator:
         self.positive_indices = np.where(CHARGE_SCALE > 0)[0]
         self.negative_indices = np.where(CHARGE_SCALE < 0)[0]
         self.hydropathy_lookup = HYDROPATHY_SCALE[self.uncharged_residues_indices]
+        
+        # Filter out excluded residues from charge indices
+        if self.exclude_residues:
+            exclude_indices = [self.aa_to_int[aa] for aa in self.exclude_residues]
+            self.positive_indices = np.array([idx for idx in self.positive_indices if idx not in exclude_indices])
+            self.negative_indices = np.array([idx for idx in self.negative_indices if idx not in exclude_indices])
         
     def _generate_parameter_batch(self, 
                                   length=None,
@@ -149,6 +152,8 @@ class SequenceGenerator:
             hydropathy = self.hydropathy
         if num_sequences is None:
             num_sequences = self.num_sequences
+        if exclude_residues is None:
+            exclude_residues = self.exclude_residues
         
         # get excluded residues as numbers. 
         if exclude_residues is not None:
@@ -418,9 +423,9 @@ class SequenceGenerator:
         if num_sequences is None:
             num_sequences = self.num_sequences if self.num_sequences is not None else 1
         
-        # if exclude_residues is None, make it an empty list. 
+        # if exclude_residues is None, use the instance variable
         if exclude_residues is None:
-            exclude_residues = []
+            exclude_residues = self.exclude_residues
 
         # set sequence_indices to None
         sequences_array=None
@@ -521,15 +526,25 @@ class SequenceGenerator:
                 
                 sequences_array[i] = seq
 
-            self.int_to_aa={0: 'A', 1: 'C', 2: 'D', 3: 'E', 4: 'F', 5: 'G', 6: 'H', 7: 'I', 8: 'K', 9: 'L', 10: 'M', 11: 'N', 12: 'P', 13: 'Q', 14: 'R', 15: 'S', 16: 'T', 17: 'V', 18: 'W', 19: 'Y'}
+            # Create local copies of charge indices for this method
+            local_positive_indices = self.positive_indices.copy()
+            local_negative_indices = self.negative_indices.copy()
+            
+            # Handle excluded charged residues by creating restricted sets
             if 'E' in exclude_residues:
-                self.negative_indices = np.array([2])
+                local_negative_indices = np.array([2])  # Only D
             if 'D' in exclude_residues:
-                self.negative_indices = np.array([3])
+                local_negative_indices = np.array([3])  # Only E
             if 'R' in exclude_residues:
-                self.positive_indices = np.array([8])
+                local_positive_indices = np.array([8])  # Only K
             if 'K' in exclude_residues:
-                self.positive_indices = np.array([14])
+                local_positive_indices = np.array([14])  # Only R
+            
+            # Validate that we have available residues for required charges
+            if np.any(num_positive > 0) and len(local_positive_indices) == 0:
+                raise ValueError("Cannot generate positively charged residues: all positive residues are excluded")
+            if np.any(num_negative > 0) and len(local_negative_indices) == 0:
+                raise ValueError("Cannot generate negatively charged residues: all negative residues are excluded")
 
             # Now fill in the actual amino acids based on charge patterns
             for i in range(num_sequences):
@@ -542,14 +557,14 @@ class SequenceGenerator:
                 pos_count = np.sum(pos_mask)
                 if pos_count > 0:
                     sequences_array[i, pos_mask] = np.random.choice(
-                        self.positive_indices, size=pos_count
+                        local_positive_indices, size=pos_count
                     )
                     
                 # Fill negative positions with negative amino acids
                 neg_count = np.sum(neg_mask)
                 if neg_count > 0:
                     sequences_array[i, neg_mask] = np.random.choice(
-                        self.negative_indices, size=neg_count
+                        local_negative_indices, size=neg_count
                     )
                     
                 # Fill neutral positions using probability distribution

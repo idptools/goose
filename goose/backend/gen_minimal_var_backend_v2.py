@@ -11,7 +11,7 @@ from goose.backend_property_calculation.calculate_properties_batch import (
 )
 from goose.backend_property_calculation.calculate_kappa import kappa as batch_calculate_kappa
 from goose.backend.parameters import(
-        HYDRO_ERROR, MAXIMUM_KAPPA_ERROR
+        MAXIMUM_HYDRO_ERROR, MAXIMUM_KAPPA_ERROR
 )
 
 
@@ -65,7 +65,7 @@ def minimal_sequence_modification(
     tolerance_kappa=MAXIMUM_KAPPA_ERROR,
     tolerance_FCR=0.001,
     tolerance_NCPR=0.001,
-    tolerance_hydropathy=HYDRO_ERROR,
+    tolerance_hydropathy=MAXIMUM_HYDRO_ERROR,
     max_iterations=1000,
     protected_positions=None,
     weights=None,

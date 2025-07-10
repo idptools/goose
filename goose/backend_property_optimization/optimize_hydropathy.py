@@ -24,7 +24,7 @@ def optimize_hydropathy(
     target_hydropathy: float, 
     preserve_charged: bool = True,
     max_iterations: int = 1000,
-    tolerance: float = parameters.HYDRO_ERROR,
+    tolerance: float = parameters.MAXIMUM_HYDRO_ERROR,
     batch_size: int = 10, 
     only_return_within_tolernace: bool = True,
     return_when_num_hit=None,
@@ -272,7 +272,7 @@ def optimize_hydropathy_within_class(
     target_hydropathy: float, 
     min_batch_size: int = 5,
     max_iterations: int = 5000,
-    tolerance: float = parameters.HYDRO_ERROR,
+    tolerance: float = parameters.MAXIMUM_HYDRO_ERROR,
     batch_size: int = 10, 
     only_return_within_tolerance: bool = True,
     return_when_num_hit=None) -> List[str]:
@@ -517,7 +517,7 @@ def optimize_hydropathy_within_class(
 #-=-=-=-=- Minimal changes hydropathy optimization function -=-=-=-=-=-
 
 def optimize_hydropathy_minimal_changes(input_sequence, target_hydropathy, max_iterations=100, 
-                                        tolerance=parameters.HYDRO_ERROR, preserve_charged=True):
+                                        tolerance=parameters.MAXIMUM_HYDRO_ERROR, preserve_charged=True):
     """
     Optimize hydropathy of a sequence by making minimal changes to achieve a target hydropathy value.
     
@@ -534,7 +534,7 @@ def optimize_hydropathy_minimal_changes(input_sequence, target_hydropathy, max_i
         Maximum number of optimization iterations.
     tolerance : float
         Acceptable difference between achieved and target hydropathy.
-        set by parameters.HYDRO_ERROR
+        set by parameters.MAXIMUM_HYDRO_ERROR
     preserve_charged : bool
         If True, charged residues (D, E, K, R) will not be modified.
 

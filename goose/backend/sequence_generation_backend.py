@@ -504,7 +504,7 @@ def random_optimization(sequence, min_random_iterations = 100, min_is_max = Fals
     # return the best sequence
     return best_sequence
 
-def check_hydropathy(sequence, objective_hydropathy, hydro_error = parameters.HYDRO_ERROR):
+def check_hydropathy(sequence, objective_hydropathy, hydro_error = parameters.MAXIMUM_HYDRO_ERROR):
     '''
     function to check the hydropathy of a sequence and see if it is 
     within the appropriate error (hydro_error) or not
@@ -743,7 +743,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
     value_coordinate = 0
     
     # determine whether or not to stop the optimzation
-    if abs(current_hydro - final_hydropathy) < parameters.HYDRO_ERROR:
+    if abs(current_hydro - final_hydropathy) < parameters.MAXIMUM_HYDRO_ERROR:
         return sequence
     
     # make initial list of residues to exclude based on those input
@@ -820,7 +820,7 @@ def optimize_hydro(sequence, final_hydropathy, use_charged_residues=False, cutof
 
 
 
-def hydro_seq(length, mean_hydro, just_neutral=False, allowed_error=parameters.HYDRO_ERROR, return_best_seq = False, exclude_residues = []):
+def hydro_seq(length, mean_hydro, just_neutral=False, allowed_error=parameters.MAXIMUM_HYDRO_ERROR, return_best_seq = False, exclude_residues = []):
     """
     This will return a protein sequence with a specified length and
     mean hydropathy. Separate from the disordered generation because it
@@ -1386,7 +1386,7 @@ def calculate_max_charge(hydropathy):
     return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2, 1])
 
 
-def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = parameters.HYDRO_ERROR):
+def hydropathy_optimization(sequence, objective_hydropathy, allowed_error = parameters.MAXIMUM_HYDRO_ERROR):
     '''
     function to optimize hydropathy of a sequence to bring it closer to
     the objective hydropathy
@@ -1465,7 +1465,7 @@ def replace_residues(sequence, residue, replacement):
     return final_seq
     
 
-def FCR_optimization(sequence, objective_hydropathy, allowed_error=parameters.HYDRO_ERROR):
+def FCR_optimization(sequence, objective_hydropathy, allowed_error=parameters.MAXIMUM_HYDRO_ERROR):
     '''
     function to modify residues in the hydropathy and FCR 
     function for when the charged residues interfere with
@@ -1530,7 +1530,7 @@ def FCR_optimization(sequence, objective_hydropathy, allowed_error=parameters.HY
 
 
 def create_seq_by_props(length, FCR=None, NCPR=None, hydropathy=None, attempts=1, 
-    allowed_hydro_error = parameters.HYDRO_ERROR, exclude = []):
+    allowed_hydro_error = parameters.MAXIMUM_HYDRO_ERROR, exclude = []):
 
     '''
     Function that allows the user to generate a sequence with specific

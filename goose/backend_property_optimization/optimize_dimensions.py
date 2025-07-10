@@ -4,7 +4,6 @@ from sparrow.predictors import batch_predict
 from sparrow.protein import Protein
 
 from goose.backend import parameters
-from goose.backend.parameters import rg_re_attempt_num
 from goose.backend.lists import disordered_list, disordered_list_reduced_charge
 
 def predict_rg(sequence): return Protein(sequence).predictor.radius_of_gyration(use_scaled=True)
@@ -27,8 +26,8 @@ def batch_predict_re(sequences, show_progress_bar=False, return_seq2prediction=F
 
 
 def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error=None,
-                      num_attempts=rg_re_attempt_num, reduce_pos_charged=False, exclude_aas=None,
-                      variants_per_iteration=32, mutation_fraction=0.0125,
+                      num_attempts=parameters.RG_RE_ATTEMPT_NUMBER, reduce_pos_charged=False, exclude_aas=None,
+                      variants_per_iteration=64, mutation_fraction=0.0125,
                       return_all_sequences=False):
     """
     Optimize a sequence to achieve a target radius of gyration (Rg) or end-to-end distance (Re).
@@ -56,7 +55,7 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error=Non
         as predicted by current models.
     exclude_aas : list of str, optional
         Amino acids to exclude from the optimization process
-    variants_per_iteration : int, default=32
+    variants_per_iteration : int, default=64
         Number of sequence variants to generate per optimization iteration
     mutation_fraction : float, default=0.0125
         Fraction of sequence length to mutate per iteration (minimum 1 residue)
@@ -66,8 +65,10 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error=Non
 
     Returns
     -------
-    str
-        Optimized sequence with the target dimensional property
+    str, list of str or None
+        If `return_all_sequences` is False, returns the best sequence that meets the target dimensional property.
+        If `return_all_sequences` is True, returns a list of all sequences that meet the target criteria.
+        If no suitable sequence is found, returns None.
 
     Raises
     ------
@@ -130,7 +131,7 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error=Non
     all_sequences = []
 
     # Optimization loop
-    for attempt in range(num_attempts):
+    for _ in range(num_attempts):
         # Determine which amino acids to favor based on current vs target
         if current_dim > objective_dim:
             favored_aas = bias_dict['collapse']
@@ -160,23 +161,30 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error=Non
         # Find the best variant
         for sequence, predicted_dim in predictions.items():
             error = abs(predicted_dim - objective_dim)
-            
-            # Check if we've reached the target
-            if error <= allowed_error:
-                if return_all_sequences:
-                    all_sequences.append(sequence)
-                    return all_sequences
-                else:
-                    return sequence
-            
+
             # Update best candidate
             if error < best_error:
                 best_error = error
                 best_sequence = sequence
                 current_sequence = sequence
                 current_dim = predicted_dim
-                if return_all_sequences:
-                    all_sequences.append(sequence)
 
-    return best_sequence if not return_all_sequences else all_sequences
+            # Still add to all_sequences if it is within allowed error even if not the best.
+            if error <= allowed_error:
+                all_sequences.append(sequence)
+        
+        # If we found a sequence that meets the criteria, we can stop
+        if best_error <= allowed_error:
+            break
+
+    # if best_error is > allowed_error, return None.
+    if best_error > allowed_error:
+        return None
+
+    # return best sequence if not return_all_sequences
+    if not return_all_sequences:
+        return best_sequence
+
+    # otherwise return all_sequences
+    return all_sequences
 

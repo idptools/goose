@@ -15,9 +15,8 @@ import random
 # note - we import packages below with a leading _ which means they are ignored in the import
 
 #for sequence generation
-from goose.backend_sequence_generation.sequence_generation_vectorized import generate_seq_by_fractions as _generate_disordered_seq_by_fractions
-from goose.backend_sequence_generation.sequence_generation_vectorized import generate_seq_by_props as _generate_disordered_seq_by_props
-from goose.backend.sequence_generation import generate_disordered_seq_by_dimensions as _generate_disordered_seq_by_dimensions
+from goose.backend_sequence_generation import sequence_generation
+
 
 # goose tools for checking and fixing parameters
 from goose.backend.goose_tools import check_and_correct_props_kwargs as _check_and_correct_props_kwargs
@@ -140,34 +139,20 @@ def sequence(length, **kwargs):
     # casts a string length to an int
     _length_check(length)
 
-    # verify that charged residues not in exclude if FCR or NCPR specified.
-    if 'exclude' in kwargs:
-        if kwargs['exclude'] != None:
-            if 'FCR' in kwargs or 'NCPR' in kwargs:
-                # see if both D and E are in the exclude list
-                if 'D' in kwargs['exclude'] and 'E' in kwargs['exclude']:
-                    raise goose_exceptions.GooseInputError('Cannot exclude both D and E if FCR or NCPR specified.')
-                # see if both K and R are in the exclude list
-                if 'K' in kwargs['exclude'] and 'R' in kwargs['exclude']:
-                    raise goose_exceptions.GooseInputError('Cannot exclude both K and R if FCR or NCPR specified.')
-            if len(kwargs['exclude']) > 10:
-                raise goose_exceptions.GooseInputError('Cannot exclude more than 10 residues.')
-
-    if 'kappa' in kwargs:
-        if kwargs['kappa'] != None:
-            if 'FCR' in kwargs and 'NCPR' in kwargs:
-                if kwargs['FCR'] != None and kwargs['NCPR']!= None:
-                    if kwargs['FCR']==kwargs['NCPR']:
-                        raise goose_exceptions.GooseInputError('Cannot specify FCR and NCPR to be the same value and specify kappa. Kappa requires the presence of oppositely charged residues to be specified.')
-            if 'FCR' in kwargs:
-                if kwargs['FCR']==0:
-                    raise goose_exceptions.GooseInputError('When specifying kappa, FCR must be greater than 0. FCR must be a high enough value to result in at least 2 charged residues to be in the sequence so oppositely charged residue spacing (kappa) can be specified.')
+    # if hydrophobicity in kwargs, change to hydropathy
+    if 'hydrophobicity' in kwargs:
+        kwargs['hydropathy'] = kwargs['hydrophobicity']
+        # delete the old hydrophobicity key
+        del kwargs['hydrophobicity']
 
     # check we passed in acceptable keyword arguments. At this stage, if a keyword
     # was passed that is not found in the list passed to _check_valid_kwargs then
     # an exception is raised. 
-    _check_valid_kwargs(kwargs, ['FCR','NCPR', 'hydropathy', 'kappa', 'cutoff', 'attempts', 'exclude', 
-                                 'use_weighted_probabilities', 'strict_disorder', 'return_all_sequences', 'custom_probabilities', 'metapredict_version'])
+    _check_valid_kwargs(kwargs, ['FCR','NCPR', 'hydropathy', 'kappa', 'cutoff',
+                                  'attempts', 'exclude', 'use_weighted_probabilities', 
+                                  'strict_disorder', 'return_all_sequences', 'custom_probabilities', 
+                                  'metapredict_version', 'max_consecutive_ordered',
+                                  'max_total_ordered', 'batch_size'])
     
     # First correct kwargs. Do this first because
     # the next function that looks over kwargs values
@@ -178,14 +163,24 @@ def sequence(length, **kwargs):
     _check_props_parameters(**kwargs)
 
     # make the sequence
-    try:
-        generated_seq = _generate_disordered_seq_by_props(length, fcr=kwargs['FCR'], ncpr=kwargs['NCPR'], hydropathy=kwargs['hydropathy'], 
-                                                        kappa=kwargs['kappa'], exclude_residues=kwargs['exclude'], num_attempts=kwargs['attempts'],
-                                                        strict_disorder=kwargs['strict_disorder'], disorder_cutoff=kwargs['cutoff'],
-                                                        metapredict_version=kwargs['metapredict_version'], return_all_sequences=kwargs['return_all_sequences'],
-                                                        use_weighted_probabilities=kwargs['use_weighted_probabilities'], chosen_probabilities=kwargs['custom_probabilities'])
+    
+    generated_seq = sequence_generation.by_properties(length, fcr=kwargs['FCR'], 
+                                                        ncpr=kwargs['NCPR'], 
+                                                        hydropathy=kwargs['hydropathy'], 
+                                                        kappa=kwargs['kappa'], 
+                                                        exclude_residues=kwargs['exclude'], 
+                                                        num_attempts=kwargs['attempts'],
+                                                        strict_disorder=kwargs['strict_disorder'], 
+                                                        disorder_cutoff=kwargs['cutoff'],
+                                                        metapredict_version=kwargs['metapredict_version'], 
+                                                        return_all_sequences=kwargs['return_all_sequences'],
+                                                        use_weighted_probabilities=kwargs['use_weighted_probabilities'], 
+                                                        chosen_probabilities=kwargs['custom_probabilities'],
+                                                        max_consecutive_ordered= kwargs['max_consecutive_ordered'],
+                                                        max_total_ordered=kwargs['max_total_ordered'],
+                                                        batch_size=kwargs['batch_size'])
         
-    except:
+    if generated_seq is None:
         raise goose_exceptions.GooseFail('Unable to generate sequence. Please try again with different parameters or a lower cutoff value.')
 
     return generated_seq
@@ -249,10 +244,13 @@ def seq_fractions(length, **kwargs):
     # check we passed in acceptable keyword arguments. At this stage, if a keyword
     # was passed that is not found in the list passed to _check_valid_kwargs then
     # an exception is raised. 
-    _check_valid_kwargs(kwargs, ['cutoff', 'attempts',  'strict_disorder',  
-                                 'max_aa_fractions', 'A','C','D','E','F','G',
-                                 'H','I','K','L','M','N','P','Q','R','S','T',
-                                 'V','W','Y', 'return_all_sequences', 'metapredict_version'])
+    _check_valid_kwargs(kwargs, ['custom_probabilities', 'attempts', 
+                                  'strict_disorder', 'cutoff', 'max_consecutive_ordered',
+                                  'max_total_ordered','max_aa_fractions', 
+                                 'A','C','D','E','F','G','H','I','K','L','M','N',
+                                 'P','Q','R','S','T','V','W','Y', 
+                                 'return_all_sequences', 'metapredict_version',
+                                 'use_weighted_probabilities',  'batch_size'])
 
     
 
@@ -270,7 +268,7 @@ def seq_fractions(length, **kwargs):
     _check_fracs_parameters(**kwargs)
     
 
-    generated_seq = _generate_disordered_seq_by_fractions(length,fractions=fractions,
+    generated_seq = sequence_generation.by_fractions(length,fractions=fractions,
                                                           disorder_cutoff=kwargs['cutoff'],
                                                           num_attempts=kwargs['attempts'],
                                                           strict_disorder=kwargs['strict_disorder'],
@@ -290,9 +288,9 @@ def seq_fractions(length, **kwargs):
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/             \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
 
-def seq_re(length, objective_re, allowed_error=parameters.re_error, attempts=20, 
+def seq_re(length, objective_re, allowed_error=parameters.MAXIMUM_RG_RE_ERROR, attempts=20, 
     cutoff=parameters.DISORDER_THRESHOLD, strict_disorder=False,
-    individual_rg_re_attempts=parameters.rg_re_attempt_num,
+    individual_rg_re_attempts=parameters.RG_RE_ATTEMPT_NUMBER,
     reduce_pos_charged=True, exclude_aas=None):
     '''
     Parameters
@@ -345,7 +343,7 @@ def seq_re(length, objective_re, allowed_error=parameters.re_error, attempts=20,
         raise goose_exceptions.GooseInputError(f'Cannot generate sequence, for length {length}, min Re = {min_possible_value}, max Re = {max_possible_value}.')
 
     # try to make the sequence.
-    sequence=_generate_disordered_seq_by_dimensions(
+    sequence = sequence_generation.by_dimensions(
         length, 're', objective_re, attempts=attempts, allowed_error=allowed_error,
         disorder_threshold=cutoff, strict_disorder=strict_disorder,
         individual_rg_re_attempts=individual_rg_re_attempts,
@@ -354,9 +352,9 @@ def seq_re(length, objective_re, allowed_error=parameters.re_error, attempts=20,
 
 
 
-def seq_rg(length, objective_rg, allowed_error=parameters.rg_error, attempts=20, 
+def seq_rg(length, objective_rg, allowed_error=parameters.MAXIMUM_RG_RE_ERROR, attempts=20, 
     cutoff=parameters.DISORDER_THRESHOLD, strict_disorder=False,
-    individual_rg_re_attempts=parameters.rg_re_attempt_num,
+    individual_rg_re_attempts=parameters.RG_RE_ATTEMPT_NUMBER,
     reduce_pos_charged=True, exclude_aas=None):
     '''
     Parameters
@@ -409,7 +407,7 @@ def seq_rg(length, objective_rg, allowed_error=parameters.rg_error, attempts=20,
         raise goose_exceptions.GooseInputError(f'Cannot generate sequence, for length {length}, min Rg = {min_possible_value}, max Rg = {max_possible_value}.')
 
     # try to make the sequence.
-    sequence=_generate_disordered_seq_by_dimensions(
+    sequence=sequence_generation.by_dimensions(
         length, 'rg', objective_rg, attempts=attempts, allowed_error=allowed_error,
         disorder_threshold=cutoff, strict_disorder=strict_disorder,
         individual_rg_re_attempts=individual_rg_re_attempts,
@@ -624,7 +622,7 @@ def constant_properties_var(sequence, attempts=5,
     return final_sequence
 
 
-def hydro_class_var(sequence, hydropathy, hydro_error = parameters.HYDRO_ERROR,
+def hydro_class_var(sequence, hydropathy, hydro_error = parameters.MAXIMUM_HYDRO_ERROR,
     attempts=5, cutoff = parameters.DISORDER_THRESHOLD, strict=False):
     '''
     Function to take in a sequence and make a variant that adjusts the

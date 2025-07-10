@@ -232,6 +232,18 @@ def check_props_parameters(**kwargs):
                     raise GooseInputError('Cannot have NCPR = FCR for kappa to be a value other than -1.')
 
 
+    # verify that charged residues not in exclude if FCR or NCPR specified.
+    if kwargs['exclude']!= None:
+        if kwargs['FCR'] != None  or kwargs['NCPR'] != None:
+            # see if both D and E are in the exclude list
+            if 'D' in kwargs['exclude'] and 'E' in kwargs['exclude']:
+                raise GooseInputError('Cannot exclude both D and E if FCR or NCPR specified.')
+            # see if both K and R are in the exclude list
+            if 'K' in kwargs['exclude'] and 'R' in kwargs['exclude']:
+                raise GooseInputError('Cannot exclude both K and R if FCR or NCPR specified.')
+        if len(kwargs['exclude']) > 10:
+            raise GooseInputError('Cannot exclude more than 10 residues.')
+
     # now check for charge AND hydro
     if kwargs['NCPR'] != None and kwargs['hydropathy'] != None:
         hydro_and_charge = True
@@ -279,10 +291,18 @@ def check_and_correct_props_kwargs(**kwargs):
     kwargs = remove_None(**kwargs)
 
     # make sure the six essential keywords have been initialized to their default values if they were not provided
-    essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD,'FCR': None, 'NCPR': None, 'hydropathy': None, 'kappa': None, 
-                        'attempts':parameters.DEFAULT_ATTEMPTS, 'exclude':None, 'strict_disorder': False,
-                        'metapredict_version': parameters.METAPREDICT_DEFAULT_VERSION, 'return_all_sequences': False, 
-                        'use_weighted_probabilities': False, 'custom_probabilities':None}
+    essential_kwargs = {'FCR': None, 'NCPR': None, 'hydropathy': None, 'kappa': None,
+                        'exclude':None, 'attempts':5000, 'strict_disorder': False,
+                        'hydropathy_tolerance': parameters.MAXIMUM_HYDRO_ERROR,
+                        'kappa_tolerance': parameters.MAXIMUM_KAPPA_ERROR,
+                        'cutoff': parameters.DISORDER_THRESHOLD,
+                        'max_consecutive_ordered': parameters.ALLOWED_CONSECUTIVE_ORDERED,
+                        'max_total_ordered': parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
+                        'metapredict_version': parameters.METAPREDICT_DEFAULT_VERSION, 
+                        'return_all_sequences': False, 
+                        'use_weighted_probabilities': False, 
+                        'custom_probabilities':None,
+                        'batch_size':None}
     
     for kw in essential_kwargs:
         if kw not in kwargs:
@@ -314,15 +334,16 @@ def check_and_correct_fracs_kwargs(**kwargs):
     
 
     # make sure the six essential keywords have been initialized to their default values if they were not provided
-    essential_kwargs = {'cutoff': parameters.DISORDER_THRESHOLD, 
+    essential_kwargs = {'custom_probabilities': None,
+                        'attempts': 100,
                         'strict_disorder': False, 
-                        'attempts': parameters.DEFAULT_ATTEMPTS, 
-                        'max_aa_fractions': {},
+                        'cutoff': parameters.DISORDER_THRESHOLD, 
+                        'max_consecutive_ordered': parameters.ALLOWED_CONSECUTIVE_ORDERED,
+                        'max_total_ordered': parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
+                        'max_aa_fractions': parameters.MAX_FRACTION_DICT,
                         'metapredict_version': parameters.METAPREDICT_DEFAULT_VERSION,
                         'return_all_sequences': False,
-                        'use_weighted_probabilities': False,
-                        'custom_probabilities': None,
-                        'exclude': None}
+                        'batch_size': None}
 
     for kw in essential_kwargs:
         if kw not in kwargs:
