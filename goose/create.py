@@ -6,11 +6,12 @@
 ## 
 
 # if any new functions are added to create.py, you need to add them here.
-__all__ =  ['seq_fractions', 'sequence', 'seq_re', 'seq_rg', 'minimal_var', 'new_seq_constant_class_var', 'constant_properties_var', 'constant_class_var', 'hydro_class_var', 'constant_residue_var', 'region_shuffle_var', 'kappa_var', 'asymmetry_var', 'fcr_class_var', 'ncpr_class_var', 'all_props_class_var', 're_var', 'rg_var', 'seq_property_library', 'excluded_shuffle_var', 'targeted_shuffle_var', 'targeted_reposition_var',  'weighted_shuffle_var']
+__all__ =  ['sequence', 'seq_by_fractions', 'seq_by_classes', 'seq_by_re', 'seq_by_rg', 'variant']
 
 # imports
-from goose.backend import goose_tools
 from goose.backend_sequence_generation import sequence_generation
+from goose.backend_variant_generation.variant_generator import VariantGenerator
+from goose.backend import goose_tools
 from goose import goose_exceptions
 from goose.backend import parameters
 
@@ -389,7 +390,7 @@ def seq_by_classes(length: int,
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/             \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
 
-def seq_re(length, objective_re, allowed_error=parameters.MAXIMUM_RG_RE_ERROR, 
+def seq_by_re(length, objective_re, allowed_error=parameters.MAXIMUM_RG_RE_ERROR, 
            attempts=20, disorder_cutoff=parameters.DISORDER_THRESHOLD, 
            strict_disorder=False, reduce_pos_charged=False, exclude_aas=None,
             metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
@@ -476,7 +477,7 @@ def seq_re(length, objective_re, allowed_error=parameters.MAXIMUM_RG_RE_ERROR,
     return sequence
 
 
-def seq_rg(length, objective_rg, allowed_error=parameters.MAXIMUM_RG_RE_ERROR, 
+def seq_by_rg(length, objective_rg, allowed_error=parameters.MAXIMUM_RG_RE_ERROR, 
            attempts=20, disorder_cutoff=parameters.DISORDER_THRESHOLD, 
            strict_disorder=False, reduce_pos_charged=False, exclude_aas=None,
             metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
@@ -530,7 +531,7 @@ def seq_rg(length, objective_rg, allowed_error=parameters.MAXIMUM_RG_RE_ERROR,
     if objective_rg < parameters.get_min_rg(length) or objective_rg > parameters.get_max_rg(length):
         min_possible_value=parameters.get_min_rg(length)
         max_possible_value=parameters.get_max_rg(length)
-        raise goose_exceptions.GooseInputError(f'Cannot generate sequence, for length {length}, min Re = {min_possible_value}, max Re = {max_possible_value}.')
+        raise goose_exceptions.GooseInputError(f'Cannot generate sequence, for length {length}, min Rg = {min_possible_value}, max Rg = {max_possible_value}.')
 
     if allowed_error < 0:
         raise goose_exceptions.GooseInputError('Allowed error must be a positive number.')
@@ -549,7 +550,7 @@ def seq_rg(length, objective_rg, allowed_error=parameters.MAXIMUM_RG_RE_ERROR,
     
     # try to make the sequence.
     sequence = sequence_generation.by_dimensions(
-        length, objective_rg, rg_or_re='re',  
+        length, objective_rg, rg_or_re='rg',  
         allowed_error=allowed_error, 
         reduce_pos_charged=reduce_pos_charged,
         exclude_aas=exclude_aas,
@@ -571,3 +572,185 @@ def seq_rg(length, objective_rg, allowed_error=parameters.MAXIMUM_RG_RE_ERROR,
 /-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
 /-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
 '''
+
+def variant(sequence,
+            variant_type,
+            **kwargs):
+    """
+    Stand-alone function that takes care of creating variants of a sequence.
+    
+    Parameters
+    ------------
+    sequence : str
+        The amino acid sequence to generate variants from. (Required)
+    
+    variant_type : str
+        The type of variant to generate. Available options:
+        - 'shuffle_specific_regions': Shuffle specified regions
+        - 'shuffle_except_specific_regions': Shuffle all except specified regions
+        - 'shuffle_specific_residues': Shuffle specific residues
+        - 'shuffle_except_specific_residues': Shuffle all except specific residues
+        - 'weighted_shuffle_specific_residues': Weighted shuffle of specific residues
+        - 'targeted_reposition_specific_residues': Reposition specific residues
+        - 'change_residue_asymmetry': Change residue asymmetry
+        - 'constant_properties': Generate variant with constant properties
+        - 'constant_residues_and_properties': Keep specified residues and properties constant
+        - 'constant_properties_and_class': Generate variant with constant properties and class
+        - 'constant_properties_and_class_by_order': Generate variant with constant properties and class by order
+        - 'change_hydropathy_constant_class': Change hydropathy while keeping class constant
+        - 'change_fcr_minimize_class_changes': Change FCR while minimizing class changes
+        - 'change_ncpr_constant_class': Change NCPR while keeping class constant
+        - 'change_kappa': Change kappa value
+        - 'change_properties_minimize_differences': Change properties while minimizing differences
+        - 'change_any_properties': Change any combination of properties
+        - 'change_dimensions': Change sequence dimensions (Rg/Re)
+        (Required)
+    
+    **kwargs : dict
+        Additional parameters specific to the variant type:
+        
+        Common parameters:
+        - num_attempts (int): Number of attempts to generate variant (default: 50)
+        - strict_disorder (bool): Whether to use strict disorder checking (default: False)
+        - disorder_cutoff (float): Disorder cutoff threshold (default: 0.5)
+        - metapredict_version (int): MetaPredict version to use (default: 3)
+        - hydropathy_tolerance (float): Hydropathy tolerance (default: from parameters)
+        - kappa_tolerance (float): Kappa tolerance (default: from parameters)
+        
+        Variant-specific parameters:
+        - shuffle_regions (list): Regions to shuffle (for shuffle_specific_regions)
+        - excluded_regions (list): Regions to exclude (for shuffle_except_specific_regions)
+        - target_residues (list): Residues to target (for various methods)
+        - excluded_residues (list): Residues to exclude (for shuffle_except_specific_residues)
+        - shuffle_weight (float): Weight for shuffling (for weighted_shuffle_specific_residues)
+        - num_changes (int): Number of changes to make (for change_residue_asymmetry)
+        - increase_or_decrease (str): Direction of change (for change_residue_asymmetry, change_dimensions)
+        - exclude_residues (list): Residues to exclude (for constant_properties)
+        - constant_residues (list): Residues to keep constant (for constant_residues_and_properties)
+        - target_hydropathy (float): Target hydropathy value
+        - target_FCR (float): Target FCR value
+        - target_NCPR (float): Target NCPR value
+        - target_kappa (float): Target kappa value
+        - rg_or_re (str): Whether to optimize 'rg' or 're' (for change_dimensions)
+        - num_dim_attempts (int): Number of dimension attempts (for change_dimensions)
+        - allowed_error (float): Allowed error for dimensions (for change_dimensions)
+        - reduce_pos_charged (bool): Whether to reduce positive charges (for change_dimensions)
+        - exclude_aas (list): Amino acids to exclude (for change_dimensions)
+        
+    Returns
+    -------
+    str or None
+        The generated variant sequence, or None if generation failed.
+        
+    Raises
+    ------
+    GooseInputError
+        If invalid parameters are provided.
+    GooseFail
+        If variant generation fails.
+    """
+    
+    # Validate sequence
+    if not isinstance(sequence, str):
+        raise goose_exceptions.GooseInputError('Sequence must be a string')
+    
+    if len(sequence) == 0:
+        raise goose_exceptions.GooseInputError('Sequence cannot be empty')
+    
+    # Validate variant type
+    valid_variant_types = {
+        'shuffle_specific_regions',
+        'shuffle_except_specific_regions', 
+        'shuffle_specific_residues',
+        'shuffle_except_specific_residues',
+        'weighted_shuffle_specific_residues',
+        'targeted_reposition_specific_residues',
+        'change_residue_asymmetry',
+        'constant_properties',
+        'constant_residues_and_properties',
+        'constant_properties_and_class',
+        'constant_properties_and_class_by_order',
+        'change_hydropathy_constant_class',
+        'change_fcr_minimize_class_changes',
+        'change_ncpr_constant_class',
+        'change_kappa',
+        'change_properties_minimize_differences',
+        'change_any_properties',
+        'change_dimensions'
+    }
+    
+    if variant_type not in valid_variant_types:
+        raise goose_exceptions.GooseInputError(f'Invalid variant_type: {variant_type}. Must be one of: {", ".join(sorted(valid_variant_types))}')
+    
+    # Extract common parameters with defaults
+    common_params = {
+        'num_attempts': kwargs.get('num_attempts', 100),
+        'strict_disorder': kwargs.get('strict_disorder', False),
+        'disorder_cutoff': kwargs.get('disorder_cutoff', parameters.DISORDER_THRESHOLD),
+        'metapredict_version': kwargs.get('metapredict_version', parameters.METAPREDICT_DEFAULT_VERSION),
+        'hydropathy_tolerance': kwargs.get('hydropathy_tolerance', parameters.MAXIMUM_HYDRO_ERROR),
+        'kappa_tolerance': kwargs.get('kappa_tolerance', parameters.MAXIMUM_KAPPA_ERROR)
+    }
+    
+    # Create VariantGenerator instance
+    generator = VariantGenerator(**common_params)
+    
+    # Method dispatch dictionary
+    method_dispatch = {
+        'shuffle_specific_regions': ('shuffle_specific_regions', ['shuffle_regions']),
+        'shuffle_except_specific_regions': ('shuffle_except_specific_regions', ['excluded_regions']),
+        'shuffle_specific_residues': ('shuffle_specific_residues', ['target_residues']),
+        'shuffle_except_specific_residues': ('shuffle_except_specific_residues', ['excluded_residues']),
+        'weighted_shuffle_specific_residues': ('weighted_shuffle_specific_residues', ['target_residues', 'shuffle_weight']),
+        'targeted_reposition_specific_residues': ('targeted_reposition_specific_residues', ['target_residues']),
+        'change_residue_asymmetry': ('change_residue_asymmetry', ['target_residues'], ['num_changes', 'increase_or_decrease']),
+        'constant_properties': ('constant_properties', [], ['exclude_residues']),
+        'constant_residues_and_properties': ('constant_residues_and_properties', ['constant_residues']),
+        'constant_properties_and_class': ('constant_properties_and_class', []),
+        'constant_properties_and_class_by_order': ('constant_properties_and_class_by_order', []),
+        'change_hydropathy_constant_class': ('change_hydropathy_constant_class', ['target_hydropathy']),
+        'change_fcr_minimize_class_changes': ('change_fcr_minimize_class_changes', ['target_FCR']),
+        'change_ncpr_constant_class': ('change_ncpr_constant_class', ['target_NCPR']),
+        'change_kappa': ('change_kappa', ['target_kappa']),
+        'change_properties_minimize_differences': ('change_properties_minimze_differences', [], ['target_hydropathy', 'target_kappa', 'target_FCR', 'target_NCPR']),
+        'change_any_properties': ('change_any_properties', ['target_FCR', 'target_NCPR', 'target_kappa', 'target_hydropathy']),
+        'change_dimensions': ('change_dimensions', ['increase_or_decrease', 'rg_or_re'], ['num_dim_attempts', 'allowed_error', 'reduce_pos_charged', 'exclude_aas'])
+    }
+    
+    # Get method info
+    method_info = method_dispatch[variant_type]
+    method_name = method_info[0]
+    required_params = method_info[1]
+    optional_params = method_info[2] if len(method_info) > 2 else []
+    
+    # Validate required parameters
+    for param in required_params:
+        if param not in kwargs:
+            raise goose_exceptions.GooseInputError(f'Missing required parameter for {variant_type}: {param}')
+    
+    # Prepare method arguments
+    method_args = {'input_sequence': sequence}
+    
+    # Add required parameters
+    for param in required_params:
+        method_args[param] = kwargs[param]
+    
+    # Add optional parameters if provided
+    for param in optional_params:
+        if param in kwargs:
+            method_args[param] = kwargs[param]
+    
+    # Call the appropriate method
+    try:
+        method = getattr(generator, method_name)
+        result = method(**method_args)
+        
+        if result is None:
+            raise goose_exceptions.GooseFail(f'Failed to generate variant of type {variant_type}. Try adjusting parameters or increasing num_attempts.')
+        
+        return result
+        
+    except AttributeError:
+        raise goose_exceptions.GooseInputError(f'Method {method_name} not found in VariantGenerator')
+    except Exception as e:
+        raise goose_exceptions.GooseFail(f'Error generating variant: {str(e)}')

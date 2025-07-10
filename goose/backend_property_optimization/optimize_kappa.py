@@ -20,8 +20,8 @@ from goose.backend_property_optimization.modify_kappa import increase_kappa, dec
 def optimize_kappa(sequence, target_kappa, 
                               num_copies: int = 10,
                               max_change_iterations: int = 10,
-                              tolerance=parameters.MAXIMUM_KAPPA_ERROR, 
-                              num_iterations=1000, 
+                              kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR, 
+                              num_iterations=20000, 
                               return_when_num_hit=None,
                               only_return_within_tolerance=True,
                               convert_input_seq_to_matrix=False,
@@ -97,9 +97,9 @@ def optimize_kappa(sequence, target_kappa,
     prev_kappa_values = kappa_values.copy()  # Store initial kappa values for stagnation detection
 
     # Identify which sequences need to have kappa increased or decreased
-    needs_increase = kappa_values < target_kappa - tolerance
-    needs_decrease = kappa_values > target_kappa + tolerance
-    
+    needs_increase = kappa_values < target_kappa - kappa_tolerance
+    needs_decrease = kappa_values > target_kappa + kappa_tolerance
+
     # Track which sequences have reached their target
     reached_target = ~(needs_increase | needs_decrease)
     
@@ -113,6 +113,7 @@ def optimize_kappa(sequence, target_kappa,
 
     # Process in iterations
     for num_it in range(num_iterations):
+        
         # If all sequences reached target, we're done
         if np.all(reached_target):
             break
@@ -158,7 +159,8 @@ def optimize_kappa(sequence, target_kappa,
         recalc_indices = np.where(~reached_target)[0]
         if len(recalc_indices) > 0:
             current_kappa = kappa(modified_sequences[recalc_indices], is_ternarized=True)
-            if np.all(current_kappa == prev_kappa_values[recalc_indices]):
+            # Check for stagnation with small tolerance to avoid floating point precision issues
+            if np.all(np.abs(current_kappa - prev_kappa_values[recalc_indices]) < 1e-6):
                 num_not_improved+=1
             else:
                 num_not_improved=0
@@ -169,15 +171,17 @@ def optimize_kappa(sequence, target_kappa,
                 
                 # Update status of this sequence
                 old_status = (~reached_target[idx], needs_increase[idx], needs_decrease[idx])
-                
-                reached_target[idx] = abs(kappa_val - target_kappa) <= tolerance
-                needs_increase[idx] = kappa_val < target_kappa - tolerance
-                needs_decrease[idx] = kappa_val > target_kappa + tolerance
-                
+
+                reached_target[idx] = abs(kappa_val - target_kappa) <= kappa_tolerance
+                needs_increase[idx] = kappa_val < target_kappa - kappa_tolerance
+                needs_decrease[idx] = kappa_val > target_kappa + kappa_tolerance
+
                 new_status = (~reached_target[idx], needs_increase[idx], needs_decrease[idx])
+                #print(f"  Sequence {idx}: kappa {kappa_val:.6f}, reached_target: {reached_target[idx]}")
                     
             # Store current kappa values for stagnation detection
             prev_kappa_values[recalc_indices] = current_kappa
+            #print(f"After iteration {num_it}: {np.sum(reached_target)} sequences reached target")
 
             if num_not_improved > 2:
                 if window_size==5:
@@ -220,7 +224,8 @@ def optimize_kappa(sequence, target_kappa,
         # sort sequences by closest to target kappa
         sorted_indices = np.argsort(np.abs(kappa_values - target_kappa))
         # return those within tolerance in sorted order
-        modified_amino_sequences = [modified_amino_sequences[i] for i in sorted_indices if abs(kappa_values[i] - target_kappa) <= tolerance]
+        modified_amino_sequences = [modified_amino_sequences[i] for i in sorted_indices if abs(kappa_values[i] - target_kappa) <= kappa_tolerance]
+        #print(modified_amino_sequences)
         if modified_amino_sequences == []:
             return None
     return modified_amino_sequences

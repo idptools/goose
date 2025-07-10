@@ -464,11 +464,11 @@ def check_class_values(max_class_fractions,
             raise GooseInputError(f'The {class_name} fraction value of {value} exceeds the maximum allowed value of {max_class_fractions[class_name]}.')
 
 
-def check_basic_paramters(num_attempts=None,
+def check_basic_parameters(num_attempts=None,
                           strict_disorder=None,
                           disorder_cutoff=None,
                           max_consecutive_ordered=None,
-                          max_total_ordered_fraction=None,
+                          max_total_ordered=None,
                           metapredict_version=None,
                           return_all_sequences=None,
                           use_weighted_probabilities=None, 
@@ -494,9 +494,9 @@ def check_basic_paramters(num_attempts=None,
         if max_consecutive_ordered < 0:
             raise GooseInputError(f'Max consecutive ordered residues must be non-negative, got {max_consecutive_ordered}.')
     
-    if max_total_ordered_fraction is not None:
-        if max_total_ordered_fraction < 0 or max_total_ordered_fraction > 1:
-            raise GooseInputError(f'Max total ordered fraction must be between 0 and 1, got {max_total_ordered_fraction}.')
+    if max_total_ordered is not None:
+        if max_total_ordered < 0 or max_total_ordered > 1:
+            raise GooseInputError(f'Max total ordered fraction must be between 0 and 1, got {max_total_ordered}.')
     
     if metapredict_version is not None:
         if metapredict_version not in parameters.METAPREDICT_VERSIONS:

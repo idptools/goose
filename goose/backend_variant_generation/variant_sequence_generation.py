@@ -630,7 +630,7 @@ def constant_properties_and_class_sequence(sequence: str,
             new_sequence,
             target_hydropathy=target_hydropathy,
             max_iterations=1000,
-            tolerance=hydropathy_tolerance,
+            hydropathy_tolerance=hydropathy_tolerance,
             only_return_within_tolerance=False
         )[0]
         if check_hydropathy(new_sequence, target_hydropathy, hydropathy_tolerance):
@@ -648,7 +648,7 @@ def constant_properties_and_class_sequence(sequence: str,
         num_iterations=1000,
         convert_input_seq_to_matrix=True,
         inputting_matrix=False,
-        tolerance=kappa_tolerance,
+        kappa_tolerance=kappa_tolerance,
         only_return_within_tolerance=True,
         return_when_num_hit=1,
         avoid_shuffle=False,
@@ -698,7 +698,7 @@ def constant_properties_and_class_by_order_sequence(input_sequence: str,
         variant_sequence=variant_sequence,
         target_hydropathy=target_hydropathy,
         max_iterations=1000,
-        tolerance=hydropathy_tolerance
+        hydropathy_tolerance=hydropathy_tolerance
     )
 
     # see if within tolerance, if not use the within class optimization to get it closer.
@@ -707,7 +707,7 @@ def constant_properties_and_class_by_order_sequence(input_sequence: str,
             [variant_sequence],
             target_hydropathy=target_hydropathy,
             max_iterations=1000,
-            tolerance=hydropathy_tolerance,
+            hydropathy_tolerance=hydropathy_tolerance,
             only_return_within_tolerance=True
         )
         # Extract first sequence from the returned list
@@ -889,7 +889,7 @@ def change_fcr_minimize_class_changes_sequence(sequence: str,
     sequence = optimize_hydropathy_within_class(
         [sequence],
         target_hydropathy=starting_hydropathy,
-        tolerance=hydropathy_tolerance,
+        hydropathy_tolerance=hydropathy_tolerance,
         only_return_within_tolerance=False,
         max_iterations=5000
     )
@@ -907,7 +907,7 @@ def change_fcr_minimize_class_changes_sequence(sequence: str,
                 num_iterations=5000,
                 convert_input_seq_to_matrix=True,
                 inputting_matrix=False,
-                tolerance=kappa_tolerance,
+                kappa_tolerance=kappa_tolerance,
                 return_when_num_hit=1,
                 avoid_shuffle=True,
                 num_copies=10
@@ -979,7 +979,7 @@ def change_kappa_sequence(sequence,
         num_iterations=5000,
         convert_input_seq_to_matrix=True,
         inputting_matrix=False,
-        tolerance=kappa_tolerance,
+        kappa_tolerance=kappa_tolerance,
         return_when_num_hit=1,
         avoid_shuffle=True,
         num_copies=10
@@ -1148,7 +1148,7 @@ def change_properties_minimize_differences_sequence(input_sequence: str,
             [input_sequence],
             target_hydropathy=target_hydropathy,
             max_iterations=max_iterations,
-            tolerance=hydropathy_tolerance,
+            hydropathy_tolerance=hydropathy_tolerance,
             only_return_within_tolerance=False
         )[0]
         
@@ -1159,7 +1159,7 @@ def change_properties_minimize_differences_sequence(input_sequence: str,
                 input_sequence,
                 target_hydropathy=target_hydropathy,
                 max_iterations=max_iterations,
-                tolerance=hydropathy_tolerance,
+                hydropathy_tolerance=hydropathy_tolerance,
                 preserve_charged=True
             )
         
@@ -1170,7 +1170,7 @@ def change_properties_minimize_differences_sequence(input_sequence: str,
                 [input_sequence],
                 target_hydropathy=target_hydropathy,
                 max_iterations=max_iterations,
-                tolerance=hydropathy_tolerance,
+                hydropathy_tolerance=hydropathy_tolerance,
                 preserve_charged=True,
                 convert_input_seq_to_matrix=True,
                 return_when_num_hit=1,
@@ -1189,7 +1189,7 @@ def change_properties_minimize_differences_sequence(input_sequence: str,
             [input_sequence],
             target_kappa=target_kappa,
             num_iterations=max_iterations,
-            tolerance=kappa_tolerance,
+            kappa_tolerance=kappa_tolerance,
             inputting_matrix=False,
             convert_input_seq_to_matrix=True,
             return_when_num_hit=1,
@@ -1266,7 +1266,7 @@ def change_any_properties_sequence(sequence,
             [sequence],
             target_hydropathy=target_hydropathy,
             max_iterations=max_iterations,
-            tolerance=hydropathy_tolerance,
+            hydropathy_tolerance=hydropathy_tolerance,
             only_return_within_tolerance=False
         )
     sequence = sequence[0]  # Get the first sequence from the list
@@ -1289,7 +1289,7 @@ def change_any_properties_sequence(sequence,
                 sequence = optimize_kappa(
                     [sequence],
                     target_kappa=target_kappa,
-                    tolerance=kappa_tolerance,
+                    kappa_tolerance=kappa_tolerance,
                     return_when_num_hit=1,
                     inputting_matrix=False,
                     convert_input_seq_to_matrix=True,
@@ -1356,6 +1356,7 @@ def change_dimensions_sequence(sequence, increase_or_decrease, rg_or_re,
         target_intervals = dim_intervals[dim_intervals < original_dims]
     else:
         raise ValueError("increase_or_decrease must be 'increase' or 'decrease'")
+    
     
     # filter out target_intervals that are within the allowed error range
     target_intervals = target_intervals[np.abs(target_intervals - original_dims) >= allowed_error]

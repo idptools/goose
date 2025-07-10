@@ -283,7 +283,7 @@ def by_properties(length,
                 preserve_charge=True
             seqs = optimize_hydropathy(seqs, hydropathy,
                                                 preserve_charged=preserve_charge, 
-                                                tolerance=hydropathy_tolerance,
+                                                hydropathy_tolerance=hydropathy_tolerance,
                                                 return_when_num_hit=required_hydro_batch_size,
                                                 only_return_within_tolernace=True,
                                                 exclude_residues=exclude_residues)
@@ -299,7 +299,7 @@ def by_properties(length,
             seqs = optimize_kappa(seqs, kappa, 
                                              return_when_num_hit=required_kappa_batch_size, 
                                              only_return_within_tolerance=True,
-                                             tolerance=kappa_tolerance)
+                                             kappa_tolerance=kappa_tolerance)
         
         # make sure we still have sequences
         if len(seqs) == 0:

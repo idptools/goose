@@ -8,7 +8,7 @@ This works as follows:
     4. If a valid sequence is found, it is checked for disorder.
     5. If the sequence is disordered, it is returned. If not, the function tries again.
 """
-
+import random
 from sparrow.protein import Protein
 from goose.backend_sequence_generation.sequence_generation import by_properties
 from goose.backend_variant_generation.helper_functions import check_variant_disorder_vectorized
@@ -316,6 +316,9 @@ class VariantGenerator:
         """
         # Use a higher number of attempts for this method (as in original)
         attempts = max(self.num_attempts, 50)
+
+        if isinstance(target_residues, str):
+            target_residues = list(target_residues)
         
         for _ in range(attempts):
             variant_sequence = vsg.change_residue_asymmetry_sequence(
@@ -602,7 +605,9 @@ class VariantGenerator:
         str
             A generated variant sequence that meets the kappa criteria.
         """
-        for _ in range(self.num_attempts):
+        # make a copy of the input sequence so we can go back to it if we need to
+        original_sequence = input_sequence
+        for cur_iter in range(self.num_attempts):
             variant_sequence = vsg.change_kappa_sequence(
                 input_sequence,
                 target_kappa=target_kappa,
@@ -614,6 +619,17 @@ class VariantGenerator:
             disordered_sequence = self._check_disorder_and_return(input_sequence, variant_sequence)
             if disordered_sequence is not None:
                 return disordered_sequence
+            else:
+                # some times sequences get hung on not being disordered enough and the function gets kappa
+                # before it changes the sequence significantly. This can get around that. 
+                # only shuffle if cur_iter % 2 == 0
+                if cur_iter % 2 == 0:
+                    input_sequence = list(input_sequence)
+                    random.shuffle(input_sequence)
+                    input_sequence = ''.join(input_sequence)
+                else:
+                    # go back to the original sequence
+                    input_sequence = original_sequence
         
         return None
 
@@ -721,7 +737,7 @@ class VariantGenerator:
                           increase_or_decrease: str,
                           rg_or_re: str,
                           num_dim_attempts: int=5,
-                          allowed_error = None,
+                          allowed_error = parameters.MAXIMUM_RG_RE_ERROR,
                           reduce_pos_charged: bool = False,
                           exclude_aas=None
                           ) -> str:

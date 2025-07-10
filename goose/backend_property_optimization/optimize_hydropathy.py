@@ -24,7 +24,7 @@ def optimize_hydropathy(
     target_hydropathy: float, 
     preserve_charged: bool = True,
     max_iterations: int = 1000,
-    tolerance: float = parameters.MAXIMUM_HYDRO_ERROR,
+    hydropathy_tolerance: float = parameters.MAXIMUM_HYDRO_ERROR,
     batch_size: int = 10, 
     only_return_within_tolernace: bool = True,
     return_when_num_hit=None,
@@ -44,7 +44,7 @@ def optimize_hydropathy(
         If True, charged residues (D, E, K, R) will not be modified.
     max_iterations : int
         Maximum number of optimization iterations per sequence.
-    tolerance : float
+    hydropathy_tolerance : float
         Acceptable difference between achieved and target hydropathy.
     batch_size : int
         Number of mutations to apply in each iteration.
@@ -141,7 +141,7 @@ def optimize_hydropathy(
     for _ in range(max_iterations):
         # Check convergence
         delta = current_hydro - target_hydropathy
-        within_tolerance_mask = np.abs(delta) <= tolerance
+        within_tolerance_mask = np.abs(delta) <= hydropathy_tolerance
         
         # Update completed sequences
         newly_completed = set(np.where(within_tolerance_mask)[0]) - completed_sequences
@@ -165,7 +165,7 @@ def optimize_hydropathy(
             active_deltas = delta[active_indices]
             
             # Filter out sequences already within tolerance
-            valid_mask = np.abs(active_deltas) > tolerance
+            valid_mask = np.abs(active_deltas) > hydropathy_tolerance
             valid_indices = active_indices[valid_mask]
             
             # Further filter sequences that have mutable positions
@@ -176,7 +176,7 @@ def optimize_hydropathy(
             
             if sequences_with_mutable:
                 sequences_with_mutable = np.array(sequences_with_mutable)
-                need_increase_mask = delta[sequences_with_mutable] < -tolerance
+                need_increase_mask = delta[sequences_with_mutable] < -hydropathy_tolerance
                 
                 # Determine the number of modifications for each sequence
                 num_to_modify_per_seq = [min(batch_size, len(mutable_positions_cache[seq_idx])) for seq_idx in sequences_with_mutable]
@@ -245,7 +245,7 @@ def optimize_hydropathy(
     # Final filtering if needed
     if only_return_within_tolernace:
         final_hydro = calculate_hydropathy_batch(seq_matrices)
-        within_tolerance = np.abs(final_hydro - target_hydropathy) <= tolerance
+        within_tolerance = np.abs(final_hydro - target_hydropathy) <= hydropathy_tolerance
         seq_matrices = seq_matrices[within_tolerance]
     
     # if we have more than one sequence, sort them so the first sequence is the one that is closest to the target hydropathy
@@ -272,7 +272,7 @@ def optimize_hydropathy_within_class(
     target_hydropathy: float, 
     min_batch_size: int = 5,
     max_iterations: int = 5000,
-    tolerance: float = parameters.MAXIMUM_HYDRO_ERROR,
+    hydropathy_tolerance: float = parameters.MAXIMUM_HYDRO_ERROR,
     batch_size: int = 10, 
     only_return_within_tolerance: bool = True,
     return_when_num_hit=None) -> List[str]:
@@ -301,7 +301,7 @@ def optimize_hydropathy_within_class(
         This is used if a single sequence is provided        
     max_iterations : int
         Maximum number of optimization iterations
-    tolerance : float
+    hydropathy_tolerance : float
         Acceptable difference between achieved and target hydropathy
     batch_size : int
         Number of positions to modify in each sequence per iteration
@@ -407,7 +407,7 @@ def optimize_hydropathy_within_class(
     for iteration in range(max_iterations):
         # Check convergence
         delta = current_hydro - target_hydropathy
-        within_tolerance_mask = np.abs(delta) <= tolerance
+        within_tolerance_mask = np.abs(delta) <= hydropathy_tolerance
         
         # Update completed sequences
         newly_completed = set(np.where(within_tolerance_mask)[0]) - completed_sequences
@@ -429,7 +429,7 @@ def optimize_hydropathy_within_class(
             current_delta = delta[seq_idx]
             
             # Skip if already within tolerance
-            if abs(current_delta) <= tolerance:
+            if abs(current_delta) <= hydropathy_tolerance:
                 continue
                 
             mutable_pos = mutable_positions_cache[seq_idx]
@@ -437,7 +437,7 @@ def optimize_hydropathy_within_class(
                 continue
                 
             # Determine direction needed
-            need_increase = current_delta < -tolerance
+            need_increase = current_delta < -hydropathy_tolerance
             
             # Find positions that can actually be modified in the desired direction
             # The key fix: we need to check if ANY amino acid in the same class
@@ -496,7 +496,7 @@ def optimize_hydropathy_within_class(
     # Final filtering if needed
     if only_return_within_tolerance:
         final_hydro = calculate_hydropathy_batch(seq_matrices)
-        within_tolerance = np.abs(final_hydro - target_hydropathy) <= tolerance
+        within_tolerance = np.abs(final_hydro - target_hydropathy) <= hydropathy_tolerance
         seq_matrices = seq_matrices[within_tolerance]
     
     # sort by how close they are to the target hydropathy
@@ -517,7 +517,7 @@ def optimize_hydropathy_within_class(
 #-=-=-=-=- Minimal changes hydropathy optimization function -=-=-=-=-=-
 
 def optimize_hydropathy_minimal_changes(input_sequence, target_hydropathy, max_iterations=100, 
-                                        tolerance=parameters.MAXIMUM_HYDRO_ERROR, preserve_charged=True):
+                                        hydropathy_tolerance=parameters.MAXIMUM_HYDRO_ERROR, preserve_charged=True):
     """
     Optimize hydropathy of a sequence by making minimal changes to achieve a target hydropathy value.
     
@@ -532,7 +532,7 @@ def optimize_hydropathy_minimal_changes(input_sequence, target_hydropathy, max_i
         The target mean hydropathy value to achieve.
     max_iterations : int
         Maximum number of optimization iterations.
-    tolerance : float
+    hydropathy_tolerance : float
         Acceptable difference between achieved and target hydropathy.
         set by parameters.MAXIMUM_HYDRO_ERROR
     preserve_charged : bool
@@ -633,7 +633,7 @@ def optimize_hydropathy_minimal_changes(input_sequence, target_hydropathy, max_i
         current_hydropathy = Protein(''.join(sequence)).hydrophobicity
         distance_to_target = abs(current_hydropathy - target_hydropathy)
         
-        if distance_to_target <= tolerance:
+        if distance_to_target <= hydropathy_tolerance:
             break
             
         # Find the best substitution for this iteration
@@ -661,7 +661,7 @@ def optimize_hydropathy_within_class_avoid_original_residues(
         variant_sequence,
         target_hydropathy,
         max_iterations=1000,
-        tolerance=0.05):
+        hydropathy_tolerance=parameters.MAXIMUM_HYDRO_ERROR):
     """
     Optimize hydropathy of a sequence while avoiding original residues.
 
@@ -675,7 +675,7 @@ def optimize_hydropathy_within_class_avoid_original_residues(
         Target mean hydropathy value to achieve.
     max_iterations : int
         Maximum number of optimization iterations.
-    tolerance : float
+    hydropathy_tolerance : float
         Acceptable difference between achieved and target hydropathy.
 
     Returns:
@@ -694,7 +694,7 @@ def optimize_hydropathy_within_class_avoid_original_residues(
     current_hydropathy = calculate_hydropathy_single_sequence(variant_seq)
     
     for _ in range(max_iterations):
-        if abs(current_hydropathy - target_hydropathy) < tolerance:
+        if abs(current_hydropathy - target_hydropathy) < hydropathy_tolerance:
             break
         
         # Find positions that can be changed
@@ -719,7 +719,7 @@ def optimize_hydropathy_within_class_avoid_original_residues(
                 if abs(new_hydro-target_hydropathy) < best_hydro_error:
                     best_hydro_error = abs(new_hydro - target_hydropathy)
                     variant_seq = new_seq.copy()
-                    if best_hydro_error < tolerance:
+                    if best_hydro_error < hydropathy_tolerance:
                         # If we found a suitable amino acid, break early
                         break
     return array_to_sequence(variant_seq)
