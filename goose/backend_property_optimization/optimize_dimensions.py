@@ -2,9 +2,7 @@ import random
 
 from sparrow.predictors import batch_predict
 from sparrow.protein import Protein
-
 from goose.backend import parameters
-from goose.backend.lists import disordered_list, disordered_list_reduced_charge
 
 def predict_rg(sequence): return Protein(sequence).predictor.radius_of_gyration(use_scaled=True)
 def predict_re(sequence): return Protein(sequence).predictor.end_to_end_distance(use_scaled=True)
@@ -63,6 +61,7 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error=Non
         If True, returns all generated sequences that meet the target criteria.
         If False, returns only the best sequence found.
 
+
     Returns
     -------
     str, list of str or None
@@ -88,13 +87,11 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error=Non
     
     # Configure amino acid pools and bias dictionaries
     if reduce_pos_charged:
-        available_aas = list(disordered_list_reduced_charge)
         bias_dict = {
             'collapse': ['W', 'Y', 'G', 'F', 'Q', 'N'], 
             'expand': ['D', 'E', 'P', 'S', 'T']
         }
     else:
-        available_aas = list(disordered_list)
         bias_dict = {
             'collapse': ['W', 'Y', 'G', 'F', 'Q', 'N'], 
             'expand': ['D', 'E', 'K', 'R', 'P', 'S', 'T']
@@ -103,9 +100,6 @@ def optimize_seq_dims(input_sequence, rg_or_re, objective_dim, allowed_error=Non
     # Handle amino acid exclusions
     if exclude_aas is not None:
         exclude_set = set(exclude_aas)
-        
-        # Remove excluded amino acids from available pool
-        available_aas = [aa for aa in available_aas if aa not in exclude_set]
         
         # Remove excluded amino acids from bias dictionaries
         for bias_type in bias_dict:

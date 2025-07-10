@@ -4,6 +4,7 @@ the shuffled sequences in a matrix format
 '''
 
 import numpy as np
+from goose.data import aa_list_probabilities as aa_probs
 
 def shuffle_sequence_return_matrix(seq_array, num_shuffles=1000):
     """
@@ -30,4 +31,29 @@ def shuffle_sequence_return_matrix(seq_array, num_shuffles=1000):
         shuffled_matrix[i] = shuffled_seq
     
     return shuffled_matrix
-   
+
+
+def generate_random_sequence(length, probabilities=None):
+    """
+    Generate a random sequence of a given length based on specified amino acid probabilities.
+    
+    Args:
+        length (int): The length of the sequence to generate.
+        probabilities (dict, optional): A dictionary mapping amino acids to their probabilities.
+                                    If None, uses default probabilities.
+                                    
+    Returns:
+        str: A random sequence of amino acids.
+    """
+    if probabilities is None:
+        probabilities = aa_probs.IDRProbs
+    amino_acids = list(probabilities.keys())
+    probabilities = np.array(list(probabilities.values()))
+    
+    # Normalize probabilities to ensure they sum to 1
+    probabilities /= probabilities.sum()
+    
+    # Generate random sequence
+    sequence = np.random.choice(amino_acids, size=length, p=probabilities)
+    
+    return ''.join(sequence)

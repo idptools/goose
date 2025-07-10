@@ -18,7 +18,7 @@ HYDROPATHY_SCALE = np.array([6.3, 7.0, 1.0, 1.0, 7.3, 4.1, 1.3, 9.0,
 CHARGE_SCALE = np.array([0, 0, -1, -1, 0, 0, 0, 0, 1, 0, 0, 
                         0, 0, 0, 1, 0, 0, 0, 0, 0])
 AMINO_ACIDS_ARRAY = np.array(['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y'])
-DEFAULT_PROBABILITIES = aa_probs.EvenProbabilitiesNeutral
+DEFAULT_PROBABILITIES = aa_probs.IDRProbs
 
 @dataclass
 class SequenceParameters:
@@ -121,6 +121,11 @@ class SequenceGenerator:
         self.int_to_aa={0: 'A', 1: 'C', 2: 'D', 3: 'E', 4: 'F', 5: 'G', 6: 'H', 7: 'I', 8: 'K', 9: 'L', 10: 'M', 11: 'N', 12: 'P', 13: 'Q', 14: 'R', 15: 'S', 16: 'T', 17: 'V', 18: 'W', 19: 'Y'}
         self.charged_residues_indices = np.where(CHARGE_SCALE != 0)[0]
         self.uncharged_residues_indices = np.where(CHARGE_SCALE == 0)[0]
+
+        # check of the keys in chosen_probabilities are strings, if they are we need to convert them. 
+        if isinstance(list(self.chosen_probabilities.keys())[0], str):
+            # Convert string keys to integer indices
+            self.chosen_probabilities = {self.aa_to_int[aa]: prob for aa, prob in self.chosen_probabilities.items()}
         
         # Pre-compute commonly used values
         self.positive_indices = np.where(CHARGE_SCALE > 0)[0]
@@ -459,11 +464,11 @@ class SequenceGenerator:
             # now set specific_probabilities to final_probs
             specific_probabilities = final_probs
 
-            # if FCR or NCPR is specified, we need to make the values
-            # for D, E, K, and R 0.0
-            if fcr is not None or ncpr is not None:
-                for aa in [3, 4, 8, 14]:
-                    specific_probabilities[aa] = 0.0
+            # Always set charged residue probabilities to 0.0 since charged residues
+            # are selected directly and not from the probability distribution
+            # D=2, E=3, K=8, R=14
+            for aa in [2, 3, 8, 14]:
+                specific_probabilities[aa] = 0.0
             # now make sure probabilities sum to 1.0
             total = sum(specific_probabilities.values())
             for aa in specific_probabilities.keys():

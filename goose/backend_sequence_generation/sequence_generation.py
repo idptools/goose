@@ -412,7 +412,10 @@ def by_fractions(length,
     if batch_size is None:
         # use dynamic batching
         use_dynamic_batching = True
-        dynamic_batch_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+        dynamic_batch_sizes = [1, 1, 1, 1, 1,
+                               2, 2, 2, 2,
+                               4, 4, 4, 8, 8, 
+                               16, 32, 64, 128, 256]
     else:
         use_dynamic_batching = False
         if batch_size < 1:
@@ -452,40 +455,42 @@ def by_fractions(length,
         
         # the check_disordered_vectorized only returns a string if the sequence doesn't make
         # the cutoff for bieng disordered. Try to optimize it. 
-        if isinstance(seqs, str):
-            # means we got back a single sequence as a string and therefore have 
-            # a sequence not disordered. Try to optimize. 
-            # first try making 100 shuffles of the sequence we got back and checking disorder for that.
-            # this is a bit of a hack, but it works.
-            shuff_seqs = [seqs]
-            seqs=list(seqs) # convert to list for consistency
-            
-            # shuffle the sequence 512 times
-            for _ in range(256):
-                # shuffle the sequence
-                random.shuffle(seqs)
-                shuff_seqs.append(''.join(seqs))
-
-            # check disorder
-            seqs = check_disorder(shuff_seqs, strict_disorder=strict_disorder,
-                                        disorder_cutoff=disorder_cutoff,
-                                        max_consecutive_ordered=max_consecutive_ordered,
-                                        max_total_ordered=max_total_ordered,
-                                        metapredict_version=metapredict_version,
-                                        return_best_sequence=True)
-            
-            # if we still have a string, try to optimize it
+        # only attempt to optimize if we have a batch size larger than 128.
+        if cur_batch_size > 128:
             if isinstance(seqs, str):
-                seqs=optimize_disorder(seqs, disorder_cutoff=disorder_cutoff,
-                        max_iterations=500, preserve_charge_placement=False,
-                        metapredict_version=metapredict_version)
-                # check if the optimized sequence meets the disorder cutoffa
-                cur_disorder = meta.predict_disorder(seqs, version=metapredict_version)
-                if np.min(cur_disorder) >= disorder_cutoff:
-                    return seqs 
-                else:
-                    # if we still have a string, we failed to make a sequence that meets the disorder cutoff
-                    continue
+                # means we got back a single sequence as a string and therefore have 
+                # a sequence not disordered. Try to optimize. 
+                # first try making 100 shuffles of the sequence we got back and checking disorder for that.
+                # this is a bit of a hack, but it works.
+                shuff_seqs = [seqs]
+                seqs=list(seqs) # convert to list for consistency
+                
+                # shuffle the sequence 256 times
+                for _ in range(256):
+                    # shuffle the sequence
+                    random.shuffle(seqs)
+                    shuff_seqs.append(''.join(seqs))
+
+                # check disorder
+                seqs = check_disorder(shuff_seqs, strict_disorder=strict_disorder,
+                                            disorder_cutoff=disorder_cutoff,
+                                            max_consecutive_ordered=max_consecutive_ordered,
+                                            max_total_ordered=max_total_ordered,
+                                            metapredict_version=metapredict_version,
+                                            return_best_sequence=True)
+                
+                # if we still have a string, try to optimize it
+                if isinstance(seqs, str):
+                    seqs=optimize_disorder(seqs, disorder_cutoff=disorder_cutoff,
+                            max_iterations=500, preserve_charge_placement=False,
+                            metapredict_version=metapredict_version)
+                    # check if the optimized sequence meets the disorder cutoffa
+                    cur_disorder = meta.predict_disorder(seqs, version=metapredict_version)
+                    if np.min(cur_disorder) >= disorder_cutoff:
+                        return seqs 
+                    else:
+                        # if we still have a string, we failed to make a sequence that meets the disorder cutoff
+                        continue
         
         # if we have a list of sequences, check if they are empty
         if seqs == []:
@@ -597,14 +602,14 @@ def by_class(seq_length,
 
 def by_dimensions(seq_length, objective_dim, rg_or_re='rg',
                        allowed_error=parameters.MAXIMUM_RG_RE_ERROR,
-                       num_attempts_dimensions=parameters.RG_RE_ATTEMPT_NUMBER,
                        reduce_pos_charged=True, exclude_aas=None,
                        variants_per_iteration=64, mutation_fraction=0.0125,
                        num_attempts=10, strict_disorder=False,
                        disorder_cutoff=parameters.DISORDER_THRESHOLD,
                        metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                        max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
-                       max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION):
+                       max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
+                       num_attempts_dimensions=parameters.RG_RE_ATTEMPT_NUMBER,):
     """
     Create a sequence of a specified length that meets a target radius of gyration (Rg)
     or end-to-end distance (Re) with a given error tolerance.

@@ -3,13 +3,16 @@ import random
 from goose.backend import parameters
 from goose.backend.lists import disordered_list, disordered_list_reduced_charge
 from goose.backend_property_optimization.optimize_dimensions import optimize_seq_dims
+from goose.backend_property_optimization.helper_functions import generate_random_sequence
+from goose.data import aa_list_probabilities as aa_probs
+
 
 def create_seq_by_dims(seq_length, objective_dim, rg_or_re='rg',
                        allowed_error=parameters.MAXIMUM_RG_RE_ERROR, 
                        num_attempts_dimensions=parameters.RG_RE_ATTEMPT_NUMBER,
                        reduce_pos_charged=True, exclude_aas=None,
                        variants_per_iteration=64, mutation_fraction=0.0125,
-                       num_iterations=10):
+                       num_iterations=10, starting_probabilities=None):
     """
     Create a sequence of a specified length that meets a target radius of gyration (Rg)
     or end-to-end distance (Re) with a given error tolerance.
@@ -39,7 +42,9 @@ def create_seq_by_dims(seq_length, objective_dim, rg_or_re='rg',
         Fraction of sequence length to mutate per iteration (minimum 1 residue)
     num_iterations : int, default=10
         Number of iterations to attempt to make the sequence starting from random. 
-
+    starting_probabilities : dict, optional
+        Initial amino acid probabilities to use for sequence generation.
+        If None, uses default probabilities from aa_list_probabilities.
     Returns
     -------
     str or None
@@ -64,7 +69,8 @@ def create_seq_by_dims(seq_length, objective_dim, rg_or_re='rg',
     
     for _ in range(num_iterations):
         # Generate initial random sequence
-        initial_sequence = ''.join(random.choices(available_aas, k=seq_length))
+        initial_sequence = generate_random_sequence(seq_length,
+                                                    probabilities=starting_probabilities)
         
         # Use the optimize_seq_dims function to refine the sequence
         optimized_sequence = optimize_seq_dims(

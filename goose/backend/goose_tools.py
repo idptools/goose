@@ -133,11 +133,6 @@ def write_csv(input_list, output_file, properties):
             raise GooseError('Unable to write to file destination %s' % (output_file))                  
 
 
-
-
-
-
-
 def remove_None(**kwargs):
     '''
     function to remove none values from kwargs to make the CLI work
@@ -163,19 +158,6 @@ def check_props_parameters(**kwargs):
     outside possible bounds. Only for generating
     sequences by specifying properties.
     '''
-
-    # check disorder disorder cutoff value bounds
-    if 'cutoff' in list(kwargs.keys()):
-        curval = kwargs['cutoff']
-        if curval != None:
-            if curval > parameters.MAXIMUM_DISORDER:
-                error_message = f'The disorder cutoff value {curval} is greater than the max allowed value of {parameters.MAXIMUM_DISORDER}'
-                print(error_message)
-                raise GooseInputError(error_message)
-            if curval < parameters.MINIMUM_DISORDER:
-                error_message = f'The disorder cutoff {curval} is less than the minimum allowed value of {parameters.MINIMUM_DISORDER}'
-                raise GooseInputError(error_message)
-
     # check FCR bounds
     if kwargs['FCR'] != None:
         curval = kwargs['FCR']
@@ -231,7 +213,6 @@ def check_props_parameters(**kwargs):
                 if kwargs['NCPR'] == kwargs['FCR']:
                     raise GooseInputError('Cannot have NCPR = FCR for kappa to be a value other than -1.')
 
-
     # verify that charged residues not in exclude if FCR or NCPR specified.
     if kwargs['exclude']!= None:
         if kwargs['FCR'] != None  or kwargs['NCPR'] != None:
@@ -267,7 +248,18 @@ def check_props_parameters(**kwargs):
             curhydro = kwargs['hydropathy']
             error_message = f'The specified hydropathy value if {curhydro} is not compatible with the specified charge value.'
             raise GooseInputError(error_message)
-
+    
+    # check hydropathy_tolerance
+    if kwargs['hydropathy_tolerance'] != None:
+        if kwargs['hydropathy_tolerance'] < 0:
+            error_message = f'The hydropathy tolerance value of {kwargs["hydropathy_tolerance"]} is less than 0. Must be greater than or equal to 0.'
+            raise GooseInputError(error_message)
+        
+    # check kappa_tolerance 
+    if kwargs['kappa_tolerance'] != None:
+        if kwargs['kappa_tolerance'] < 0:
+            error_message = f'The kappa tolerance value of {kwargs["kappa_tolerance"]} is less than 0. Must be greater than or equal to 0.'
+            raise GooseInputError(error_message)
 
 
 def check_and_correct_props_kwargs(**kwargs):
@@ -295,7 +287,7 @@ def check_and_correct_props_kwargs(**kwargs):
                         'exclude':None, 'attempts':5000, 'strict_disorder': False,
                         'hydropathy_tolerance': parameters.MAXIMUM_HYDRO_ERROR,
                         'kappa_tolerance': parameters.MAXIMUM_KAPPA_ERROR,
-                        'cutoff': parameters.DISORDER_THRESHOLD,
+                        'disorder_cutoff': parameters.DISORDER_THRESHOLD,
                         'max_consecutive_ordered': parameters.ALLOWED_CONSECUTIVE_ORDERED,
                         'max_total_ordered': parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
                         'metapredict_version': parameters.METAPREDICT_DEFAULT_VERSION, 
@@ -334,13 +326,13 @@ def check_and_correct_fracs_kwargs(**kwargs):
     
 
     # make sure the six essential keywords have been initialized to their default values if they were not provided
-    essential_kwargs = {'custom_probabilities': None,
+    essential_kwargs = {'remaining_probabilities': None,
                         'attempts': 100,
                         'strict_disorder': False, 
-                        'cutoff': parameters.DISORDER_THRESHOLD, 
+                        'disorder_cutoff': parameters.DISORDER_THRESHOLD, 
                         'max_consecutive_ordered': parameters.ALLOWED_CONSECUTIVE_ORDERED,
                         'max_total_ordered': parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
-                        'max_aa_fractions': parameters.MAX_FRACTION_DICT,
+                        'max_aa_fractions': {},
                         'metapredict_version': parameters.METAPREDICT_DEFAULT_VERSION,
                         'return_all_sequences': False,
                         'batch_size': None}
@@ -375,34 +367,18 @@ def check_fracs_parameters(**kwargs):
         Returns a Goose input error in a passed fracion is invalid.
 
     '''
-
-    # check disorder disorder cutoff value bounds (max and min are 1 and 0)
-    if 'cutoff' in kwargs:
-        curval = kwargs['cutoff']
-        if curval != None:
-            if curval > parameters.MAXIMUM_DISORDER:
-                error_message = f'The disorder cutoff value {curval} is greater than the max allowed value of {parameters.MAXIMUM_DISORDER}'
-                print(error_message)
-                raise GooseInputError(error_message)
-            if curval < parameters.MINIMUM_DISORDER:
-                error_message = f'The disorder cutoff {curval} is less than the minimum allowed value of {parameters.MINIMUM_DISORDER}'
-                raise GooseInputError(error_message)
-
+    # amino acids to check
     amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
 
     # cycle over each keyword (kw) in the kwargs dictionary
     for kw in kwargs:
-
         # if the keyword is an amino acid...
         if kw in amino_acids:
-            
             # get current fraction value
             current_value = kwargs[kw]
-
             # if a an override max value was provided
             if kw in kwargs['max_aa_fractions']:
                 max_value = kwargs['max_aa_fractions'][kw]
-
             # otherwise use the default
             else:                
                 max_value = parameters.MAX_FRACTION_DICT[kw]
@@ -433,6 +409,132 @@ def check_fracs_parameters(**kwargs):
         raise GooseInputError(f'Requested a sequence where the sum of the fractional components is greater than 1. This will not work!')
         
 
+def check_class_values(max_class_fractions,
+                   aromatic: float = 0.0,
+                    aliphatic: float = 0.0,
+                    polar: float = 0.0,
+                    positive: float = 0.0,
+                    negative: float = 0.0,
+                    glycine: float = 0.0,
+                    proline: float = 0.0,
+                    cysteine: float = 0.0,
+                    histidine: float = 0.0):
+    '''
+    Function to check that the class values provided are within the allowed bounds.
+    
+    Parameters
+    -----------
+    max_class_fractions : Dict
+        A dictionary of the maximum allowed fractions for each class.
+
+    aromatic, aliphatic, polar, positive, negative, glycine, proline, cysteine, histidine : float
+        The fraction values for each class.
+
+    Returns
+    --------
+    None
+        This function does not return anything but raises an error if any value is out of bounds.
+    '''
+    # make dict of all values
+    class_values = {
+        'aromatic': aromatic,
+        'aliphatic': aliphatic,
+        'polar': polar,
+        'positive': positive,
+        'negative': negative,
+        'glycine': glycine,
+        'proline': proline,
+        'cysteine': cysteine,
+        'histidine': histidine
+    }
+        
+    # check that all values are within the allowed bounds
+    for class_name, value in class_values.items():
+        if value < 0 or value > max_class_fractions[class_name]:
+            raise GooseInputError(f'The {class_name} fraction value of {value} is not within the allowed bounds (0, {max_class_fractions[class_name]}).')
+        
+    # check that the sum of all values is less than or equal to 1
+    total_fraction = sum(class_values.values())
+    if total_fraction > 1:
+        raise GooseInputError(f'The sum of all class fractions is {total_fraction}, which exceeds the maximum allowed value of 1.')
+    
+    # check that all values are within the allowed bounds
+    for class_name, value in class_values.items():
+        if value > max_class_fractions[class_name]:
+            raise GooseInputError(f'The {class_name} fraction value of {value} exceeds the maximum allowed value of {max_class_fractions[class_name]}.')
+
+
+def check_basic_paramters(num_attempts=None,
+                          strict_disorder=None,
+                          disorder_cutoff=None,
+                          max_consecutive_ordered=None,
+                          max_total_ordered_fraction=None,
+                          metapredict_version=None,
+                          return_all_sequences=None,
+                          use_weighted_probabilities=None, 
+                          batch_size = None,
+                          custom_probabilities=None,
+                          exclude=None):
+    '''
+    Function to check that the basic parameters for sequence generation are valid.
+    '''
+    if num_attempts is not None:
+        if num_attempts < 1:
+            raise GooseInputError(f'Number of attempts must be at least 1, got {num_attempts}.')
+    
+    if strict_disorder is not None:
+        if not isinstance(strict_disorder, bool):
+            raise GooseInputError(f'Strict disorder must be a boolean value, got {strict_disorder}.')
+    
+    if disorder_cutoff is not None:
+        if disorder_cutoff < 0 or disorder_cutoff > 1:
+            raise GooseInputError(f'Disorder cutoff must be between 0 and 1, got {disorder_cutoff}.')
+    
+    if max_consecutive_ordered is not None:
+        if max_consecutive_ordered < 0:
+            raise GooseInputError(f'Max consecutive ordered residues must be non-negative, got {max_consecutive_ordered}.')
+    
+    if max_total_ordered_fraction is not None:
+        if max_total_ordered_fraction < 0 or max_total_ordered_fraction > 1:
+            raise GooseInputError(f'Max total ordered fraction must be between 0 and 1, got {max_total_ordered_fraction}.')
+    
+    if metapredict_version is not None:
+        if metapredict_version not in parameters.METAPREDICT_VERSIONS:
+            raise GooseInputError(f'Metapredict version must be one of {parameters.METAPREDICT_VERSIONS}, got {metapredict_version}.')
+    
+    if return_all_sequences is not None:
+        if not isinstance(return_all_sequences, bool):
+            raise GooseInputError(f'Return all sequences must be a boolean value, got {return_all_sequences}.')
+    
+    if use_weighted_probabilities is not None:
+        if not isinstance(use_weighted_probabilities, bool):
+            raise GooseInputError(f'Use weighted probabilities must be a boolean value, got {use_weighted_probabilities}.')
+        
+    if batch_size is not None:
+        if not isinstance(batch_size, int) or batch_size < 1:
+            raise GooseInputError(f'Batch size must be a positive integer, got {batch_size}.')
+        
+    if custom_probabilities is not None:
+        if not isinstance(custom_probabilities, dict):
+            raise GooseInputError(f'Custom probabilities must be a dictionary, got {type(custom_probabilities)}.')
+        for aa, prob in custom_probabilities.items():
+            if aa not in parameters.VALID_AMINO_ACIDS:
+                raise GooseInputError(f'Invalid amino acid {aa} in custom probabilities.')
+            if prob < 0 or prob > 1:
+                raise GooseInputError(f'Probability for {aa} must be between 0 and 1, got {prob}.')
+        total_prob = sum(custom_probabilities.values())
+        if total_prob > 1:
+            raise GooseInputError(f'Total probability of custom probabilities exceeds 1, got {total_prob}.')
+    
+    if exclude is not None:
+        if not isinstance(exclude, list):
+            raise GooseInputError(f'Exclude must be a list, got {type(exclude)}.')
+        for aa in exclude:
+            if aa not in parameters.VALID_AMINO_ACIDS:
+                raise GooseInputError(f'Invalid amino acid {aa} in exclude list.')
+        if len(exclude) > 19:
+            raise GooseInputError('Cannot exclude more than 19 amino acids.')
+
 
 
 def gen_random_name():
@@ -445,9 +547,4 @@ def gen_random_name():
         random_name += amino_acids[random.randint(0, len(amino_acids)-1)]
         random_name += str(random.randint(0, 9))
     return random_name    
-
-
-
-
-
 

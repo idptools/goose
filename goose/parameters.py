@@ -5,7 +5,9 @@ Can change parameters here and it will change paramters in GOOSE globally
 # need this for the min and max Rg / Re functions
 import statistics as stat
 
+METAPREDICT_VERSIONS=[1,2,3]
 METAPREDICT_DEFAULT_VERSION = 3
+
 ALLOWED_CONSECUTIVE_ORDERED = 3
 ALLOWED_TOTAL_ORDERED_FRACTION = 0.05
 
@@ -88,4 +90,16 @@ MAX_FRACTION_V = 0.71
 # dict of max fractions
 MAX_FRACTION_DICT = {'A' : MAX_FRACTION_A, 'R' : MAX_FRACTION_R, 'N' : MAX_FRACTION_N, 'D' : MAX_FRACTION_D, 'C' : MAX_FRACTION_C, 'Q' : MAX_FRACTION_Q, 'E' : MAX_FRACTION_E, 'G' : MAX_FRACTION_G, 'H' : MAX_FRACTION_H, 'I' : MAX_FRACTION_I, 'L' : MAX_FRACTION_L, 'K' : MAX_FRACTION_K, 'M' : MAX_FRACTION_M, 'F' : MAX_FRACTION_F, 'P' : MAX_FRACTION_P, 'S' : MAX_FRACTION_S, 'T' : MAX_FRACTION_T, 'W' : MAX_FRACTION_W, 'Y' : MAX_FRACTION_Y, 'V' : MAX_FRACTION_V}
 
+MAX_CLASS_FRACTIONS = {
+  'aromatic': max(MAX_FRACTION_F, MAX_FRACTION_W, MAX_FRACTION_Y),
+  'aliphatic': max(MAX_FRACTION_A, MAX_FRACTION_I, MAX_FRACTION_L, MAX_FRACTION_M, MAX_FRACTION_V),
+  'polar': max(MAX_FRACTION_N, MAX_FRACTION_Q, MAX_FRACTION_S, MAX_FRACTION_T),
+  'positive': max(MAX_FRACTION_R, MAX_FRACTION_K),
+  'negative': max(MAX_FRACTION_D, MAX_FRACTION_E),
+  'proline': MAX_FRACTION_P,
+  'glycine': MAX_FRACTION_G,
+  'cysteine': MAX_FRACTION_C,
+  'histidine': MAX_FRACTION_H
+}
 
+VALID_AMINO_ACIDS = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']

@@ -14,7 +14,7 @@ AMINO_ACIDS_LIST = list(AMINO_ACIDS)
 CHARGED_RESIDUES = "DEKR"
 POSITIVE_CHARGED = "KR"
 NEGATIVE_CHARGED = "DE"
-DEFAULT_REMAINING_PROBABILITIES = aa_probs.HumanProbabilitiesByAA
+DEFAULT_REMAINING_PROBABILITIES = aa_probs.IDRProbs
 
 @dataclass
 class SequenceParametersByFractions:
@@ -24,12 +24,21 @@ class SequenceParametersByFractions:
     This class handles the specification of amino acid fractions for sequence generation,
     with validation and normalization of the provided fractions.
     
+    Behavior:
+    - Specified fractions are ALWAYS enforced as exact counts (deterministic allocation).
+    - Unspecified amino acids are ALWAYS allocated probabilistically based on 
+      default_remaining_probabilities.
+    - The 'strict' parameter controls other validation behavior but does not affect
+      the deterministic nature of specified fractions.
+    
     Attributes:
         length (int): Length of sequences to generate
         fractions (Dict[str, float]): Dictionary mapping amino acids to their fractions
-        randomize_unspecified (bool): Whether to randomize unspecified fractions
+        randomize_unspecified (bool): Whether to randomize unspecified fractions using
+            uniform random distribution (only applies when strict=False)
         normalize (bool): Whether to normalize fractions to sum to 1.0
-        strict (bool): Whether to strictly enforce specified fractions
+        strict (bool): Whether to use strict validation (affects error handling for
+            invalid fraction sums, but specified fractions are always deterministic)
         default_remaining_probabilities (Dict[str, float]): Probability distribution 
             used for unspecified amino acids when randomize_unspecified is False
     """
@@ -80,41 +89,12 @@ class SequenceParametersByFractions:
                                      f"Cannot maintain strict fractions. Either set strict=False or "
                                      f"reduce the sum of specified fractions.")
                 
-                # Find unspecified amino acids
-                unspecified = [aa for aa in AMINO_ACIDS if aa not in self.fractions]
-                
-                # If there are unspecified amino acids, distribute the remaining probability
-                if unspecified:
-                    remaining = 1.0 - specified_sum
-                    
-                    # If remaining is effectively 0, avoid division problems
-                    if abs(remaining) < 1e-10:
-                        for aa in unspecified:
-                            self.fractions[aa] = 0.0
-                    elif self.randomize_unspecified:
-                        # Generate random values for unspecified AAs
-                        random_values = np.random.random(len(unspecified))
-                        random_values = random_values / np.sum(random_values) * remaining
-                        
-                        for i, aa in enumerate(unspecified):
-                            self.fractions[aa] = random_values[i]
-                    else:
-                        # Distribute using normalized default_remaining_probabilities
-                        # Calculate sum of default_remaining_probabilities for unspecified amino acids
-                        unspec_prob_sum = sum(self.default_remaining_probabilities.get(aa, 0) for aa in unspecified)
-                        
-                        # Distribute with normalization
-                        if unspec_prob_sum > 0:
-                            for aa in unspecified:
-                                self.fractions[aa] = (self.default_remaining_probabilities.get(aa, 0) / unspec_prob_sum) * remaining
-                        else:
-                            # Fallback to even distribution if no probabilities available
-                            per_aa = remaining / len(unspecified)
-                            for aa in unspecified:
-                                self.fractions[aa] = per_aa
+                # In strict mode, we don't pre-assign fractions to unspecified amino acids
+                # They will be handled probabilistically during sequence generation
                 
                 # If all amino acids are specified but sum < 1.0, normalize instead of raising error
-                elif specified_sum < 0.999:  # Allow for small floating point errors
+                unspecified = [aa for aa in AMINO_ACIDS if aa not in self.fractions]
+                if not unspecified and specified_sum < 0.999:  # Allow for small floating point errors
                     if self.normalize:
                         for aa in self.fractions:
                             self.fractions[aa] /= specified_sum
@@ -122,44 +102,44 @@ class SequenceParametersByFractions:
                         raise ValueError(f"All amino acids are specified but their fractions sum to {specified_sum}, "
                                          f"which is less than 1.0. Please correct the fractions or set normalize=True.")
             else:
-                # In non-strict mode, scale everything if sum > 1.0
+                # In non-strict mode, we still use the same deterministic approach
+                # but allow normalization of specified fractions if sum > 1.0
                 if specified_sum > 1.0:
                     for aa in self.fractions:
                         self.fractions[aa] /= specified_sum
-                    return
-                
-                # Handle the case where sum < 1.0 similar to strict mode
-                unspecified = [aa for aa in AMINO_ACIDS if aa not in self.fractions]
-                if unspecified:
-                    remaining = 1.0 - specified_sum
-                    
-                    if self.randomize_unspecified:
-                        # Generate random values for unspecified AAs
-                        random_values = np.random.random(len(unspecified))
-                        random_values = random_values / np.sum(random_values) * remaining
-                        
-                        for i, aa in enumerate(unspecified):
-                            self.fractions[aa] = random_values[i]
-                    else:
-                        # Distribute using normalized default_remaining_probabilities
-                        # Calculate sum of default_remaining_probabilities for unspecified amino acids
-                        unspec_prob_sum = sum(self.default_remaining_probabilities.get(aa, 0) for aa in unspecified)
-                        
-                        # Distribute with normalization
-                        if unspec_prob_sum > 0:
-                            for aa in unspecified:
-                                self.fractions[aa] = (self.default_remaining_probabilities.get(aa, 0) / unspec_prob_sum) * remaining
-                        else:
-                            # Fallback to even distribution if no probabilities available
-                            per_aa = remaining / len(unspecified)
-                            for aa in unspecified:
-                                self.fractions[aa] = per_aa
 
 
     
     def get_fraction_array(self):
         """Convert fractions dictionary to a numpy array in AMINO_ACIDS order."""
         return np.array([self.fractions.get(aa, 0.0) for aa in AMINO_ACIDS])
+    
+    def get_unspecified_probabilities(self):
+        """
+        Get normalized probabilities for unspecified amino acids.
+        
+        Returns:
+            tuple: (unspecified_aas, normalized_probs) where unspecified_aas is a list
+                   of amino acids not specified in fractions, and normalized_probs is
+                   the corresponding normalized probability distribution.
+        """
+        unspecified = [aa for aa in AMINO_ACIDS if aa not in self.fractions or self.fractions[aa] == 0]
+        
+        if not unspecified:
+            return [], []
+        
+        # Get probabilities for unspecified amino acids
+        probs = [self.default_remaining_probabilities.get(aa, 0) for aa in unspecified]
+        
+        # Normalize probabilities
+        prob_sum = sum(probs)
+        if prob_sum > 0:
+            probs = [p / prob_sum for p in probs]
+        else:
+            # Fallback to uniform distribution
+            probs = [1.0 / len(unspecified)] * len(unspecified)
+        
+        return unspecified, probs
     
     def __str__(self):
         """String representation showing fractions and calculated properties."""
@@ -171,6 +151,17 @@ class SequenceParametersByFractions:
 class FractionBasedSequenceGenerator:
     """
     Class for generating protein sequences with specific amino acid fractions.
+    
+    This generator enforces specified amino acid fractions as exact counts while
+    allocating unspecified amino acids probabilistically:
+    
+    - Specified fractions: Always calculated as exact integer counts (deterministic)
+    - Unspecified amino acids: Always allocated probabilistically based on 
+      default_remaining_probabilities
+    
+    For example, with length=100 and fractions={'A':0.1}, you will always get 
+    exactly 10 A's in every sequence, while the remaining 90 positions will be
+    filled probabilistically based on default_remaining_probabilities.
     """
     def __init__(self, 
                  length: Optional[int] = None,
@@ -185,11 +176,13 @@ class FractionBasedSequenceGenerator:
         Args:
             length (int, optional): Length of sequences to generate
             fractions (Dict[str, float], optional): Specified amino acid fractions
+                (these will always be enforced as exact counts)
             randomize_unspecified (bool): Whether to randomize unspecified fractions
+                (only affects initialization, not sequence generation behavior)
             normalize (bool): Whether to normalize fractions to sum to 1.0
-            strict (bool): Whether to strictly enforce specified fractions
+            strict (bool): Whether to use strict validation for fraction sums
             default_remaining_probabilities (Dict[str, float], optional): Probability
-                distribution used for unspecified amino acids
+                distribution used for unspecified amino acids (always probabilistic)
         """
         self.length = length
         self.fractions = fractions if fractions else {}
@@ -215,13 +208,18 @@ class FractionBasedSequenceGenerator:
         """
         Generate protein sequences using the specified amino acid fractions.
         
+        Specified fractions are always enforced as exact counts, while unspecified
+        amino acids are allocated probabilistically based on default_remaining_probabilities.
+        
         Args:
             num_sequences (int): Number of sequences to generate
             length (int, optional): Length of sequences to generate (overrides init value)
             fractions (Dict[str, float], optional): Amino acid fractions (overrides init value)
-            strict (bool, optional): Whether to strictly enforce specified fractions
+                These will always be enforced as exact counts.
+            strict (bool, optional): Whether to use strict validation (does not affect
+                the deterministic nature of specified fractions)
             default_remaining_probabilities (Dict[str, float], optional): Probability
-                distribution used for unspecified amino acids
+                distribution used for unspecified amino acids (always probabilistic)
             convert_to_amino_acids (bool): Whether to convert indices back to amino acid strings
             
         Returns:
@@ -251,7 +249,7 @@ class FractionBasedSequenceGenerator:
         )
         
         # Add warning for very short sequences when many amino acids are specified
-        if use_strict and use_length < 20:
+        if use_length < 20:
             specified_aa_count = sum(1 for aa in AMINO_ACIDS if aa in use_fractions and use_fractions[aa] > 0)
             if specified_aa_count > use_length / 2:
                 import warnings
@@ -263,107 +261,91 @@ class FractionBasedSequenceGenerator:
         
         sequences = []
         
-        if use_strict:
-            # Deterministic approach for strict mode - exact counts
-            for _ in range(num_sequences):
-                # More precise algorithm for calculating exact integer counts
-                aa_counts = {}
-                fractional_counts = {}
-                remaining_positions = use_length
-                
-                # First pass: calculate integer counts for each amino acid
-                for aa in AMINO_ACIDS:
-                    if aa in params.fractions and params.fractions[aa] > 0:
-                        # Calculate exact fractional count
-                        frac_count = params.fractions[aa] * use_length
-                        # Store integer part
-                        aa_counts[aa] = int(frac_count)  # floor, not round
-                        # Store fractional part for later allocation
-                        fractional_counts[aa] = frac_count - int(frac_count)
-                        remaining_positions -= aa_counts[aa]
-                
-                # Distribute remaining positions based on fractional parts
-                if remaining_positions > 0:
-                    # Sort amino acids by descending fractional part
-                    sorted_aa = sorted(fractional_counts.keys(), 
-                                     key=lambda aa: fractional_counts[aa],
-                                     reverse=True)
-                    
-                    # Allocate remaining positions to amino acids with highest fractional parts
-                    for i in range(remaining_positions):
-                        if i < len(sorted_aa):
-                            aa_counts[sorted_aa[i]] += 1
-                        else:
-                            # If we have more positions than amino acids with fractions,
-                            # distribute to unspecified amino acids
-                            unspecified = [aa for aa in AMINO_ACIDS if aa not in params.fractions]
-                            if unspecified:
-                                idx = i % len(unspecified)
-                                aa = unspecified[idx]
-                                aa_counts[aa] = aa_counts.get(aa, 0) + 1
-                            else:
-                                # If all amino acids are specified, distribute evenly
-                                idx = i % len(AMINO_ACIDS)
-                                aa = AMINO_ACIDS[idx]
-                                aa_counts[aa] = aa_counts.get(aa, 0) + 1
-                
-                # Verify we have the right total
-                total_count = sum(aa_counts.values())
-                if total_count != use_length:
-                    # This should not happen, but just in case
-                    diff = use_length - total_count
-                    if diff > 0:
-                        # Add missing positions
-                        for i in range(diff):
-                            aa = AMINO_ACIDS[i % len(AMINO_ACIDS)]
-                            aa_counts[aa] = aa_counts.get(aa, 0) + 1
-                    else:
-                        # Remove extra positions (least likely to be needed)
-                        sorted_counts = sorted(aa_counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
-                        for i in range(-diff):
-                            aa = sorted_counts[i % len(sorted_counts)][0]
-                            if aa_counts[aa] > 0:
-                                aa_counts[aa] -= 1
-                
-                # Create a pool of amino acids based on counts
-                aa_pool = []
-                for aa, count in aa_counts.items():
-                    aa_pool.extend([aa] * count)
-                
-                # Verify we have the right number of amino acids
-                assert len(aa_pool) == use_length, f"Expected {use_length} amino acids, got {len(aa_pool)}"
-                
-                # Shuffle the pool to randomize order
-                np.random.shuffle(aa_pool)
-                
-                # Convert to string
-                if convert_to_amino_acids:
-                    sequences.append(''.join(aa_pool))
-                else:
-                    # Convert to indices if not converting to amino acids
-                    sequence_indices = [self.aa_to_idx[aa] for aa in aa_pool]
-                    sequences.append(sequence_indices)
-        else:
-            # Probabilistic approach for non-strict mode
-            # Get normalized fractions as array
-            fractions_array = params.get_fraction_array()
+        # Always use deterministic allocation for specified fractions
+        # and probabilistic allocation for unspecified amino acids
+        for _ in range(num_sequences):
+            # Calculate exact counts for specified amino acids
+            specified_aa_counts = {}
+            fractional_counts = {}
+            total_specified_positions = 0
             
-            # Generate sequences using vectorized operations
-            for _ in range(num_sequences):
-                # Generate sequence indices based on probabilities
-                indices = np.random.choice(
-                    len(AMINO_ACIDS),
-                    size=use_length,
-                    p=fractions_array
-                )
+            # First pass: calculate integer counts for specified amino acids only
+            for aa in AMINO_ACIDS:
+                if aa in params.fractions and params.fractions[aa] > 0:
+                    # Calculate exact fractional count
+                    frac_count = params.fractions[aa] * use_length
+                    # Store integer part
+                    specified_aa_counts[aa] = int(frac_count)  # floor, not round
+                    # Store fractional part for later allocation (only if > 0)
+                    fractional_part = frac_count - int(frac_count)
+                    if fractional_part > 1e-10:  # Only store if fractional part is significant
+                        fractional_counts[aa] = fractional_part
+                    total_specified_positions += specified_aa_counts[aa]
+            
+            # Distribute remaining fractional positions among specified amino acids
+            remaining_fractional_positions = use_length - total_specified_positions
+            
+            # Handle fractional parts for specified amino acids
+            if remaining_fractional_positions > 0 and fractional_counts:
+                # Sort amino acids by descending fractional part
+                sorted_aa = sorted(fractional_counts.keys(), 
+                                 key=lambda aa: fractional_counts[aa],
+                                 reverse=True)
                 
-                # Convert indices to amino acids
-                if convert_to_amino_acids:
-                    sequence = ''.join(AMINO_ACIDS[idx] for idx in indices)
+                # Allocate remaining positions to amino acids with highest fractional parts
+                positions_to_allocate = min(remaining_fractional_positions, len(sorted_aa))
+                for i in range(positions_to_allocate):
+                    specified_aa_counts[sorted_aa[i]] += 1
+                    total_specified_positions += 1
+                
+                # Update remaining positions
+                remaining_fractional_positions -= positions_to_allocate
+            
+            # Now handle unspecified amino acids probabilistically
+            remaining_positions = use_length - total_specified_positions
+            unspecified_aa_counts = {}
+            
+            if remaining_positions > 0:
+                # Get unspecified amino acids and their probabilities
+                unspecified, unspec_probs = params.get_unspecified_probabilities()
+                
+                if unspecified:
+                    # Probabilistically allocate remaining positions
+                    for _ in range(remaining_positions):
+                        # Choose amino acid based on probabilities
+                        chosen_idx = np.random.choice(len(unspecified), p=unspec_probs)
+                        chosen_aa = unspecified[chosen_idx]
+                        unspecified_aa_counts[chosen_aa] = unspecified_aa_counts.get(chosen_aa, 0) + 1
                 else:
-                    sequence = indices
-
-                sequences.append(sequence)
+                    # If no unspecified amino acids, distribute remaining positions
+                    # among specified amino acids (this is rare but possible)
+                    specified_aas = list(specified_aa_counts.keys())
+                    if specified_aas:
+                        for i in range(remaining_positions):
+                            aa = specified_aas[i % len(specified_aas)]
+                            specified_aa_counts[aa] += 1
+            
+            # Combine all counts
+            all_aa_counts = {**specified_aa_counts, **unspecified_aa_counts}
+            
+            # Create a pool of amino acids based on counts
+            aa_pool = []
+            for aa, count in all_aa_counts.items():
+                aa_pool.extend([aa] * count)
+            
+            # Verify we have the right number of amino acids
+            assert len(aa_pool) == use_length, f"Expected {use_length} amino acids, got {len(aa_pool)}"
+            
+            # Shuffle the pool to randomize order
+            np.random.shuffle(aa_pool)
+            
+            # Convert to string
+            if convert_to_amino_acids:
+                sequences.append(''.join(aa_pool))
+            else:
+                # Convert to indices if not converting to amino acids
+                sequence_indices = [self.aa_to_idx[aa] for aa in aa_pool]
+                sequences.append(sequence_indices)
             
         return sequences
 

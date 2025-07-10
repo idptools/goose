@@ -4,7 +4,7 @@ Functionality to create a sequence from the class of amino acids.
 from goose.backend_sequence_generation.sequence_by_fractions import FractionBasedSequenceGenerator
 from typing import Dict, List, Optional, Union
 import numpy as np
-from goose.data.defined_aa_classes import aa_classes, aa_classes_by_aa, aa_class_indices
+from goose.data.defined_aa_classes import aa_classes
 
 def get_individual_amino_acid_fractions(
         length: int,
@@ -188,7 +188,8 @@ def create_sequence_by_class(
         cysteine_fraction: float = 0.0,
         histidine_fraction: float = 0.0,
         num_sequences: int = 1,
-        convert_to_amino_acids: bool = True) -> Union[str, List[str]]:
+        convert_to_amino_acids: bool = True,
+        remaining_probabilities: dict = None) -> Union[str, List[str]]:
     '''
     Create sequence(s) based on the specified amino acid class fractions.
     
@@ -222,6 +223,9 @@ def create_sequence_by_class(
         Number of sequences to generate (default: 1).
     convert_to_amino_acids : bool
         If True, convert the generated sequences to amino acid strings.
+    remaining_probabilities : dict, optional
+        Custom probabilities for amino acids. If provided, these will override
+        the default probabilities used by the FractionBasedSequenceGenerator.
     Returns:
     --------
     Union[str, List[str]]
@@ -287,7 +291,8 @@ def create_sequence_by_class(
         fractions=aa_fractions,
         randomize_unspecified=False,  # We've already filled everything
         normalize=False,  # Don't normalize again since we just did it
-        strict=True  # Use strict mode for exact counts
+        strict=True,  # Use strict mode for exact counts
+        default_remaining_probabilities=remaining_probabilities if remaining_probabilities else None
         )
     
     sequences = generator.generate_sequences(num_sequences=num_sequences,
