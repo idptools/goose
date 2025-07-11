@@ -6,8 +6,8 @@ import random
 import numpy as np
 import metapredict as meta
 from numpy.lib.stride_tricks import sliding_window_view
-from goose import parameters
 from goose import goose_exceptions
+from goose.backend import parameters
 from goose.backend_property_calculation.calculate_properties_batch import matrices_to_sequences
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa
 from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy
@@ -445,6 +445,7 @@ def by_fractions(length,
         # generate starter sequences with specified properties
         seqs = seq_gen.generate_sequences(num_sequences=cur_batch_size)
 
+
         # finally, check for disorder.
         seqs = check_disorder(seqs, strict_disorder=strict_disorder,
                                         disorder_cutoff=disorder_cutoff,
@@ -452,19 +453,18 @@ def by_fractions(length,
                                         max_total_ordered=max_total_ordered,
                                         metapredict_version=metapredict_version,
                                         return_best_sequence=True)
-        
+
         # the check_disordered_vectorized only returns a string if the sequence doesn't make
         # the cutoff for bieng disordered. Try to optimize it. 
         # only attempt to optimize if we have a batch size larger than 128.
-        if cur_batch_size > 128:
-            if isinstance(seqs, str):
+        if isinstance(seqs, str):
+            if cur_batch_size > 128:
                 # means we got back a single sequence as a string and therefore have 
                 # a sequence not disordered. Try to optimize. 
                 # first try making 100 shuffles of the sequence we got back and checking disorder for that.
                 # this is a bit of a hack, but it works.
                 shuff_seqs = [seqs]
                 seqs=list(seqs) # convert to list for consistency
-                
                 # shuffle the sequence 256 times
                 for _ in range(256):
                     # shuffle the sequence
@@ -491,9 +491,15 @@ def by_fractions(length,
                     else:
                         # if we still have a string, we failed to make a sequence that meets the disorder cutoff
                         continue
+            else:
+                continue
         
         # if we have a list of sequences, check if they are empty
         if seqs == []:
+            continue
+
+        if seqs is None:
+            # if we got back None, we failed to make a sequence that meets the disorder cutoff
             continue
         
         # if return_all_sequences, return seqs
@@ -501,15 +507,22 @@ def by_fractions(length,
             return seqs
         else:
             # return a single sequence
-            return random.choice(seqs)
+            if isinstance(seqs, list):
+                if len(seqs) == 0:
+                    continue
+            # if we have a list of sequences, return a random one
+            if isinstance(seqs, list):
+                # if we have a string, return it as a list
+                seqs = random.choice(seqs)
+            # return a random sequence from the list
+            return seqs
     
     # if we get here, we didn't find any sequences that met the criteria
     return None
 
 
     
-def by_class(seq_length,
-                            length: int,
+def by_class(length: int,
                             aromatic_fraction: float = 0.0,
                             aliphatic_fraction: float = 0.0,
                             polar_fraction: float = 0.0,
@@ -523,7 +536,8 @@ def by_class(seq_length,
                             disorder_cutoff=parameters.DISORDER_THRESHOLD,
                             metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                             max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
-                            max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION):
+                            max_total_ordered=parameters.ALLOWED_TOTAL_ORDERED_FRACTION,
+                            remaining_probabilities=None):
     """
     Generate a sequence of a specified length with specific amino acid class fractions.
     Non-specified classes will be randomly filled in. 
@@ -563,6 +577,9 @@ def by_class(seq_length,
     max_total_ordered : float or int, default=0.05
         If float (0-1): Maximum fraction of residues allowed to be below the cutoff
         If int (>1): Maximum absolute number of residues allowed to be below the cutoff
+    remaining_probabilities : dict, optional
+        Dictionary of probabilities for the unspecified amino acid classes.
+        If not provided, the unspecified classes will be filled randomly.
 
     Returns
     -------
@@ -573,7 +590,7 @@ def by_class(seq_length,
     for _ in range(num_attempts):
         # Call the create_sequence_by_class function to
         # generate the sequence with specified class fractions
-        seq = create_sequence_by_class(seq_length, length=length,
+        seq = create_sequence_by_class(length,
                             aromatic_fraction=aromatic_fraction,
                             aliphatic_fraction=aliphatic_fraction,
                             polar_fraction=polar_fraction,
@@ -583,7 +600,8 @@ def by_class(seq_length,
                             proline_fraction=proline_fraction,
                             cysteine_fraction=cysteine_fraction,
                             histidine_fraction=histidine_fraction,
-                            num_sequences=32)
+                            num_sequences=32,
+                            remaining_probabilities=remaining_probabilities)
         
         # check disorder
         disordered_seqs = check_disorder(seq, strict_disorder=strict_disorder,

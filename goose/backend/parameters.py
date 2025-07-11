@@ -31,15 +31,6 @@ MAXIMUM_HYDRO_ERROR = 0.07
 MAXIMUM_KAPPA_ERROR=0.03
 MAXIMUM_RG_RE_ERROR=0.5
 
-# Empirically determined Rg / Re min and max based on length.
-def get_min_re(length):
-  return stat.sqrt(length+(length/2.8))+5
-def get_max_re(length):
-  return stat.sqrt(length+(length*140))-10
-def get_max_rg(length):
-  return stat.sqrt(length+(length*24))-4
-def get_min_rg(length):
-  return stat.sqrt(length+(length/200))+2
 
 # thresholds
 DISORDER_THRESHOLD = 0.5
@@ -103,3 +94,46 @@ MAX_CLASS_FRACTIONS = {
 }
 
 VALID_AMINO_ACIDS = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+
+
+# functions to calculate max or min values. 
+def calculate_max_charge(hydropathy):
+    '''    
+    Function to determine the maximum charge value depending
+    on the objective hydropathy of a sequence. Empirically 
+    determined by having GOOSE try to generate tons of different
+    FCR / NCPR / hydropathy sequences and determining the slope of
+    the line that is the cutoff between values that can generate
+    disordered sequences vs. those that can't. 
+
+    Parameters
+    ----------
+    hydropathy : Float
+        The objective hydropathy for the final sequence
+
+    Returns
+    -------
+        The maximum possible charge that a sequence can have
+        for a specific hydropathy value. Two different equations
+        were determined that differ slightly depending on the version
+        of metapredict used. Takes the minimum of both in order to maximize
+        chances that the user stays in a regime where a disordered sequence
+        can be generated.
+
+    '''
+    # calculate the maximum charge values for a given hydropathy
+    MAXIMUM_CHARGE_WITH_HYDRO_1 = 1.1907 + (-0.1389 * hydropathy)
+    MAXIMUM_CHARGE_WITH_HYDRO_2 = 1.2756 + (-0.1450 * hydropathy)
+    # return the lower value between the 2 possibilities.
+    # can't have FCR > 1. so 1 is also in the list
+    return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2, 1])
+
+# Empirically determined Rg / Re min and max based on length.
+def get_min_re(length):
+  return stat.sqrt(length+(length/2.8))+5
+def get_max_re(length):
+  return stat.sqrt(length+(length*140))-10
+def get_max_rg(length):
+  return stat.sqrt(length+(length*24))-4
+def get_min_rg(length):
+  return stat.sqrt(length+(length/200))+2

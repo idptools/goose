@@ -36,6 +36,7 @@ class SequenceParameters:
         self.fcr_range = (0, 1)
         self.ncpr_range = (-1, 1)
 
+    @staticmethod
     def _calculate_max_fcr(target_hydropathy: float) -> float:
         """
         Calculate the maximum fraction of charged residues based on target hydropathy.
@@ -50,6 +51,7 @@ class SequenceParameters:
         return np.clip(max_fcr, 0.0, 1.0) 
 
 
+    @staticmethod
     def _calculate_charged_residues(target_fcr, target_ncpr, objective_length):
         if target_ncpr > target_fcr:
             raise Exception('cannot have objective NCPR greater than objective FCR.')
@@ -60,6 +62,7 @@ class SequenceParameters:
         return positive_charged_residues, negative_charged_residues
 
 
+    @staticmethod
     def _get_necessary_hydropathy_value_with_charge(sequence_length: float,
                                                     target_hydropathy: float,
                                                     target_fcr: float,
@@ -201,15 +204,29 @@ class SequenceGenerator:
             if hydropathy is not None:
                 # get max FCR
                 max_fcr = SequenceParameters._calculate_max_fcr(hydropathy)
+                
+                # Validate provided FCR against hydropathy constraints
+                if fcr is not None and fcr > max_fcr:
+                    raise ValueError(f"FCR {fcr} exceeds maximum allowed FCR {max_fcr:.3f} for hydropathy {hydropathy}")
+                
                 # have max FCR already calculated. Just need to get min FCR and NCPR
                 if fcr is None:
                     if ncpr is not None:
                         min_fcr = abs(ncpr)
+                        # Check if constraints are satisfiable
+                        if min_fcr > max_fcr:
+                            raise ValueError(f"Cannot satisfy constraints: |NCPR| {abs(ncpr)} > max FCR {max_fcr:.3f} for hydropathy {hydropathy}")
                     else:
                         min_fcr = 0.0
                     fcr = np.random.uniform(low=min_fcr, high=max_fcr)
+                
+                # Validate and set NCPR
                 if ncpr is None:
                     ncpr = np.random.uniform(-fcr, fcr)
+                else:
+                    # Validate that NCPR is within valid range for the FCR
+                    if abs(ncpr) > fcr:
+                        raise ValueError(f"NCPR {ncpr} is outside valid range [-{fcr}, {fcr}] for FCR {fcr}")
                 
                 
             # Otherwise, choose parameters based on charge constraints
@@ -217,11 +234,17 @@ class SequenceGenerator:
                 if fcr is None:
                     if ncpr is not None:
                         min_fcr = abs(ncpr) 
+                        fcr = np.random.uniform(low=min_fcr, high=1.0)
                     else:
                         min_fcr = 0.0
-                    fcr = np.random.uniform(low=min_fcr, high=1.0)
+                        fcr = np.random.beta(1, 2)
+                    
                 if ncpr is None:
                     ncpr = np.random.uniform(-fcr, fcr)
+                else:
+                    # Validate that NCPR is within valid range for the FCR
+                    if abs(ncpr) > fcr:
+                        raise ValueError(f"NCPR {ncpr} is outside valid range [-{fcr}, {fcr}] for FCR {fcr}")
                 
                 # Calculate hydropathy range based on FCR
                 max_hydropathy = (1-fcr) * 9.0

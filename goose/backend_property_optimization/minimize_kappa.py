@@ -67,7 +67,7 @@ def calc_sigma_windows(ternarized_seqs, window_size, overall_asymmetry):
     return squared_diffs
 
 
-def efficient_kappa_minimization(seq_matrices, max_iterations=1000):
+def efficient_kappa_minimization(seq_matrices, max_iterations=1000, fixed_indices=None):
     """
     Efficiently minimize kappa by targeting the most problematic windows.
     
@@ -77,6 +77,8 @@ def efficient_kappa_minimization(seq_matrices, max_iterations=1000):
         2D array of sequence matrices (shape: n_sequences x sequence_length)
     max_iterations : int, default=1000
         Maximum number of optimization iterations
+    fixed_indices : list or np.ndarray, optional
+        Indices to keep constant during optimization. If None, all positions can be modified.
         
     Returns
     -------
@@ -90,6 +92,16 @@ def efficient_kappa_minimization(seq_matrices, max_iterations=1000):
 
     # get num seqs, seq_length
     n_sequences, seq_length = ternary_seqs.shape
+    
+    # Handle fixed indices
+    if fixed_indices is not None:
+        fixed_indices = np.array(fixed_indices)
+        # Create a mask for positions that can be modified
+        modifiable_mask = np.ones(seq_length, dtype=bool)
+        modifiable_mask[fixed_indices] = False
+        modifiable_indices = np.where(modifiable_mask)[0]
+    else:
+        modifiable_indices = np.arange(seq_length)
     
     # Calculate initial kappa scores
     current_kappa = kappa(seq_matrices)
@@ -108,7 +120,7 @@ def efficient_kappa_minimization(seq_matrices, max_iterations=1000):
     window_size=6
     
     # Pre-compute charged positions for all sequences (done once)
-    all_charged_positions = precompute_charged_positions(ternary_seqs)
+    all_charged_positions = precompute_charged_positions(ternary_seqs, modifiable_indices)
     
     # main loop
     for iteration in range(max_iterations):
@@ -151,6 +163,10 @@ def efficient_kappa_minimization(seq_matrices, max_iterations=1000):
                     # Find all positions with different charges (vectorized)
                     different_charges = np.where(ternary_seqs[seq_idx] != from_charge)[0]
                     different_charges = different_charges[different_charges != from_pos]
+                    
+                    # Filter out fixed indices from potential swap targets
+                    if fixed_indices is not None:
+                        different_charges = different_charges[~np.isin(different_charges, fixed_indices)]
                     
                     if len(different_charges) == 0:
                         continue
@@ -249,13 +265,24 @@ def efficient_kappa_minimization(seq_matrices, max_iterations=1000):
                 # Shuffle the sequence randomly while preserving charge counts
                 # Get current sequence
                 current_seq = ternary_seqs[seq_idx].copy()
-                # Generate random permutation indices
-                perm_indices = np.random.permutation(len(current_seq))
-                # Apply permutation to preserve charge counts
-                ternary_seqs[seq_idx] = current_seq[perm_indices]
+                
+                # Only shuffle modifiable positions if fixed_indices is specified
+                if fixed_indices is not None:
+                    # Create a copy of the sequence to modify
+                    shuffled_seq = current_seq.copy()
+                    # Only shuffle the modifiable positions
+                    modifiable_values = current_seq[modifiable_indices]
+                    np.random.shuffle(modifiable_values)
+                    shuffled_seq[modifiable_indices] = modifiable_values
+                    ternary_seqs[seq_idx] = shuffled_seq
+                else:
+                    # Generate random permutation indices for entire sequence
+                    perm_indices = np.random.permutation(len(current_seq))
+                    # Apply permutation to preserve charge counts
+                    ternary_seqs[seq_idx] = current_seq[perm_indices]
             
             # Update charged positions after shuffling
-            all_charged_positions = precompute_charged_positions(ternary_seqs)
+            all_charged_positions = precompute_charged_positions(ternary_seqs, modifiable_indices)
         
         # Recalculate global asymmetry after changes
         overall_asymmetry = calc_global_sigma(ternary_seqs)
@@ -368,7 +395,7 @@ def batch_evaluate_moves(ternary_seq, from_pos, to_positions, window_size,
     
     return improvements
 
-def precompute_charged_positions(ternary_seqs):
+def precompute_charged_positions(ternary_seqs, modifiable_indices=None):
     """
     Pre-compute charged positions for all sequences to avoid repeated calculations.
     
@@ -376,11 +403,13 @@ def precompute_charged_positions(ternary_seqs):
     ----------
     ternary_seqs : np.ndarray
         2D array of ternary sequences
+    modifiable_indices : np.ndarray, optional
+        Indices that can be modified during optimization. If None, all positions are modifiable.
         
     Returns
     -------
     list
-        List of arrays containing charged positions for each sequence
+        List of arrays containing charged positions for each sequence that can be modified
     """
     n_sequences = ternary_seqs.shape[0]
     charged_positions = []
@@ -388,6 +417,11 @@ def precompute_charged_positions(ternary_seqs):
     for seq_idx in range(n_sequences):
         # Find all charged positions (not neutral)
         charged_pos = np.where(ternary_seqs[seq_idx] != 0)[0]
+        
+        # Filter to only include modifiable positions
+        if modifiable_indices is not None:
+            charged_pos = charged_pos[np.isin(charged_pos, modifiable_indices)]
+        
         charged_positions.append(charged_pos)
     
     return charged_positions

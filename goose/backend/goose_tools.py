@@ -6,8 +6,8 @@ import csv
 
 from goose.goose_exceptions import GooseError, GooseInputError
 from goose.backend import parameters
-from goose.backend.sequence_generation_backend import calculate_max_charge
-
+from goose.backend.parameters import calculate_max_charge
+from goose.data.aa_list_probabilities import idr_probabilities
 
 def check_valid_kwargs(kwargs_dict, valid_keywords):
     """
@@ -520,9 +520,9 @@ def check_basic_parameters(num_attempts=None,
         for aa, prob in custom_probabilities.items():
             if aa not in parameters.VALID_AMINO_ACIDS:
                 raise GooseInputError(f'Invalid amino acid {aa} in custom probabilities.')
-            if prob < 0 or prob > 1:
+            if prob < 0 or round(prob,8) > 1:
                 raise GooseInputError(f'Probability for {aa} must be between 0 and 1, got {prob}.')
-        total_prob = sum(custom_probabilities.values())
+        total_prob = round(sum(custom_probabilities.values()),8)
         if total_prob > 1:
             raise GooseInputError(f'Total probability of custom probabilities exceeds 1, got {total_prob}.')
     
@@ -548,3 +548,42 @@ def gen_random_name():
         random_name += str(random.randint(0, 9))
     return random_name    
 
+def handle_custom_probabilities(custom_probabilities):
+    """
+    Function to handle custom probabilities for amino acid generation.
+    
+    Parameters
+    -----------
+    custom_probabilities : dict or str
+        Custom amino acid probabilities or a string indicating a predefined set.
+
+    Returns
+    --------
+    dict
+        A dictionary of amino acid probabilities.
+    """
+    if isinstance(custom_probabilities, str):
+        # make lowercase since all keys are lowercase.
+        custom_probabilities=custom_probabilities.lower()
+        # make sure is valid option
+        if custom_probabilities in idr_probabilities:
+            return idr_probabilities[custom_probabilities]
+        else:
+            raise GooseInputError(f'Invalid custom probabilities string: {custom_probabilities}. Options are: {", ".join(idr_probabilities.keys())}.')
+    
+    elif isinstance(custom_probabilities, dict):
+        # verify that the keys are valid amino acids and values are probabilities
+        for aa, prob in custom_probabilities.items():
+            if aa not in parameters.VALID_AMINO_ACIDS:
+                raise GooseInputError(f'Invalid amino acid {aa} in custom probabilities.')
+            if prob < 0 or prob > 1:
+                raise GooseInputError(f'Probability for {aa} must be between 0 and 1, got {prob}.')
+        total_prob = sum(custom_probabilities.values())
+        if total_prob > 1:
+            raise GooseInputError(f'Total probability of custom probabilities exceeds 1, got {total_prob}.')
+    else:
+        raise GooseInputError('Custom probabilities must be a dictionary or a valid string.')
+    
+    # If we reach here, the custom probabilities are valid
+    # Return the custom probabilities dictionary    
+    return custom_probabilities

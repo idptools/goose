@@ -9,8 +9,8 @@ import random
 
 from sparrow.protein import Protein
 
-from goose import parameters
-from goose.parameters import get_min_re, get_max_re, get_min_rg, get_max_rg
+from goose.backend import parameters
+from goose.backend.parameters import get_min_re, get_max_re, get_min_rg, get_max_rg
 from goose.backend_sequence_generation.sequence_generation import by_properties
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa
 from goose.backend_sequence_generation.sequence_by_class import create_sequence_by_class
@@ -76,7 +76,7 @@ def shuffle_except_specific_regions_sequence(input_sequence: str,
         seq_list[idx] = new_aa
     return ''.join(seq_list)
 
-def shuffle_except_specific_residues(input_sequence: str,
+def shuffle_except_specific_residues_sequence(input_sequence: str,
                              excluded_residues: list) -> str:
     """
     Generate a variant of the input sequence by shuffling residues not specified in exclude_indices.
@@ -99,17 +99,6 @@ def shuffle_except_specific_residues(input_sequence: str,
     This function can take in class names (e.g. 'charged', 'polar') as well as individual amino acids.
     
     """
-    # dict of classes that are possible to choose
-    classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
-    ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
-
-    if isinstance(excluded_residues, str):
-        if excluded_residues in classdict:
-            # if target_aas is a class, get the list of amino acids in that class
-            excluded_residues = classdict[excluded_residues]
-        else:
-            # if target_aas is a single amino acid, convert to list
-            excluded_residues = list(excluded_residues)
 
     # Convert input sequence to a list for easier manipulation
     seq_list = list(input_sequence)
@@ -153,18 +142,6 @@ def shuffle_specific_residues_sequence(input_sequence: str,
     This function can take in class names (e.g. 'charged', 'polar') as well as individual amino acids.
 
     '''
-    # dict of classes that are possible to choose
-    classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
-    ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
-
-    if isinstance(target_residues, str):
-        if target_residues in classdict:
-            # if target_aas is a class, get the list of amino acids in that class
-            target_residues = classdict[target_residues]
-        else:
-            # if target_aas is a single amino acid, convert to list
-            target_residues = list(target_residues)
-
     # Convert input sequence to a list for easier manipulation
     seq_list = list(input_sequence)
     
@@ -208,17 +185,6 @@ def weighted_shuffle_specific_residues_sequence(sequence, target_aas, shuffle_we
         a weight between 0.0-1.0 representing the probability of 
         moving a residue during shuffling
     '''
-    # dict of classes that are possible to choose
-    classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
-    ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
-
-    if isinstance(target_aas, str):
-        if target_aas in classdict:
-            # if target_aas is a class, get the list of amino acids in that class
-            target_aas = classdict[target_aas]
-        else:
-            # if target_aas is a single amino acid, convert to list
-            target_aas = list(target_aas)
 
     # define probabilities of not relocating a residue and relocating a residue, respectively
     shuffle_weights=[1-shuffle_weight, shuffle_weight]
@@ -283,27 +249,10 @@ def targeted_reposition_specific_residues_sequence(input_sequence: str,
     ValueError
         If target_residues contains invalid amino acids or class names.
     """
-    # Define amino acid classes
-    amino_acid_classes = {
-        'charged': ['D', 'E', 'K', 'R'], 
-        'polar': ['Q', 'N', 'S', 'T'], 
-        'aromatic': ['F', 'W', 'Y'], 
-        'aliphatic': ['I', 'V', 'L', 'A', 'M'], 
-        'negative': ['D', 'E'], 
-        'positive': ['K', 'R']
-    }
-    
+
     # Valid amino acids
     valid_amino_acids = set('ACDEFGHIKLMNPQRSTVWY')
-    
-    # Process target_residues input
-    if isinstance(target_residues, str):
-        if target_residues in amino_acid_classes:
-            target_residues = amino_acid_classes[target_residues]
-        else:
-            # Convert single amino acid string to list
-            target_residues = list(target_residues.upper())
-    
+
     # Validate target residues
     if not isinstance(target_residues, list):
         raise ValueError("target_residues must be a string (class name or amino acids) or list of amino acids")
@@ -397,17 +346,6 @@ def change_residue_asymmetry_sequence(sequence: str,
     the asymmetry of the specified residues. It will not change the overall composition
     of the sequence, but will change the distribution of the specified residues.
     """
-    # dict of classes that are possible to choose
-    classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
-    ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
-
-    if isinstance(target_residues, str):
-        if target_residues in classdict:
-            # if target_aas is a class, get the list of amino acids in that class
-            target_residues = classdict[target_residues]
-        else:
-            # if target_aas is a single amino acid, convert to list
-            target_residues = list(target_residues)
 
     for _ in range(num_changes):
         if increase_or_decrease == 'increase':
@@ -454,6 +392,9 @@ def constant_residues_and_properties_sequence(sequence: str,
     # make sequence without specified residues
     modified_sequence = ''.join([aa for aa in sequence if aa not in constant_residues])
     
+    # get indices of constant residues
+    constant_indices = [i for i, aa in enumerate(sequence) if aa in constant_residues]
+
     # Handle edge case where all residues are constant
     if len(modified_sequence) == 0:
         return sequence  # Return original sequence if nothing to vary
@@ -474,7 +415,7 @@ def constant_residues_and_properties_sequence(sequence: str,
             ncpr=original_NCPR,
             hydropathy=original_hydropathy,
             kappa=original_kappa,
-            check_disorder=False,
+            check_sequence_disorder=False,
             batch_size=200,
             exclude_residues=constant_residues
         )
@@ -566,6 +507,33 @@ def constant_residues_and_properties_sequence(sequence: str,
         if not check_hydropathy(final_sequence, target_hydropathy, hydropathy_tolerance):
             # if not within hydropathy tolerance, skip this sequence
             continue
+        # check kappa
+        final_sequence_protein = Protein(final_sequence)
+        if not np.isclose(final_sequence_protein.kappa, Protein(sequence).kappa, atol=parameters.MAXIMUM_KAPPA_ERROR):
+            # optimize kappa
+            if Protein(sequence).kappa > 0:
+                final_sequence = optimize_kappa(
+                    [final_sequence],
+                    target_kappa=Protein(sequence).kappa,
+                    num_iterations=1000,
+                    convert_input_seq_to_matrix=True,
+                    inputting_matrix=False,
+                    kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR,
+                    only_return_within_tolerance=True,
+                    return_when_num_hit=1,
+                    avoid_shuffle=False,
+                    num_copies=10,
+                    fixed_indices=constant_indices
+                )
+                if final_sequence is None or len(final_sequence) == 0:
+                    # if we don't have a sequence within kappa tolerance, skip this sequence
+                    continue
+                
+                # Get the first sequence from the list
+                final_sequence = final_sequence[0]
+        
+        # If we reach here, we have a valid sequence
+        # Append the final sequence to the list of all sequences
         all_sequences.append(final_sequence)
 
     if all_sequences==[]:
@@ -642,21 +610,22 @@ def constant_properties_and_class_sequence(sequence: str,
             return None
 
     # finally, optimize kappa to get it to the original kappa
-    new_sequence = optimize_kappa(
-        [new_sequence],
-        target_kappa=original_kappa,
-        num_iterations=1000,
-        convert_input_seq_to_matrix=True,
-        inputting_matrix=False,
-        kappa_tolerance=kappa_tolerance,
-        only_return_within_tolerance=True,
-        return_when_num_hit=1,
-        avoid_shuffle=False,
-        num_copies=10
-    )
-    # if we don't have a sequence within kappa tolerance, return None. 
-    if new_sequence is None or len(new_sequence) == 0:
-        return None
+    if original_kappa > 0:
+        new_sequence = optimize_kappa(
+            [new_sequence],
+            target_kappa=original_kappa,
+            num_iterations=1000,
+            convert_input_seq_to_matrix=True,
+            inputting_matrix=False,
+            kappa_tolerance=kappa_tolerance,
+            only_return_within_tolerance=True,
+            return_when_num_hit=1,
+            avoid_shuffle=False,
+            num_copies=10
+        )
+        # if we don't have a sequence within kappa tolerance, return None. 
+        if new_sequence is None or len(new_sequence) == 0:
+            return None
     
     # Get the first sequence from the list
     new_sequence = new_sequence[0]  
@@ -900,21 +869,22 @@ def change_fcr_minimize_class_changes_sequence(sequence: str,
     # make sure we can have a non negative kappa value. 
     if Protein(sequence).FCR != 0:
         if round(abs(Protein(sequence).NCPR),8) != round(Protein(sequence).FCR,8):
-            # finally, optimize kappa to get it to the original kappa
-            sequence = optimize_kappa(
-                [sequence],
-                target_kappa=starting_kappa,
-                num_iterations=5000,
-                convert_input_seq_to_matrix=True,
-                inputting_matrix=False,
-                kappa_tolerance=kappa_tolerance,
-                return_when_num_hit=1,
-                avoid_shuffle=True,
-                num_copies=10
-            )
-            if sequence is None or len(sequence) == 0:
-                return None
-            sequence = sequence[0]
+            if starting_kappa > 0:
+                # finally, optimize kappa to get it to the original kappa
+                sequence = optimize_kappa(
+                    [sequence],
+                    target_kappa=starting_kappa,
+                    num_iterations=5000,
+                    convert_input_seq_to_matrix=True,
+                    inputting_matrix=False,
+                    kappa_tolerance=kappa_tolerance,
+                    return_when_num_hit=1,
+                    avoid_shuffle=True,
+                    num_copies=10
+                )
+                if sequence is None or len(sequence) == 0:
+                    return None
+                sequence = sequence[0]
 
     return sequence
 
@@ -1185,20 +1155,21 @@ def change_properties_minimize_differences_sequence(input_sequence: str,
 
     # Step 5: Optimize kappa
     if target_kappa is not None:
-        input_sequence = optimize_kappa(
-            [input_sequence],
-            target_kappa=target_kappa,
-            num_iterations=max_iterations,
-            kappa_tolerance=kappa_tolerance,
-            inputting_matrix=False,
-            convert_input_seq_to_matrix=True,
-            return_when_num_hit=1,
-            avoid_shuffle=True,
-            num_copies=10
-        )
-        if input_sequence is None:
-            return None
-        input_sequence = input_sequence[0]
+        if target_kappa > 0:
+            input_sequence = optimize_kappa(
+                [input_sequence],
+                target_kappa=target_kappa,
+                num_iterations=max_iterations,
+                kappa_tolerance=kappa_tolerance,
+                inputting_matrix=False,
+                convert_input_seq_to_matrix=True,
+                return_when_num_hit=1,
+                avoid_shuffle=True,
+                num_copies=10
+            )
+            if input_sequence is None:
+                return None
+            input_sequence = input_sequence[0]
     
     return input_sequence
 
@@ -1284,17 +1255,21 @@ def change_any_properties_sequence(sequence,
         if Protein(sequence).FCR != 0:
             # make sure sequence has a net charge not equal to fraction charge.
             if round(abs(Protein(sequence).NCPR),8) != round(Protein(sequence).FCR,8):
-                # optimize kappa
-                # use kappa optimzer
-                sequence = optimize_kappa(
-                    [sequence],
-                    target_kappa=target_kappa,
-                    kappa_tolerance=kappa_tolerance,
-                    return_when_num_hit=1,
-                    inputting_matrix=False,
-                    convert_input_seq_to_matrix=True,
-                    num_copies=10
-                )[0]
+                if target_kappa > 0:
+                    # optimize kappa
+                    # use kappa optimzer
+                    sequence = optimize_kappa(
+                        [sequence],
+                        target_kappa=target_kappa,
+                        kappa_tolerance=kappa_tolerance,
+                        return_when_num_hit=1,
+                        inputting_matrix=False,
+                        convert_input_seq_to_matrix=True,
+                        num_copies=10
+                    )
+                    if sequence is None or len(sequence) == 0:
+                        return None
+                    sequence = sequence[0]  # Get the first sequence from the list
     # return sequence
     return sequence
 

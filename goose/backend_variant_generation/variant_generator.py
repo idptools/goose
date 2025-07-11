@@ -10,10 +10,11 @@ This works as follows:
 """
 import random
 from sparrow.protein import Protein
+from goose.backend import parameters
 from goose.backend_sequence_generation.sequence_generation import by_properties
 from goose.backend_variant_generation.helper_functions import check_variant_disorder_vectorized
 from goose.backend_variant_generation import variant_sequence_generation as vsg
-from goose.backend import parameters
+
 
 
 class VariantGenerator:
@@ -175,6 +176,25 @@ class VariantGenerator:
         str
             A generated variant sequence with specified residues shuffled.
         """
+        # dict of classes that are possible to choose
+        classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
+        ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+        
+        # if input is a class as a list, pull the first element
+        if isinstance(target_residues, list):
+            if target_residues[0] in classdict:
+                target_residues=target_residues[0] 
+        
+        # if string is the input, see if its the classdict or amino acids. 
+        if isinstance(target_residues, str):
+            if target_residues in classdict:
+                # if target_aas is a class, get the list of amino acids in that class
+                target_residues = classdict[target_residues]
+            else:
+                # if target_aas is a single amino acid, convert to list
+                target_residues = list(target_residues)
+
+
         for _ in range(self.num_attempts):
             shuff_seqs = []
             for _ in range(10):
@@ -204,6 +224,23 @@ class VariantGenerator:
         str
             A generated variant sequence with specified residues excluded from shuffling.
         """
+        # dict of classes that are possible to choose
+        classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
+        ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+
+        # if input is a class as a list, pull the first element
+        if isinstance(excluded_residues, list):
+            if excluded_residues[0] in classdict:
+                excluded_residues=excluded_residues[0] 
+
+        if isinstance(excluded_residues, str):
+            if excluded_residues in classdict:
+                # if target_aas is a class, get the list of amino acids in that class
+                excluded_residues = classdict[excluded_residues]
+            else:
+                # if target_aas is a single amino acid, convert to list
+                excluded_residues = list(excluded_residues) 
+
         for _ in range(self.num_attempts):
             shuff_seqs = []
             for _ in range(10):
@@ -240,6 +277,24 @@ class VariantGenerator:
         str
             A generated variant sequence with specified residues shuffled.
         """
+
+        # dict of classes that are possible to choose
+        classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
+        ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+
+        # if input is a class as a list, pull the first element
+        if isinstance(target_aas, list):
+            if target_aas[0] in classdict:
+                target_aas=target_aas[0] 
+
+        if isinstance(target_aas, str):
+            if target_aas in classdict:
+                # if target_aas is a class, get the list of amino acids in that class
+                target_aas = classdict[target_aas]
+            else:
+                # if target_aas is a single amino acid, convert to list
+                target_aas = list(target_aas)
+                        
         for _ in range(self.num_attempts):
             variant_sequence = vsg.weighted_shuffle_specific_residues_sequence(
                 input_sequence,
@@ -273,6 +328,29 @@ class VariantGenerator:
         str
             A generated variant sequence with specified residues repositioned.
         """
+        # Define amino acid classes
+        amino_acid_classes = {
+            'charged': ['D', 'E', 'K', 'R'], 
+            'polar': ['Q', 'N', 'S', 'T'], 
+            'aromatic': ['F', 'W', 'Y'], 
+            'aliphatic': ['I', 'V', 'L', 'A', 'M'], 
+            'negative': ['D', 'E'], 
+            'positive': ['K', 'R']
+        }
+
+        # if input is a class as a list, pull the first element
+        if isinstance(target_aas, list):
+            if target_aas[0] in amino_acid_classes:
+                target_aas=target_aas[0] 
+
+        # Process target_residues input
+        if isinstance(target_residues, str):
+            if target_residues in amino_acid_classes:
+                target_residues = amino_acid_classes[target_residues]
+            else:
+                # Convert single amino acid string to list
+                target_residues = list(target_residues.upper())    
+
         for _ in range(self.num_attempts):
             variant_sequence = vsg.targeted_reposition_specific_residues_sequence(
                 input_sequence,
@@ -314,6 +392,23 @@ class VariantGenerator:
         str
             A generated variant sequence with specified residues made asymmetric.
         """
+        # dict of classes that are possible to choose
+        classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
+        ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+
+        if isinstance(target_residues, list):
+            if target_residues[0] in classdict:
+                target_residues = classdict[target_residues[0]]
+
+        if isinstance(target_residues, str):
+            if target_residues in classdict:
+                # if target_aas is a class, get the list of amino acids in that class
+                target_residues = classdict[target_residues]
+            else:
+                # if target_aas is a single amino acid, convert to list
+                target_residues = list(target_residues)
+
+
         # Use a higher number of attempts for this method (as in original)
         attempts = max(self.num_attempts, 50)
 
@@ -666,7 +761,7 @@ class VariantGenerator:
             A generated variant sequence that meets the disorder criteria.
         """
         for _ in range(self.num_attempts):
-            variant_sequence = vsg.change_properties_minimze_differences_sequence(
+            variant_sequence = vsg.change_properties_minimize_differences_sequence(
                 input_sequence,
                 target_hydropathy=target_hydropathy,
                 target_kappa=target_kappa,

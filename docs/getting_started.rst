@@ -9,21 +9,24 @@ The main functionalities of GOOSE are:
 * Generate synthetic IDRs where you can specify length and
   * Simultaneously specify average hydrophobicity, fraction of charged residues (FCR), net charge per residue (NCPR), and kappa (quantifies opposite charge distribution)  
   * Fractions of amino acids (multiple fractions simultaneously)  
+  * Classes of amino acids (multiple classes simultaneously)  
   * End-to-end distance (Re) or radius of gyration (Rg)  
-  * Interactions between an IDR and itself or other IDRs
 * Generate sequences by sequence optimization. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can define your own functions to design sequences!
 * Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
-* Make sequence libraries spanning sequence properties or fractions of amino acids.  
 
-What is new in V0.2.0?
+What is new in V0.2.1?
 -----------------------
-The higlights of the new features in GOOSE V0.2.0 are:
+The higlights of the new features in GOOSE V0.2.1 are:
 
-* An entirely new approach to make sequences or sequence variants with SequenceOptimizer
-* Completely rewritten backend for sequence generation by specifying properties or fractions of amino acids. 
-* More efficient sequence generation means we no longer rely on weighted probabilities to make disordered sequences. This means all sequences are generated more or less randomly to match some set of sequence parameters and then checked for disorder. Thank you Numpy for making this possible.
-* Way faster kappa optimization. This helps with de novo sequence generation and variant generation.
-* Support for generating sequences with specified interactions (self interactions or interactions with other IDRs).
+* Complete overhaul of the variant generation functionality to make it easier to use and less confusing.
+* Major improvements to sequence generation to increase speed. 
+* Introduction of custom probabilities for sequence generation. This allows you to specify the probability of each amino acid in your sequence, which can be useful for generating sequences with specific properties or characteristics.
+* Addition of probabilities of amino acids in IDRs by organism based on their frequency across their proteomes. 
+* Better exploration of sequence space by reducing constraints during sequence generation.
+* Much faster kappa optimization and improvements to generate sequences with extreme kappa values.
+* Improved error handling and more informative error messages.
+* Improved documentation and examples to help users get started with GOOSE more easily.
+* Many many bug fixes. 
 
 
 For full details, see the change log `here <https://github.com/idptools/goose>`_ 
@@ -84,7 +87,7 @@ GOOSE has some important limitations that users should be aware of. First, GOOSE
 
 Allowed error in sequence properties
 -------------------------------------
-GOOSE by default allows a *small* amount of error between some user input properties and the properties of returned sequences. For hydropathy, the allowed error is 0.07, which is honestly negligible. For kappa, allowed error is 0.03. This is a balance between accuracy and speed. If you install GOOSE locally, you can go into goose/backend/properties and modify these values globally. Finally, if you choose an NCPR / FCR combination that is mathematically impossible, GOOSE will get as close as it can.
+GOOSE by default allows a *small* amount of error between some user input properties and the properties of returned sequences. For hydropathy, the allowed error is 0.07, which is honestly negligible. For kappa, allowed error is 0.03. This is a balance between accuracy and speed. You can change these values by specifying kappa_tolerance or hydropathy_tolerance in the relevant functions. In addition, if you install GOOSE locally, you can go into goose/backend/parameters and modify these values globally. Finally, if you choose an NCPR / FCR combination that is mathematically impossible, GOOSE will get as close as it can.
 
 Speed, specified properties, and stochasticity
 -----------------------------------------------

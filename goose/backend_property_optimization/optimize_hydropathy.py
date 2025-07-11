@@ -12,7 +12,7 @@ Includes:
 from typing import List, Union
 import numpy as np
 from sparrow.protein import Protein
-from goose import parameters
+from goose.backend import parameters
 from goose.backend_property_calculation.calculate_properties_batch import calculate_hydropathy_batch, sequences_to_matrices, matrices_to_sequences
 from goose.backend_property_calculation.calculate_properties_single_sequence import sequence_to_array, array_to_sequence, calculate_hydropathy_single_sequence
 from goose.data.defined_aa_classes import aa_class_indices

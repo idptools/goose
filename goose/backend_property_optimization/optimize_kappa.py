@@ -10,7 +10,7 @@ The optimization is done by moving the charged residues in the sequence.
 import random
 import numpy as np
 from typing import List
-from goose import parameters
+from goose.backend import parameters
 from goose.backend_property_calculation.calculate_kappa import charge_matrix_to_ternary, kappa
 from goose.backend_property_calculation.calculate_properties_batch import sequences_to_matrices, matrices_to_sequences
 from goose.backend_property_optimization.helper_functions import shuffle_sequence_return_matrix
@@ -26,7 +26,8 @@ def optimize_kappa(sequence, target_kappa,
                               only_return_within_tolerance=True,
                               convert_input_seq_to_matrix=False,
                               inputting_matrix=True,
-                              avoid_shuffle=False) -> List[str]:
+                              avoid_shuffle=False,
+                              fixed_indices=None) -> List[str]:
     '''
     Optimize kappa values of sequences by either increasing or decreasing charge asymmetry
     to reach a target kappa value. Optimized for performance.
@@ -46,6 +47,8 @@ def optimize_kappa(sequence, target_kappa,
         convert_input_seq_to_matrix (bool): If True, convert input sequence to matrix format before processing.
         inputting_matrix (bool): If True, inputting something ready to go. 
         avoid_shuffle (bool): If True, avoid shuffling sequences.
+        fixed_indices (list or np.ndarray, optional): Indices to keep constant during optimization.
+            If None, all positions can be modified.
     
     Returns:
         list: Sequences with kappa values optimized to be close to the target
@@ -71,7 +74,7 @@ def optimize_kappa(sequence, target_kappa,
 
         # make copies of the sequence and shuffle all but the original
         if avoid_shuffle==False:
-            sequence_matrix = shuffle_sequence_return_matrix(sequence_matrix, num_shuffles=num_copies)
+            sequence_matrix = shuffle_sequence_return_matrix(sequence_matrix, num_shuffles=num_copies, fixed_indices=fixed_indices)
         else:
             # make a matrix with num_copies of the sequence
             sequence_matrix = np.tile(sequence_matrix, (num_copies, 1))
@@ -132,12 +135,12 @@ def optimize_kappa(sequence, target_kappa,
                 # Apply increase_kappa multiple times based on max_change_iterations
                 current_seq = increase_seqs[i:i+1].copy()
                 iters = random.randint(1, max_change_iterations)
-                for _ in range(iters):
+                for i in range(iters):
                     # Use aggressive strategy when stagnation is detected
-                    if num_not_improved > 1:
-                        current_seq = increase_kappa_aggressive(current_seq, window_size=window_size)
+                    if num_not_improved%2==0:
+                        current_seq = increase_kappa_aggressive(current_seq, window_size=window_size, fixed_indices=fixed_indices)
                     else:
-                        current_seq = increase_kappa(current_seq, window_size=window_size)
+                        current_seq = increase_kappa(current_seq, window_size=window_size, fixed_indices=fixed_indices)
                 modified_sequences[idx] = current_seq[-1]
         # Process sequences that need kappa decreased
         decrease_indices = np.where(needs_decrease)[0]
@@ -149,16 +152,17 @@ def optimize_kappa(sequence, target_kappa,
                 current_seq = decrease_seqs[i:i+1].copy()
                 if target_kappa > 0.15:
                     for _ in range(iters):
-                        current_seq = decrease_kappa(current_seq)
+                        current_seq = decrease_kappa(current_seq, fixed_indices=fixed_indices)
                     modified_sequences[idx] = current_seq[-1]
                 else:
-                    result = efficient_kappa_minimization(current_seq, iters)
+                    result = efficient_kappa_minimization(current_seq, iters, fixed_indices=fixed_indices)
                     modified_sequences[idx] = result[0]
                 
         # Recalculate kappa for sequences that haven't reached target
         recalc_indices = np.where(~reached_target)[0]
         if len(recalc_indices) > 0:
             current_kappa = kappa(modified_sequences[recalc_indices], is_ternarized=True)
+
             # Check for stagnation with small tolerance to avoid floating point precision issues
             if np.all(np.abs(current_kappa - prev_kappa_values[recalc_indices]) < 1e-6):
                 num_not_improved+=1
@@ -188,14 +192,14 @@ def optimize_kappa(sequence, target_kappa,
                     window_size=6
                 else:
                     window_size=5
-            if num_not_improved > 3:
+            if num_not_improved > 5:
                 window_size=5
                 if inputting_matrix==False:
                     # should have single sequence, just make shuffles
                     if avoid_shuffle==False:
                         modified_sequences[recalc_indices] = charge_matrix_to_ternary(
                             shuffle_sequence_return_matrix(
-                            sequences_to_matrices([sequence]), num_shuffles=len(recalc_indices)))
+                            sequences_to_matrices([sequence]), num_shuffles=len(recalc_indices), fixed_indices=fixed_indices))
                     else:
                         # set the sequences unable to improve to the original sequence
                         modified_sequences[recalc_indices] = charge_matrix_to_ternary(
@@ -206,7 +210,7 @@ def optimize_kappa(sequence, target_kappa,
                     for n, idx in enumerate(recalc_indices):
                         cur_seq = sequence_matrix[idx:idx+1].copy()
                         modified_sequences[idx] = charge_matrix_to_ternary(
-                            shuffle_sequence_return_matrix(cur_seq, num_shuffles=1))[0]
+                            shuffle_sequence_return_matrix(cur_seq, num_shuffles=1, fixed_indices=fixed_indices))[0]
                 # reset num_not_improved
                 num_not_improved=0
                 

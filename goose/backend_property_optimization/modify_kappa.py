@@ -34,7 +34,7 @@ def calculate_linear_ncpr(ternarized_seqs, window_size):
     
     return linear_ncpr
 
-def decrease_kappa(ternarized_sequences):
+def decrease_kappa(ternarized_sequences, fixed_indices=None):
     '''
     Function to decrease the kappa value of a sequence by applying a sliding window approach.
     This function is vectorized for efficiency.
@@ -43,6 +43,8 @@ def decrease_kappa(ternarized_sequences):
     ----------
     ternarized_sequences : list of np.ndarray
         List of ternarized sequences, where each sequence is a 2D numpy array.
+    fixed_indices : list or np.ndarray, optional
+        Indices to keep constant during optimization. If None, all positions can be modified.
     
     Returns
     -------
@@ -54,6 +56,16 @@ def decrease_kappa(ternarized_sequences):
     n_sequences, seq_length = seqs_array.shape
     window_size = 5
     half_window = window_size // 2
+    
+    # Handle fixed indices
+    if fixed_indices is not None:
+        fixed_indices = np.array(fixed_indices)
+        # Create a mask for positions that can be modified
+        modifiable_mask = np.ones(seq_length, dtype=bool)
+        modifiable_mask[fixed_indices] = False
+        modifiable_indices = np.where(modifiable_mask)[0]
+    else:
+        modifiable_indices = np.arange(seq_length)
     
     # Calculate the linear NCPR for each sequence
     linear_ncpr = calculate_linear_ncpr(ternarized_sequences, window_size=window_size)
@@ -79,8 +91,10 @@ def decrease_kappa(ternarized_sequences):
         random_first_index = random_first_indices[seq_idx]
         random_last_index = random_last_indices[seq_idx]
 
-        # Get charged positions
+        # Get charged positions, filtered by modifiable indices
         charged_positions = np.where(np.abs(seq) == 1)[0]
+        if fixed_indices is not None:
+            charged_positions = charged_positions[np.isin(charged_positions, modifiable_indices)]
         
         # Find a charged position in the first window
         first_window_start = max(0, random_first_index - half_window)
@@ -93,10 +107,12 @@ def decrease_kappa(ternarized_sequences):
         
         random_first_pos = np.random.choice(first_window_charged_positions)
         
-        # Find a random position in the last window
+        # Find a random position in the last window, filtered by modifiable indices
         last_window_start = max(0, random_last_index - half_window)
         last_window_end = min(seq_length, random_last_index + half_window + 1)
         last_window_positions = np.arange(last_window_start, last_window_end)
+        if fixed_indices is not None:
+            last_window_positions = last_window_positions[np.isin(last_window_positions, modifiable_indices)]
         
         if len(last_window_positions) == 0:
             continue
@@ -114,7 +130,7 @@ def decrease_kappa(ternarized_sequences):
     return [modified_sequences[i] for i in range(len(modified_sequences))]
 
 
-def increase_kappa(ternarized_sequences, window_size=5):
+def increase_kappa(ternarized_sequences, window_size=5, fixed_indices=None):
     '''
     Moves a negative residue to the more negative half of the sequence and a positive residue to the more positive half of the sequence.
     Fully vectorized implementation for improved performance - removes the for loop entirely.
@@ -125,6 +141,8 @@ def increase_kappa(ternarized_sequences, window_size=5):
         List of ternarized sequences, where each sequence is a 2D numpy array.
     window_size : int, optional
         The size of the sliding window to use for calculating NCPR. Default is 5
+    fixed_indices : list or np.ndarray, optional
+        Indices to keep constant during optimization. If None, all positions can be modified.
     Returns
     -------
     list of np.ndarray
@@ -151,6 +169,16 @@ def increase_kappa(ternarized_sequences, window_size=5):
     seqs_array = np.array(ternarized_sequences)
     n_sequences, seq_length = seqs_array.shape
     
+    # Handle fixed indices
+    if fixed_indices is not None:
+        fixed_indices = np.array(fixed_indices)
+        # Create a mask for positions that can be modified
+        modifiable_mask = np.ones(seq_length, dtype=bool)
+        modifiable_mask[fixed_indices] = False
+        modifiable_indices = np.where(modifiable_mask)[0]
+    else:
+        modifiable_indices = np.arange(seq_length)
+    
     # Create modified sequences as a copy
     modified_sequences = seqs_array.copy()
     
@@ -159,13 +187,28 @@ def increase_kappa(ternarized_sequences, window_size=5):
     negative_masks = (seqs_array == -1)  # Shape: (n_sequences, seq_length)
     neutral_masks = (seqs_array == 0)    # Shape: (n_sequences, seq_length)
     
+    # Apply fixed indices constraint - only consider modifiable positions
+    if fixed_indices is not None:
+        modifiable_position_mask = np.ones(seq_length, dtype=bool)
+        modifiable_position_mask[fixed_indices] = False
+        
+        # Only consider charges at modifiable positions
+        positive_masks = positive_masks & modifiable_position_mask
+        negative_masks = negative_masks & modifiable_position_mask
+        neutral_masks = neutral_masks & modifiable_position_mask
+    
     # Create target region masks for all sequences
     positive_region_mask = np.zeros((n_sequences, seq_length), dtype=bool)
     negative_region_mask = np.zeros((n_sequences, seq_length), dtype=bool)
     
-    # Apply the same target regions to all sequences
+    # Apply the same target regions to all sequences, but only to modifiable positions
     valid_positive_positions = positive_positions[positive_positions < seq_length]
     valid_negative_positions = negative_positions[negative_positions < seq_length]
+    
+    if fixed_indices is not None:
+        # Filter target positions to only include modifiable ones
+        valid_positive_positions = valid_positive_positions[np.isin(valid_positive_positions, modifiable_indices)]
+        valid_negative_positions = valid_negative_positions[np.isin(valid_negative_positions, modifiable_indices)]
     
     positive_region_mask[:, valid_positive_positions] = True
     negative_region_mask[:, valid_negative_positions] = True
@@ -212,9 +255,15 @@ def increase_kappa(ternarized_sequences, window_size=5):
         fallback_indices = np.where(fallback_mask)[0]
         
         for seq_idx in fallback_indices:
-            neutral_positions = np.where(neutral_masks[seq_idx])[0]
-            all_positive_pos = np.where(positive_masks[seq_idx])[0]
-            all_negative_pos = np.where(negative_masks[seq_idx])[0]
+            # Only consider modifiable positions for neutral positions and charges
+            if fixed_indices is not None:
+                neutral_positions = np.where(neutral_masks[seq_idx])[0]
+                all_positive_pos = np.where(positive_masks[seq_idx])[0]
+                all_negative_pos = np.where(negative_masks[seq_idx])[0]
+            else:
+                neutral_positions = np.where(neutral_masks[seq_idx])[0]
+                all_positive_pos = np.where(positive_masks[seq_idx])[0]
+                all_negative_pos = np.where(negative_masks[seq_idx])[0]
 
             if len(neutral_positions) >= 2 and len(all_positive_pos) > 0 and len(all_negative_pos) > 0:
                 first_half_more_positive = mean_first_half[seq_idx] > mean_second_half[seq_idx]
@@ -246,7 +295,7 @@ def increase_kappa(ternarized_sequences, window_size=5):
     # Convert back to list of arrays
     return [modified_sequences[i] for i in range(len(modified_sequences))]
 
-def increase_kappa_aggressive(ternarized_sequences, window_size=5):
+def increase_kappa_aggressive(ternarized_sequences, window_size=5, fixed_indices=None):
     """
     Alternative aggressive increase_kappa function that systematically moves charges
     toward sequence ends to maximize asymmetry. This function is designed to avoid
@@ -260,6 +309,8 @@ def increase_kappa_aggressive(ternarized_sequences, window_size=5):
     window_size : int, optional
         The size of the sliding window to use for calculating NCPR. Default is 5.
         (Note: window_size is not used in this aggressive implementation but is kept for API consistency).
+    fixed_indices : list or np.ndarray, optional
+        Indices to keep constant during optimization. If None, all positions can be modified.
 
     Returns
     -------
@@ -270,12 +321,29 @@ def increase_kappa_aggressive(ternarized_sequences, window_size=5):
     seqs_array = np.array(ternarized_sequences)
     n_sequences, seq_length = seqs_array.shape
 
+    # Handle fixed indices
+    if fixed_indices is not None:
+        fixed_indices = np.array(fixed_indices)
+        # Create a mask for positions that can be modified
+        modifiable_mask = np.ones(seq_length, dtype=bool)
+        modifiable_mask[fixed_indices] = False
+        modifiable_indices = np.where(modifiable_mask)[0]
+    else:
+        modifiable_indices = np.arange(seq_length)
+
     # Create modified sequences as a copy
     modified_sequences = seqs_array.copy()
 
-    # Masks for charge positions
+    # Masks for charge positions - only consider modifiable positions
     positive_masks = (seqs_array == 1)
     negative_masks = (seqs_array == -1)
+    
+    if fixed_indices is not None:
+        # Filter masks to only include modifiable positions
+        modifiable_position_mask = np.ones(seq_length, dtype=bool)
+        modifiable_position_mask[fixed_indices] = False
+        positive_masks = positive_masks & modifiable_position_mask
+        negative_masks = negative_masks & modifiable_position_mask
 
     # Find sequences that have at least one of each charge
     valid_indices = np.where(np.any(positive_masks, axis=1) & np.any(negative_masks, axis=1))[0]
@@ -315,6 +383,9 @@ def increase_kappa_aggressive(ternarized_sequences, window_size=5):
         source_pos = pos_source[i]
         if pos_target_is_right[i]:
             target_range = np.arange(half_len, seq_length)
+            # Filter target range to only include modifiable positions
+            if fixed_indices is not None:
+                target_range = target_range[np.isin(target_range, modifiable_indices)]
             available = target_range[(seqs_array[seq_idx, target_range] != 1) & (target_range > source_pos)]
             if len(available) > 0:
                 target_pos = np.random.choice(available)
@@ -322,6 +393,9 @@ def increase_kappa_aggressive(ternarized_sequences, window_size=5):
                     temp_sequences[seq_idx, source_pos], temp_sequences[seq_idx, target_pos]
         else:
             target_range = np.arange(half_len)
+            # Filter target range to only include modifiable positions
+            if fixed_indices is not None:
+                target_range = target_range[np.isin(target_range, modifiable_indices)]
             available = target_range[(seqs_array[seq_idx, target_range] != 1) & (target_range < source_pos)]
             if len(available) > 0:
                 target_pos = np.random.choice(available)
@@ -333,6 +407,9 @@ def increase_kappa_aggressive(ternarized_sequences, window_size=5):
         source_pos = neg_source[i]
         if not pos_target_is_right[i]: # Negative target is right
             target_range = np.arange(half_len, seq_length)
+            # Filter target range to only include modifiable positions
+            if fixed_indices is not None:
+                target_range = target_range[np.isin(target_range, modifiable_indices)]
             available = target_range[(temp_sequences[seq_idx, target_range] != -1) & (target_range > source_pos)]
             if len(available) > 0:
                 target_pos = np.random.choice(available)
@@ -340,6 +417,9 @@ def increase_kappa_aggressive(ternarized_sequences, window_size=5):
                     temp_sequences[seq_idx, source_pos], temp_sequences[seq_idx, target_pos]
         else: # Negative target is left
             target_range = np.arange(half_len)
+            # Filter target range to only include modifiable positions
+            if fixed_indices is not None:
+                target_range = target_range[np.isin(target_range, modifiable_indices)]
             available = target_range[(temp_sequences[seq_idx, target_range] != -1) & (target_range < source_pos)]
             if len(available) > 0:
                 target_pos = np.random.choice(available)

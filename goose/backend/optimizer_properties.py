@@ -1048,9 +1048,9 @@ class FDSurfaceInteractionByMean(ProteinProperty):
     
     def calculate(self, protein: 'sparrow.Protein') -> float:
         # make sure we have the original epsilon vectors
-        self.loadedloaded_IMC_object_model = self.load_IMC_object()
+        self.loaded_IMC_object = self.load_IMC_object()
         self.folded_domain = self.load_folded_domain()
-        cur_net = target_fd.calculate_mean_surface_epsilon(protein.sequence, imc_obj)
+        cur_net = self.folded_domain.calculate_mean_surface_epsilon(protein.sequence, self.loaded_IMC_object)
         # get the diff
         return cur_net
 

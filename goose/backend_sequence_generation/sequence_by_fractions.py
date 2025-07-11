@@ -4,7 +4,7 @@ This allows for direct control of the amino acid composition in generated sequen
 '''
 
 import numpy as np
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from goose.data import aa_list_probabilities as aa_probs
 

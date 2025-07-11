@@ -372,7 +372,7 @@ def decrease_res_asymmetry(sequence, residues, num_attempts=100):
             window_sizes = [5]  # fallback to minimum window size if no valid sizes
         # randomly choose a window size from the list
         window_size = np.random.choice(window_sizes)
-        print(window_size)
+        
         # Calculate half window size
         half_window = window_size // 2
         

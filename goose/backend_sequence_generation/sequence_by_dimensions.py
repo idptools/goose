@@ -1,10 +1,6 @@
-import random
-
 from goose.backend import parameters
-from goose.backend.lists import disordered_list, disordered_list_reduced_charge
 from goose.backend_property_optimization.optimize_dimensions import optimize_seq_dims
 from goose.backend_property_optimization.helper_functions import generate_random_sequence
-from goose.data import aa_list_probabilities as aa_probs
 
 
 def create_seq_by_dims(seq_length, objective_dim, rg_or_re='rg',
@@ -52,21 +48,7 @@ def create_seq_by_dims(seq_length, objective_dim, rg_or_re='rg',
         If no suitable sequence is found, returns None.
 
     """
-
-    # Configure amino acid pools based on constraints
-    if reduce_pos_charged:
-        available_aas = list(disordered_list_reduced_charge)
-    else:
-        available_aas = list(disordered_list)
-    
-    # Handle amino acid exclusions
-    if exclude_aas is not None:
-        exclude_set = set(exclude_aas)
-        available_aas = [aa for aa in available_aas if aa not in exclude_set]
         
-        if not available_aas:
-            raise ValueError("Cannot exclude all available amino acids")
-    
     for _ in range(num_iterations):
         # Generate initial random sequence
         initial_sequence = generate_random_sequence(seq_length,

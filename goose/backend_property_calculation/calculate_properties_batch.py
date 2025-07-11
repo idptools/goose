@@ -2,7 +2,7 @@
 Functions for FCR, NCPR, and hydropathy to calculate properties using numpy vectorization.
 '''
 import numpy as np
-from typing import List, Union
+
 
 # from AA to INT and back
 AA_TO_INT = {'A': 0, 'C': 1, 'D': 2, 'E': 3, 'F': 4, 'G': 5, 'H': 6, 'I': 7, 
