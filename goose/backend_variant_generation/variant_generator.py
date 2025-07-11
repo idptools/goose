@@ -283,17 +283,17 @@ class VariantGenerator:
         ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
 
         # if input is a class as a list, pull the first element
-        if isinstance(target_aas, list):
-            if target_aas[0] in classdict:
-                target_aas=target_aas[0] 
+        if isinstance(target_residues, list):
+            if target_residues[0] in classdict:
+                target_residues=target_residues[0] 
 
-        if isinstance(target_aas, str):
-            if target_aas in classdict:
+        if isinstance(target_residues, str):
+            if target_residues in classdict:
                 # if target_aas is a class, get the list of amino acids in that class
-                target_aas = classdict[target_aas]
+                target_residues = classdict[target_residues]
             else:
                 # if target_aas is a single amino acid, convert to list
-                target_aas = list(target_aas)
+                target_residues = list(target_residues)
                         
         for _ in range(self.num_attempts):
             variant_sequence = vsg.weighted_shuffle_specific_residues_sequence(
@@ -339,9 +339,9 @@ class VariantGenerator:
         }
 
         # if input is a class as a list, pull the first element
-        if isinstance(target_aas, list):
-            if target_aas[0] in amino_acid_classes:
-                target_aas=target_aas[0] 
+        if isinstance(target_residues, list):
+            if target_residues[0] in amino_acid_classes:
+                target_residues = target_residues[0]
 
         # Process target_residues input
         if isinstance(target_residues, str):
@@ -782,10 +782,10 @@ class VariantGenerator:
 
     def change_any_properties(self,
                                   input_sequence: str,
-                                  target_FCR: float,
-                                  target_NCPR: float,
-                                  target_kappa: float,
-                                  target_hydropathy: float) -> str:
+                                  target_FCR: float=None,
+                                  target_NCPR: float=None,
+                                  target_kappa: float=None,
+                                  target_hydropathy: float=None) -> str:
         """
         Generate a variant sequence by constraining FCR, NCPR, kappa, and hydropathy.
         

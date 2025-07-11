@@ -1,11 +1,12 @@
 '''
 code to verify that variants maintain expected properties. 
 '''
-
+from goose import goose_exceptions
 from sparrow.protein import Protein
 from goose.data.defined_aa_classes import aa_classes, aas_to_class_nums
-from goose.data import parameters
+from goose.backend import parameters
 from goose.backend_variant_generation.helper_functions import check_variant_disorder_vectorized
+from goose.backend_property_optimization.optimize_dimensions import predict_re, predict_rg
 
 def verify_same_number_by_class(original_seq, variant_seq):
     """
@@ -41,7 +42,7 @@ def verify_constant_properties(original_seq, variant_seq,
     # Verify kappa and hydropathy values
     if abs(original_protein.kappa - variant_protein.kappa) > kappa_tolerance:
         return False
-    if abs(original_protein.hydropathy - variant_protein.hydropathy) > hydropathy_tolerance:
+    if abs(original_protein.hydrophobicity - variant_protein.hydrophobicity) > hydropathy_tolerance:
         return False
     # verify hydrophobicity
     if abs(original_protein.hydrophobicity - variant_protein.hydrophobicity) > hydropathy_tolerance:
@@ -74,7 +75,7 @@ def verify_constant_hydropathy(original_seq, variant_seq, hydropathy_tolerance=p
     original_protein = Protein(original_seq)
     variant_protein = Protein(variant_seq)
 
-    return abs(original_protein.hydropathy - variant_protein.hydropathy) < hydropathy_tolerance
+    return abs(original_protein.hydrophobicity - variant_protein.hydrophobicity) < hydropathy_tolerance
 
 def verify_constant_kappa(original_seq, variant_seq, kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR):
     """
@@ -109,7 +110,7 @@ def verify_target_hydropathy(variant_seq, hydropathy_target, hydropathy_toleranc
     Verify that the hydropathy of the variant sequence is within the specified tolerance of the target hydropathy.
     """
     variant_protein = Protein(variant_seq)
-    return abs(variant_protein.hydropathy - hydropathy_target) <= hydropathy_tolerance
+    return abs(variant_protein.hydrophobicity - hydropathy_target) <= hydropathy_tolerance
 
 def verify_target_kappa(variant_seq, kappa_target, kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR):
     """
@@ -118,10 +119,11 @@ def verify_target_kappa(variant_seq, kappa_target, kappa_tolerance=parameters.MA
     variant_protein = Protein(variant_seq)
     return abs(variant_protein.kappa - kappa_target) <= kappa_tolerance
 
-def verify_target_FCR(variant_seq, FCR_target, FCR_tolerance=0.001):
+def verify_target_FCR(variant_seq, FCR_target):
     """
     Verify that the FCR value of the variant sequence is within the specified tolerance of the target FCR.
     """
+    FCR_tolerance = 1/len(variant_seq) + 1e-6  # Tolerance based on sequence length
     variant_protein = Protein(variant_seq)
     return abs(variant_protein.FCR - FCR_target) <= FCR_tolerance
 
@@ -170,12 +172,66 @@ def verify_constant_residue_positions(original_seq, variant_seq, residues):
     # if all residues are in the same positions, return True
     return True
 
-def verify_disorder(original_seq, variant_seq, strict_disorder=False,
-                    disorder_tolerance=parameters.MAXIMUM_DISORDER_ERROR):
+def verify_disorder(original_seq, variant_seq, strict_disorder=False):
     """
     Verify that the disorder vector of the original sequence is the same as the variant sequence.
     This is done using a vectorized approach for efficiency.
     """
-    if check_variant_disorder_vectorized(original_seq, variant_seq) == None:
+    if check_variant_disorder_vectorized(original_seq, variant_seq, strict_disorder=strict_disorder) == None:
         return False
     return True
+
+def verify_changed_iwd(original_seq, variant_seq, increase_or_decrease, residues):
+    """
+    Verify that the IWD (Intrinsic Disorder) of the variant sequence has changed as expected.
+    The increase_or_decrease parameter should be 'increase' or 'decrease'.
+    """
+    original_protein = Protein(original_seq)
+    variant_protein = Protein(variant_seq)
+
+    classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
+        ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
+    if isinstance(residues, list):
+        if residues[0] in classdict:
+            residues = classdict[residues[0]]
+    if isinstance(residues, str):
+        if residues in classdict:
+            # if residues is a class, get the list of amino acids in that class
+            residues = classdict[residues]
+        else:
+            residues=list(residues)
+
+    if increase_or_decrease == 'increase':
+        return variant_protein.compute_iwd(residues) > original_protein.compute_iwd(residues)
+    elif increase_or_decrease == 'decrease':
+        return variant_protein.compute_iwd(residues) < original_protein.compute_iwd(residues)
+    else:
+        raise goose_exceptions.GooseException("increase_or_decrease must be 'increase' or 'decrease'.")
+    
+def verify_dimensions(original_seq, variant_seq, rg_or_re, increase_or_decrease):
+    """
+    Verify that the dimensions (Rg or Re) of the variant sequence have changed as expected.
+    The rg_or_re parameter should be 'Rg' or 'Re', and increase_or_decrease should be 'increase' or 'decrease'.
+    """
+    if rg_or_re == 'Rg':
+        predict_function = predict_rg
+    elif rg_or_re == 'Re':
+        predict_function = predict_re
+    else:
+        raise goose_exceptions.GooseException("rg_or_re must be 'Rg' or 'Re'.")
+    
+    original_dimension = predict_function(original_seq)
+    variant_dimension = predict_function(variant_seq)
+
+    if increase_or_decrease == 'increase':
+        return variant_dimension > original_dimension
+    elif increase_or_decrease == 'decrease':
+        return variant_dimension < original_dimension
+    else:
+        raise goose_exceptions.GooseException("increase_or_decrease must be 'increase' or 'decrease'.")
+
+def verify_same_length(original_seq, variant_seq):
+    """
+    Verify that the original sequence and the variant sequence have the same length.
+    """
+    return len(original_seq) == len(variant_seq)

@@ -599,3 +599,20 @@ def handle_custom_probabilities(custom_probabilities):
     # If we reach here, the custom probabilities are valid
     # Return the custom probabilities dictionary    
     return custom_probabilities
+
+def is_valid_sequence(sequence):
+    """
+    Function to check if a sequence is valid (contains only valid amino acids).
+    
+    Parameters
+    -----------
+    sequence : str
+        The amino acid sequence to validate.
+
+    Returns
+    --------
+    bool
+        True if the sequence is valid, False otherwise.
+    """
+    valid_amino_acids = set(parameters.VALID_AMINO_ACIDS)
+    return all(aa in valid_amino_acids for aa in sequence)

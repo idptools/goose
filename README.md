@@ -1,16 +1,17 @@
 ![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
 # GOOSE : Generate disOrdered prOtiens Specifying propErties
 
-## Last updated May 2025
+## Last updated July 2025, latest version V0.2.1
 
 ### What's new (the highlights)?
-* Thanks to moving to a system whereby sequences are generated using numpy vectorized operations, we no longer need to use weighted probabilities for sequence generation to keep GOOSE fast. This should dramatically improve the sequence space that GOOSE can explore when generating a protein seuqence. 
+* OVERHAUL OF VARIANT GENERATION! The variant generation functionality is now completely overhauled. The previous approach was... pretty confusing. This version is hopefully better. 
+* Dramatically improved sequence space that GOOSE can explore when generating a protein seuqence thanks to an overhaul of the backend code. 
 * A completely new approach for sequence / sequence variant generation has been launched! Check out the new SequenceOptimizer documentation on ReadTheDocs. 
-* SPEED! GOOSE is faster. This is numpy and metapredict V3. 
+* SPEED! GOOSE is faster thanks to a rewrite of ... everything (as of v 0_2_1). 
 * Additional functionality for sequence creation (ex. custom probabilities for amino acids when specifying sequences by properties).
-* Updated minimal_variant functionality. It is  slower but does a much better job of minimizing the number of amino acids changed when trying to create your desired sequence from a starting sequence. 
+* Addition of amino acid frequencies in the IDRs of 11 model organism proteomes that can be used for the custom probabilities for sequence generation.
+* Updated minimal_variant functionality (again). Now it's not dreadfully fast and it does a better job!
 * Addition of demo Jupyter Notebooks. See /goose/demos for examples on using SequenceOptimizer, generating sequences based on interactions, and making custom optimizer properties
-
 
 ### What is GOOSE?
 GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. 
@@ -23,21 +24,16 @@ The main functionalities of GOOSE are:
  • Simultaneously specify *average hydrophobicity*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa* (quantifies opposite charge distribution)  
  • Fractions of amino acids (multiple fractions simultaneously)  
  • End-to-end distance (Re) or radius of gyration (Rg)  
- • Interactions between an IDR and itself or other IDRs
 
- **2.** Generate sequences by *sequence optimization*. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can **define your own functions to design sequences**!
+ **2.** Generate sequences by *sequence optimization*. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can **define your own functions to design sequences**! This is the mechanism by which you can design IDRs that interact with themselves or other IDRs. 
 
-**3.** Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
+**3.** Generate IDR variants. There are now 16 different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 
-**4.** Make sequence libraries spanning sequence properties or fractions of amino acids.  
-
-**5.** Analyze sequences. Although this is possible in GOOSE, I recommend using[SPARROW](https://github.com/idptools/sparrow) for sequence analysis. 
+**4.** Analyze sequences. Although this is possible in GOOSE, I recommend using[SPARROW](https://github.com/idptools/sparrow) for sequence analysis. 
 
 ## How to use GOOSE
 
-You can use GOOSE from Python or from a Google Colab notebook. The Colab notebook can be found at https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing
-
-**NOTE: May 2025** - It seems that the colab notebook is not working properly at this time. I will fix it as soon as I can. It doesn't appear to be an issue with GOOSE but rather an issue with a dependency (which makes it a little harder to debug). Apologies for any inconveniences!
+You can use GOOSE from Python. I am working on remaking the Colab Notebook as it no longer works with the current version of GOOSE.
 
 ## Installation - GOOSE takes flight!
 
@@ -89,6 +85,13 @@ For the time being, you can cite our [preprint](https://www.biorxiv.org/content/
 ## Changes
 
 The section below logs changes to GOOSE.  
+
+#### V0.2.1 - MAJOR UPDATE... again! (July 2025)
+* Complete rewrite of variant generation functionality for both the backend code and the front end code. 
+* Deprecation of library generation. If this ends up a feature people want back, I'm happy to reimplement it. 
+* Addition of 11 model organism proteome IDR amino acid frequencies for use when specifying custom probabilities in sequence generation. 
+* Addition of the ability to generate sequences by class of amino acids (in addition to properties and amino acid fractions).
+* Overhaul of code used for generation of minimal_variant (again). 
 
 #### V0.2.0 - MAJOR UPDATE! (May 2025)
 * Overhaul of sequence generation. Sequence generation now by default does not use weighted lists. Rather, vectorized operations produce many sequences at once allowing creating of much more diverse sequences while maintaining speed of sequence generation. 

@@ -2,8 +2,8 @@ from sparrow.protein import Protein
 import numpy as np
 from goose.data.defined_aa_classes import aa_classes_by_aa, min_class_hydro, max_class_hydro
 import metapredict as meta
-from goose.data import parameters
-
+from goose.backend import parameters
+from goose import goose_exceptions
 
 def fraction_net_charge(length, fraction, net_charge):
 

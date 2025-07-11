@@ -945,6 +945,10 @@ def variant(sequence,
     if len(sequence) == 0:
         raise goose_exceptions.GooseInputError('Sequence cannot be empty')
     
+    # verify input sequence is a valid amino acid sequence
+    if not goose_tools.is_valid_sequence(sequence):
+        raise goose_exceptions.GooseInputError('Invalid sequence. Must contain valid amino acid codes.')
+    
     # Define all valid variant types for validation
     valid_variant_types = {
         'shuffle_specific_regions',
@@ -1004,7 +1008,7 @@ def variant(sequence,
         'change_ncpr_constant_class': ('change_ncpr_constant_class', ['target_NCPR']),
         'change_kappa': ('change_kappa', ['target_kappa']),
         'change_properties_minimize_differences': ('change_properties_minimze_differences', [], ['target_hydropathy', 'target_kappa', 'target_FCR', 'target_NCPR']),
-        'change_any_properties': ('change_any_properties', ['target_FCR', 'target_NCPR', 'target_kappa', 'target_hydropathy']),
+        'change_any_properties': ('change_any_properties', [], ['target_FCR', 'target_NCPR', 'target_kappa', 'target_hydropathy']),
         'change_dimensions': ('change_dimensions', ['increase_or_decrease', 'rg_or_re'], ['num_dim_attempts', 'allowed_error', 'reduce_pos_charged', 'exclude_aas'])
     }
     
