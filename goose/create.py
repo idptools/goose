@@ -8,7 +8,7 @@
 ## 
 
 # If any new functions are added to create.py, you need to add them here.
-__all__ = ['sequence', 'seq_by_fractions', 'seq_by_classes', 'seq_by_re', 'seq_by_rg', 'variant']
+__all__ = ['sequence', 'seq_by_fractions', 'seq_by_classes', 'seq_by_re', 'seq_by_rg', 'variant', 'seq_fractions']
 
 # Import required modules and functions
 from goose import goose_exceptions
@@ -367,6 +367,38 @@ def seq_by_fractions(length, **kwargs):
 
     # Return the generated sequence (no need to check for None as backend handles this)
     return generated_seq
+
+def seq_fractions(length, **kwargs):
+    """
+    Generate a disordered sequence with specified amino acid fractions.
+    
+    This function is a backwards compatibility wrapper around seq_by_fractions.
+    Please use seq_by_fractions for new code.
+    
+    Parameters
+    ----------
+    length : int
+        Length of the desired disordered sequence.
+    **kwargs : dict
+        All keyword arguments are passed directly to seq_by_fractions.
+        See seq_by_fractions documentation for full parameter details.
+    
+    Returns
+    -------
+    str or list
+        Generated amino acid sequence(s) - see seq_by_fractions for details.
+    
+    See Also
+    --------
+    seq_by_fractions : The main function for generating sequences by fractions.
+    
+    Examples
+    --------
+    >>> # Generate sequence with 30% alanine and 10% glycine
+    >>> seq = seq_fractions(100, A=0.3, G=0.1)
+    """
+    return seq_by_fractions(length, **kwargs)
+
 
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/             \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-

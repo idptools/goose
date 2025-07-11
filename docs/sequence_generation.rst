@@ -267,6 +267,8 @@ Generating Sequences specifying Fractions of Amino Acids
 
 The ``create.seq_by_fractions()`` function lets you create sequences predicted to be disordered with specified fractions of various amino acids. This function provides fine-grained control over sequence composition by allowing you to specify the exact fraction of each amino acid type. With this function, you can specify multiple amino acids simultaneously. Each fraction should be specified using a decimal value (for example, if you want one-tenth of the amino acids to be alanine use ``A=0.1``).
 
+Note: ``create.seq_fractions()`` is a wrapper around ``create.seq_by_fractions()`` for backwards compatibility.
+
 For each amino acid, we had GOOSE attempt (at least 10,000 times for each value) to make sequences with increasing fractions of each amino acid until we identified the maximum possible fraction. The default maximum values for each amino acid are as follows - 
 
 .. code-block:: python
