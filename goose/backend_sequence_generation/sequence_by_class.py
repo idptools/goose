@@ -129,8 +129,8 @@ def fill_in_remaining_classes(
     filled_fractions = aa_class_fractions.copy()
     
     # Calculate current sum of specified fractions
-    current_sum = sum(filled_fractions.values())
-    
+    current_sum = sum(frac for frac in filled_fractions.values() if frac is not None)
+
     # If sum is already 1.0 (within tolerance), return as is
     if abs(current_sum - 1.0) < 1e-10:
         return filled_fractions
@@ -149,16 +149,14 @@ def fill_in_remaining_classes(
     all_classes = ['aromatic', 'aliphatic', 'polar', 'positive', 'negative', 
                    'glycine', 'proline', 'cysteine', 'histidine']
     
-    unspecified_classes = [cls for cls in all_classes 
-                          if filled_fractions.get(cls, 0.0) == 0.0]
-    
+    # unspecified classes are those equal to None. 
+    unspecified_classes = [cls for cls, frac in filled_fractions.items() if frac is None]
+
     # If no unspecified classes, distribute remaining among existing classes proportionally
     if not unspecified_classes:
         if current_sum > 0:
-            for class_name in filled_fractions:
-                proportion = filled_fractions[class_name] / current_sum
-                additional_count = int(round(proportion * remaining_count))
-                filled_fractions[class_name] += additional_count / length
+            raise ValueError("All classes are specified but the sum of fractions is less than 1.0.")
+
     else:
         # Distribute remaining fraction among unspecified classes
         if remaining_count > 0:
@@ -178,15 +176,15 @@ def fill_in_remaining_classes(
 
 def create_sequence_by_class(
         length: int,
-        aromatic_fraction: float = 0.0,
-        aliphatic_fraction: float = 0.0,
-        polar_fraction: float = 0.0,
-        positive_fraction: float = 0.0,
-        negative_fraction: float = 0.0,
-        glycine_fraction: float = 0.0,
-        proline_fraction: float = 0.0,
-        cysteine_fraction: float = 0.0,
-        histidine_fraction: float = 0.0,
+        aromatic_fraction: float = None,
+        aliphatic_fraction: float = None,
+        polar_fraction: float = None,
+        positive_fraction: float = None,
+        negative_fraction: float = None,
+        glycine_fraction: float = None,
+        proline_fraction: float = None,
+        cysteine_fraction: float = None,
+        histidine_fraction: float = None,
         num_sequences: int = 1,
         convert_to_amino_acids: bool = True,
         remaining_probabilities: dict = None) -> Union[str, List[str]]:
@@ -253,11 +251,13 @@ def create_sequence_by_class(
     }
     
     for class_name, fraction in class_fractions.items():
-        if fraction < 0:
-            raise ValueError(f"{class_name}_fraction must be non-negative, got {fraction}")
+        if fraction is not None:
+            if fraction < 0:
+                raise ValueError(f"{class_name}_fraction must be non-negative, got {fraction}")
     
     # Check if sum exceeds 1.0
-    total_specified = round(sum(class_fractions.values()),8)
+    specified_fractions = {cls: frac for cls, frac in class_fractions.items() if frac is not None}
+    total_specified = round(sum(specified_fractions.values()),8)
     if total_specified > 1.0:
         raise ValueError(f"Sum of class fractions ({total_specified:.4f}) exceeds 1.0")
     

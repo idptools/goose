@@ -97,6 +97,12 @@ def optimize_kappa(sequence, target_kappa,
     # Calculate initial kappa values for all sequences
     kappa_values = kappa(ternarized_sequences, is_ternarized=True)
 
+    # remove all sequences that have kappa values equal to -1
+    valid_indices = np.where(kappa_values != -1)[0]
+    if len(valid_indices) == 0:
+        # raising an error because otherwise we risk looping other functions relying on this one. 
+        raise ValueError("All sequences have kappa value of -1, cannot optimize kappa. Terminating optimization.")
+
     prev_kappa_values = kappa_values.copy()  # Store initial kappa values for stagnation detection
 
     # Identify which sequences need to have kappa increased or decreased

@@ -8,6 +8,7 @@ from goose.goose_exceptions import GooseError, GooseInputError
 from goose.backend import parameters
 from goose.backend.parameters import calculate_max_charge
 from goose.data.aa_list_probabilities import idr_probabilities
+from goose.data.defined_aa_classes import aa_classes
 
 def check_valid_kwargs(kwargs_dict, valid_keywords):
     """
@@ -410,15 +411,15 @@ def check_fracs_parameters(**kwargs):
         
 
 def check_class_values(max_class_fractions,
-                   aromatic: float = 0.0,
-                    aliphatic: float = 0.0,
-                    polar: float = 0.0,
-                    positive: float = 0.0,
-                    negative: float = 0.0,
-                    glycine: float = 0.0,
-                    proline: float = 0.0,
-                    cysteine: float = 0.0,
-                    histidine: float = 0.0):
+                   aromatic: float = None,
+                    aliphatic: float = None,
+                    polar: float = None,
+                    positive: float = None,
+                    negative: float = None,
+                    glycine: float = None,
+                    proline: float = None,
+                    cysteine: float = None,
+                    histidine: float = None):
     '''
     Function to check that the class values provided are within the allowed bounds.
     
@@ -447,21 +448,32 @@ def check_class_values(max_class_fractions,
         'cysteine': cysteine,
         'histidine': histidine
     }
+
+    # track number of classes specified and their total values.
+    total_classes_specified=0
+    total_proability = 0
         
     # check that all values are within the allowed bounds
     for class_name, value in class_values.items():
-        if value < 0 or value > max_class_fractions[class_name]:
-            raise GooseInputError(f'The {class_name} fraction value of {value} is not within the allowed bounds (0, {max_class_fractions[class_name]}).')
+        if value is not None:
+            total_classes_specified += 1
+            total_proability += value
+            if value < 0 or value > max_class_fractions[class_name]:
+                raise GooseInputError(f'The {class_name} fraction value of {value} is not within the allowed bounds (0, {max_class_fractions[class_name]}).')
         
     # check that the sum of all values is less than or equal to 1
-    total_fraction = sum(class_values.values())
-    if total_fraction > 1:
-        raise GooseInputError(f'The sum of all class fractions is {total_fraction}, which exceeds the maximum allowed value of 1.')
-    
+    if round(total_proability, 8) > 1:
+        raise GooseInputError(f'The sum of all class fractions is {total_proability}, which exceeds the maximum allowed value of 1.')
+
+    if total_classes_specified == len(aa_classes.keys()):
+        if round(total_proability,8) < 1:
+            raise GooseInputError(f'If all classes are specified, the total probability must be 1.')
+
     # check that all values are within the allowed bounds
     for class_name, value in class_values.items():
-        if value > max_class_fractions[class_name]:
-            raise GooseInputError(f'The {class_name} fraction value of {value} exceeds the maximum allowed value of {max_class_fractions[class_name]}.')
+        if value is not None:
+            if value > max_class_fractions[class_name]:
+                raise GooseInputError(f'The {class_name} fraction value of {value} exceeds the maximum allowed value of {max_class_fractions[class_name]}.')
 
 
 def check_basic_parameters(num_attempts=None,

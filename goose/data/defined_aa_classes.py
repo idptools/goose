@@ -41,6 +41,29 @@ aa_classes_by_aa = {
     'H': ['H']
 }
 
+aas_to_class_nums = {
+    'A': 0,
+    'I': 0,
+    'L': 0,
+    'M': 0,
+    'V': 0,
+    'S': 1,
+    'T': 1,
+    'N': 1,
+    'Q': 1,
+    'K': 2,
+    'R': 2,
+    'D': 3,
+    'E': 3,
+    'F': 4,
+    'W': 4,
+    'Y': 4,
+    'G': 5,
+    'P': 6,
+    'C': 7,
+    'H': 8
+}
+
 # Define amino acid classes (using indices)
 aa_class_indices = {
     # Hydrophobic: A, I, L, M, V

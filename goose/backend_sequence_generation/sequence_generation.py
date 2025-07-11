@@ -523,16 +523,16 @@ def by_fractions(length,
 
     
 def by_class(length: int,
-                            aromatic_fraction: float = 0.0,
-                            aliphatic_fraction: float = 0.0,
-                            polar_fraction: float = 0.0,
-                            positive_fraction: float = 0.0,
-                            negative_fraction: float = 0.0,
-                            glycine_fraction: float = 0.0,
-                            proline_fraction: float = 0.0,
-                            cysteine_fraction: float = 0.0,
-                            histidine_fraction: float = 0.0,
-                            num_attempts=10, strict_disorder=False,
+                            aromatic_fraction: float = None,
+                            aliphatic_fraction: float = None,
+                            polar_fraction: float = None,
+                            positive_fraction: float = None,
+                            negative_fraction: float = None,
+                            glycine_fraction: float = None,
+                            proline_fraction: float = None,
+                            cysteine_fraction: float = None,
+                            histidine_fraction: float = None,
+                            num_attempts=100, strict_disorder=False,
                             disorder_cutoff=parameters.DISORDER_THRESHOLD,
                             metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                             max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
@@ -546,25 +546,25 @@ def by_class(length: int,
     ----------
     seq_length : int
         Length of the sequence to generate
-    aromatic_fraction : float, default=0.0
+    aromatic_fraction : float, default=None
         Fraction of aromatic amino acids (F, W, Y)
-    aliphatic_fraction : float, default=0.0
+    aliphatic_fraction : float, default=None
         Fraction of aliphatic amino acids (A, I, L, V)
-    polar_fraction : float, default=0.0
+    polar_fraction : float, default=None
         Fraction of polar amino acids (N, Q, S, T)
-    positive_fraction : float, default=0.0
+    positive_fraction : float, default=None
         Fraction of positively charged amino acids (K, R)
-    negative_fraction : float, default=0.0
+    negative_fraction : float, default=None
         Fraction of negatively charged amino acids (D, E)
-    glycine_fraction : float, default=0.0
+    glycine_fraction : float, default=None  
         Fraction of glycine (G)
-    proline_fraction : float, default=0.0       
+    proline_fraction : float, default=None
         Fraction of proline (P)
-    cysteine_fraction : float, default=0.0
+    cysteine_fraction : float, default=None
         Fraction of cysteine (C)
-    histidine_fraction : float, default=0.0
+    histidine_fraction : float, default=None
         Fraction of histidine (H)
-    num_attempts : int, default=10
+    num_attempts : int, default=100
         Number of attempts to make the sequence
     strict_disorder : bool, default=False
         If True, applies strict disorder checks using MetaPredict
@@ -587,7 +587,7 @@ def by_class(length: int,
         Generated sequence that meets the target amino acid class fractions and is disordered.
         If no suitable sequence is found, returns None.
     """
-    for _ in range(num_attempts):
+    for i in range(num_attempts):
         # Call the create_sequence_by_class function to
         # generate the sequence with specified class fractions
         seq = create_sequence_by_class(length,
@@ -622,7 +622,7 @@ def by_dimensions(seq_length, objective_dim, rg_or_re='rg',
                        allowed_error=parameters.MAXIMUM_RG_RE_ERROR,
                        reduce_pos_charged=True, exclude_aas=None,
                        variants_per_iteration=64, mutation_fraction=0.0125,
-                       num_attempts=10, strict_disorder=False,
+                       num_attempts=100, strict_disorder=False,
                        disorder_cutoff=parameters.DISORDER_THRESHOLD,
                        metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                        max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,

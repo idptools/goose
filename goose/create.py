@@ -410,16 +410,16 @@ def seq_fractions(length, **kwargs):
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
 
 def seq_by_classes(length: int,
-                    aromatic: float = 0.0,
-                    aliphatic: float = 0.0,
-                    polar: float = 0.0,
-                    positive: float = 0.0,
-                    negative: float = 0.0,
-                    glycine: float = 0.0,
-                    proline: float = 0.0,
-                    cysteine: float = 0.0,
-                    histidine: float = 0.0,
-                    num_attempts=10, strict_disorder=False,
+                    aromatic: float = None,
+                    aliphatic: float = None,
+                    polar: float = None,
+                    positive: float = None,
+                    negative: float = None,
+                    glycine: float = None,
+                    proline: float = None,
+                    cysteine: float = None,
+                    histidine: float = None,
+                    num_attempts=100, strict_disorder=False,
                     disorder_cutoff=parameters.DISORDER_THRESHOLD,
                     cutoff = None, # legacy parameter name
                     metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
@@ -463,7 +463,7 @@ def seq_by_classes(length: int,
     histidine : float, optional
         Fraction of histidine (H) in the sequence (between 0 and 1). Default is 0.0.
     num_attempts : int, optional
-        Number of attempts to generate the sequence. Default is 10.
+        Number of attempts to generate the sequence. Default is 100.
     strict_disorder : bool, optional
         Whether to use strict disorder checking. If True, all residues must
         be above the disorder threshold. Default is False.
@@ -585,7 +585,7 @@ def seq_by_classes(length: int,
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
 
 def seq_by_re(length, objective_re, allowed_error=parameters.MAXIMUM_RG_RE_ERROR, 
-           attempts=20, disorder_cutoff=parameters.DISORDER_THRESHOLD, 
+           attempts=100, disorder_cutoff=parameters.DISORDER_THRESHOLD, 
            strict_disorder=False, reduce_pos_charged=False, exclude_aas=None,
             metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
             max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,
@@ -702,7 +702,7 @@ def seq_by_re(length, objective_re, allowed_error=parameters.MAXIMUM_RG_RE_ERROR
 
 
 def seq_by_rg(length, objective_rg, allowed_error=parameters.MAXIMUM_RG_RE_ERROR, 
-           attempts=20, disorder_cutoff=parameters.DISORDER_THRESHOLD, 
+           attempts=100, disorder_cutoff=parameters.DISORDER_THRESHOLD, 
            strict_disorder=False, reduce_pos_charged=False, exclude_aas=None,
             metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
             max_consecutive_ordered=parameters.ALLOWED_CONSECUTIVE_ORDERED,

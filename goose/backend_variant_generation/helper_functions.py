@@ -2,80 +2,7 @@ from sparrow.protein import Protein
 import numpy as np
 from goose.data.defined_aa_classes import aa_classes_by_aa, min_class_hydro, max_class_hydro
 import metapredict as meta
-
-def check_properties(
-        variant_sequence,
-        target_hydropathy=None,
-        target_ncpr=None,
-        target_fcr=None,
-        target_kappa=None,
-        hydropathy_tolerance=0.05,
-        kappa_tolerance=0.03):
-    '''
-    Check if properties are what we want them to be. Only
-    checks properties that are not None. If all properties
-    are None, returns True. If any of the properties are not
-    what we want them to be, returns False.
-    
-    Parameters
-    -----------
-    variant_sequence : str
-        The sequence to check properties for.
-        
-    target_hydropathy : float or None
-        The target hydropathy value. If None, this property is not checked.
-        
-    target_ncpr : float or None
-        The target NCPR value. If None, this property is not checked.
-        
-    target_fcr : float or None
-        The target FCR value. If None, this property is not checked.
-        
-    target_kappa : float or None
-        The target kappa value. If None, this property is not checked.
-
-    hydropathy_tolerance : float
-        The tolerance for hydropathy comparison. Default is 0.05.
-        
-    kappa_tolerance : float
-        The tolerance for kappa comparison. Default is 0.03.
-        
-    Returns
-    --------
-    bool
-        True if all properties match the targets, False otherwise.
-    '''
-    # if we had changes to FCR or NCPR, we need to allow for a small amount of error
-    # as some NCPR / FCR combinations are not possible.
-    if target_fcr is not None:
-        allowed_ncpr_error = 1/len(variant_sequence)
-    else:
-        allowed_ncpr_error = 0
-    if target_ncpr is not None:
-        allowed_fcr_error = 1/len(variant_sequence)
-    else:
-        allowed_fcr_error = 0
-
-    # Check each property against its target
-    if target_hydropathy is not None:
-        current_hydropathy = Protein(variant_sequence).hydrophobicity
-        if abs(current_hydropathy - target_hydropathy) > hydropathy_tolerance:
-            return False
-    if target_ncpr is not None:
-        current_ncpr = Protein(variant_sequence).NCPR
-        if round(abs(current_ncpr - target_ncpr),5) > allowed_ncpr_error:
-            return False
-    if target_fcr is not None:
-        current_fcr = Protein(variant_sequence).FCR
-        if round(abs(current_fcr - target_fcr),5) > allowed_fcr_error:
-            return False
-    if target_kappa is not None:
-        current_kappa = Protein(variant_sequence).kappa
-        if round(abs(current_kappa - target_kappa),5) > kappa_tolerance:
-            return False
-
-    # If all checks passed, return True
-    return True
+from goose.data import parameters
 
 
 def fraction_net_charge(length, fraction, net_charge):
@@ -609,8 +536,8 @@ def check_variant_disorder_vectorized(
                               original_sequence,
                               sequences, 
                               strict_disorder=False,
-                              disorder_cutoff=0.5,
-                              metapredict_version=3,
+                              disorder_cutoff=parameters.DISORDER_THRESHOLD,
+                              metapredict_version=parameters.METAPREDICT_DEFAULT_VERSION,
                               return_best_sequence=False):
     """
     Check disorder of sequences using vectorized operations.

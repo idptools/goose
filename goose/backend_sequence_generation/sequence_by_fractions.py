@@ -72,7 +72,7 @@ class SequenceParametersByFractions:
         self.default_remaining_probabilities = valid_default_probs
         
         # Calculate sum of specified fractions
-        specified_sum = sum(self.fractions.values())
+        specified_sum = round(sum(self.fractions.values()), 8)
         
         # Handle empty fractions case - use uniform distribution
         if not self.fractions:
