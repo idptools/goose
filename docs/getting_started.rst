@@ -6,13 +6,13 @@ What can GOOSE do?
 --------------------
 The main functionalities of GOOSE are:
 
-* Generate synthetic IDRs where you can specify length and
-  * Simultaneously specify average hydrophobicity, fraction of charged residues (FCR), net charge per residue (NCPR), and kappa (quantifies opposite charge distribution)  
-  * Fractions of amino acids (multiple fractions simultaneously)  
-  * Classes of amino acids (multiple classes simultaneously)  
-  * End-to-end distance (Re) or radius of gyration (Rg)  
-* Generate sequences by sequence optimization. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can define your own functions to design sequences!
-* Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
+- Generate synthetic IDRs where you can specify length and
+  #. Simultaneously specify average hydrophobicity, fraction of charged residues (FCR), net charge per residue (NCPR), and kappa (quantifies opposite charge distribution)  
+  #. Fractions of amino acids (multiple fractions simultaneously)  
+  #. Classes of amino acids (multiple classes simultaneously)  
+  #. End-to-end distance (Re) or radius of gyration (Rg)  
+- Generate sequences by sequence optimization. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can define your own functions to design sequences!
+- Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 
 What is new in V0.2.1?
 -----------------------

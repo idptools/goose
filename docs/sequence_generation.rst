@@ -29,17 +29,17 @@ GOOSE provides amino acid probabilities derived from intrinsically disordered re
 
 These probabilities are based on MetaPredict V3 predictions of IDRs across different proteomes and can help generate sequences that are more representative of natural disordered regions in specific organisms.
 Specific organisms are:
-- **Mouse**: Mus musculus
-- **Human**: Homo sapiens
-- **Fly**: Drosophila melanogaster
-- **Neurospora**: Neurospora crassa
-- **Yeast**: Saccharomyces cerevisiae
-- **Arabidopsis**: Arabidopsis thaliana
-- **E. coli**: Escherichia coli
-- **Worm**: Caenorhabditis elegans
-- **Zebrafish**: Danio rerio
-- **Frog**: Xenopus laevis
-- **Dictyostelium**: Dictyostelium discoideum
+- ``mouse``: Mus musculus
+- ``human``: Homo sapiens
+- ``fly``: Drosophila melanogaster
+- ``neurospora``: Neurospora crassa
+- ``yeast``: Saccharomyces cerevisiae
+- ``arabidopsis``: Arabidopsis thaliana
+- ``e_coli``: Escherichia coli
+- ``worm``: Caenorhabditis elegans
+- ``zebrafish``: Danio rerio
+- ``frog``: Xenopus laevis
+- ``dictyostelium``: Dictyostelium discoideum
 
 Generating sequences with specified properties
 ---------------------------------------------------

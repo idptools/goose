@@ -28,24 +28,32 @@ Types of sequence variants
 ---------------------------
 
 The ``variant()`` function supports multiple variant types, each with specific parameters and behaviors:
-
+  
 **Shuffling methods:**
+  
 - ``'shuffle_specific_regions'`` - Shuffle only specified regions
 - ``'shuffle_except_specific_regions'`` - Shuffle all except specified regions  
 - ``'shuffle_specific_residues'`` - Shuffle only specific residue types
 - ``'shuffle_except_specific_residues'`` - Shuffle all except specific residue types
 - ``'weighted_shuffle_specific_residues'`` - Weighted shuffle of specific residues
 - ``'targeted_reposition_specific_residues'`` - Reposition specific residues
-
+  
+  
 **Residue asymmetry methods:**
+  
 - ``'change_residue_asymmetry'`` - Change residue asymmetry patterns
-
+  
+  
 **Property methods:**
+  
 - ``'constant_properties'`` - Generate variant with constant properties (NCPR, FCR, hydropathy, and kappa)
 - ``'constant_residues_and_properties'`` - Keep specified residues and properties constant. The sequence generated will have the same properties as the input sequence, but with specified residues kept constant. 
 - ``'constant_properties_and_class'`` - Generate variant with constant properties and the number of amino acids by each amino acid class
 - ``'constant_properties_and_class_by_order'`` - Generate variant with constant properties and the number and order of amino acids by class constant
+  
+
 **Property modification methods:**
+  
 - ``'change_hydropathy_constant_class'`` - Change hydropathy while keeping class constant
 - ``'change_fcr_minimize_class_changes'`` - Change FCR while minimizing changes to amino acid classes. Prioritizes keeping aromatics constant then H, C, and P, then aliphatics, then polar.
 - ``'change_ncpr_constant_class'`` - Change NCPR while keeping class constant
