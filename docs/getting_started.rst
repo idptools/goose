@@ -2,7 +2,7 @@ What is GOOSE?
 ===============
 **GOOSE : Generate disOrdered prOtiens Specifying propErties** is a python package developed to generate intrinsically disordered proteins or protein regions (collectively IDRs) and IDR variants. My goal is to make this *as useful as possible to the protein disorder community*. If you have any feature requests, please email me at remenecker@wustl.edu with the subject line **GOOSE feature request** and I'll be happy to see if I can make it happen. 
 
-Why can GOOSE do?
+What can GOOSE do?
 --------------------
 The main functionalities of GOOSE are:
 
@@ -33,7 +33,11 @@ For full details, see the change log `here <https://github.com/idptools/goose>`_
 
 How can I use GOOSE?
 --------------------
-You can use GOOSE from Python or from a Google Colab notebook. The Colab notebook can be found `here <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
+You can use GOOSE from Python or from Goole Colab.
+  
+NOTE: The colab notebook is currently not up to date, this will be fixed soon (July 2025).
+We also have a Google Colab notebook. The Colab notebook can be found `here <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
+
 
 Installation - GOOSE takes flight!
 ===================================

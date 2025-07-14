@@ -364,7 +364,7 @@ The ``'change_any_properties'`` variant type adjusts multiple properties simulta
     # Output: 'GNGGQNAEQRNTKEGNESHTSTHTGDRAHQKSNNHQTNLERVSN'
 
 Change properties minimize differences
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ``'change_properties_minimize_differences'`` variant type changes properties while minimizing differences from the original.
 

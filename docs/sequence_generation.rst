@@ -1,5 +1,5 @@
-Creating sequences and sequence variants with GOOSE
-=====================================================
+Creating sequences with GOOSE
+===============================
 
 GOOSE provides several functions for generating intrinsically disordered protein sequences with specific properties. This guide covers the main sequence generation functions:
 
@@ -10,7 +10,7 @@ GOOSE provides several functions for generating intrinsically disordered protein
 - ``create.seq_by_re()``: Generate sequences with specified end-to-end distance
 
 Getting Started
-===============
+-----------------
 
 First import ``create`` from goose.
 
@@ -42,7 +42,7 @@ Specific organisms are:
 - **Dictyostelium**: Dictyostelium discoideum
 
 Generating sequences with specified properties
-===============================================
+---------------------------------------------------
 
 The ``create.sequence()`` function lets you create sequences predicted to be disordered with various specified properties. 
 
@@ -103,7 +103,7 @@ The only required argument is the length, which must be between the minimum and 
 
 
 Examples of sequence generation by properties
-----------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Just specifying length:
 
@@ -238,7 +238,7 @@ You cannot have values for NCPR where the absolute value of NCPR is greater than
 
 
 Error Handling
-==============
+^^^^^^^^^^^^^^^^
 
 GOOSE provides informative error messages when sequence generation fails or invalid parameters are provided:
 
@@ -263,7 +263,7 @@ GOOSE provides informative error messages when sequence generation fails or inva
 
 
 Generating Sequences specifying Fractions of Amino Acids
-=========================================================
+---------------------------------------------------------
 
 The ``create.seq_by_fractions()`` function lets you create sequences predicted to be disordered with specified fractions of various amino acids. This function provides fine-grained control over sequence composition by allowing you to specify the exact fraction of each amino acid type. With this function, you can specify multiple amino acids simultaneously. Each fraction should be specified using a decimal value (for example, if you want one-tenth of the amino acids to be alanine use ``A=0.1``).
 
@@ -320,7 +320,7 @@ In addition to specifying the specific amino acid fractions, other parameters ca
 
 
 Examples of Sequence Generation by Fractions
----------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Specifying a single amino acid fraction:**
 
@@ -370,7 +370,7 @@ If you want to exclude an amino acid, you can set it equal to 0.
 
 
 Generating Sequences specifying Amino Acid Classes
-==================================================
+---------------------------------------------------
 
 The ``create.seq_by_classes()`` function lets you create sequences with specified fractions of amino acid classes rather than individual amino acids. This provides a higher-level approach to sequence composition control.
 
@@ -405,7 +405,8 @@ All class fractions should be between 0 and 1. Additional parameters include:
     - ``'unbiased'``: Equal probabilities (5%) for all 20 amino acids
     - ``'all'``: Weighted average probabilities across all organisms
 
-**Examples:**
+Examples of Sequence Generation by Fractions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: python
 
@@ -424,7 +425,7 @@ All class fractions should be between 0 and 1. Additional parameters include:
 
 
 Generating Sequences specifying Ensemble Dimensions
-=========================================================
+-----------------------------------------------------
 
 The ``create.seq_by_rg()`` and ``create.seq_by_re()`` functions let you create sequences with a specified length and a predicted radius of gyration (Rg) or end-to-end distance (Re). For these functions, you must specify the length and an objective Re or Rg. In addition you can also specify:
 
@@ -447,7 +448,7 @@ The ``create.seq_by_rg()`` and ``create.seq_by_re()`` functions let you create s
 9. ``max_total_ordered``: Maximum fraction of ordered residues allowed in the sequence. Default value comes from the parameters module.
 
 Examples of generating sequences by specifying Rg or Re
-----------------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Specifying a length and Rg:**
 
@@ -490,7 +491,7 @@ Examples of generating sequences by specifying Rg or Re
 
 
 Function Selection Guide
-========================
+--------------------------
 
 Choose the appropriate function based on your needs:
 
