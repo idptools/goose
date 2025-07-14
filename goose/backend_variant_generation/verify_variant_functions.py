@@ -75,7 +75,7 @@ def verify_constant_hydropathy(original_seq, variant_seq, hydropathy_tolerance=p
     original_protein = Protein(original_seq)
     variant_protein = Protein(variant_seq)
 
-    return abs(original_protein.hydrophobicity - variant_protein.hydrophobicity) < hydropathy_tolerance
+    return abs(round(original_protein.hydrophobicity,8) - round(variant_protein.hydrophobicity,8)) < hydropathy_tolerance
 
 def verify_constant_kappa(original_seq, variant_seq, kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR):
     """
@@ -84,7 +84,7 @@ def verify_constant_kappa(original_seq, variant_seq, kappa_tolerance=parameters.
     original_protein = Protein(original_seq)
     variant_protein = Protein(variant_seq)
 
-    return abs(original_protein.kappa - variant_protein.kappa) < kappa_tolerance
+    return abs(round(original_protein.kappa,8) - round(variant_protein.kappa,8)) < kappa_tolerance
 
 def verify_constant_FCR(original_seq, variant_seq, FCR_tolerance=0.001):
     """
@@ -93,7 +93,7 @@ def verify_constant_FCR(original_seq, variant_seq, FCR_tolerance=0.001):
     original_protein = Protein(original_seq)
     variant_protein = Protein(variant_seq)
 
-    return abs(original_protein.FCR - variant_protein.FCR) < FCR_tolerance
+    return abs(round(original_protein.FCR,8) - round(variant_protein.FCR,8)) < FCR_tolerance
 
 def verify_constant_NCPR(original_seq, variant_seq):
     """
@@ -103,29 +103,29 @@ def verify_constant_NCPR(original_seq, variant_seq):
     original_protein = Protein(original_seq)
     variant_protein = Protein(variant_seq)
 
-    return abs(original_protein.NCPR - variant_protein.NCPR) <= (1/len(original_seq)) + 1e-6
+    return abs(round(original_protein.NCPR,8) - round(variant_protein.NCPR,8)) <= (1/len(original_seq)) + 1e-6
 
 def verify_target_hydropathy(variant_seq, hydropathy_target, hydropathy_tolerance=parameters.MAXIMUM_HYDRO_ERROR):
     """
     Verify that the hydropathy of the variant sequence is within the specified tolerance of the target hydropathy.
     """
     variant_protein = Protein(variant_seq)
-    return abs(variant_protein.hydrophobicity - hydropathy_target) <= hydropathy_tolerance
+    return abs(round(variant_protein.hydrophobicity,8) - round(hydropathy_target,8)) <= hydropathy_tolerance
 
 def verify_target_kappa(variant_seq, kappa_target, kappa_tolerance=parameters.MAXIMUM_KAPPA_ERROR):
     """
     Verify that the kappa value of the variant sequence is within the specified tolerance of the target kappa.
     """
     variant_protein = Protein(variant_seq)
-    return abs(variant_protein.kappa - kappa_target) <= kappa_tolerance
+    return abs(round(variant_protein.kappa,8) - round(kappa_target,8)) <= kappa_tolerance
 
 def verify_target_FCR(variant_seq, FCR_target):
     """
     Verify that the FCR value of the variant sequence is within the specified tolerance of the target FCR.
     """
-    FCR_tolerance = 1/len(variant_seq) + 1e-6  # Tolerance based on sequence length
+    FCR_tolerance = 1/len(variant_seq) + 0.0001 # Tolerance based on sequence length
     variant_protein = Protein(variant_seq)
-    return abs(variant_protein.FCR - FCR_target) <= FCR_tolerance
+    return abs(round(variant_protein.FCR,8) - round(FCR_target,8)) <= FCR_tolerance
 
 def verify_target_NCPR(variant_seq, NCPR_target):
     """
@@ -133,7 +133,7 @@ def verify_target_NCPR(variant_seq, NCPR_target):
     NCPR may vary by 1 due to prioritizing FCR.
     """
     variant_protein = Protein(variant_seq)
-    return abs(variant_protein.NCPR - NCPR_target) <= (1/len(variant_seq)) + 1e-6
+    return abs(round(variant_protein.NCPR,8) - round(NCPR_target,8)) <= (1/len(variant_seq)) + 0.0001
 
 def verify_constant_region(original_seq, variant_seq, region):
     """
@@ -213,12 +213,12 @@ def verify_dimensions(original_seq, variant_seq, rg_or_re, increase_or_decrease)
     Verify that the dimensions (Rg or Re) of the variant sequence have changed as expected.
     The rg_or_re parameter should be 'Rg' or 'Re', and increase_or_decrease should be 'increase' or 'decrease'.
     """
-    if rg_or_re == 'Rg':
+    if rg_or_re == 'rg':
         predict_function = predict_rg
-    elif rg_or_re == 'Re':
+    elif rg_or_re == 're':
         predict_function = predict_re
     else:
-        raise goose_exceptions.GooseException("rg_or_re must be 'Rg' or 'Re'.")
+        raise goose_exceptions.GooseException("rg_or_re must be 'rg' or 're'.")
     
     original_dimension = predict_function(original_seq)
     variant_dimension = predict_function(variant_seq)

@@ -223,12 +223,12 @@ def optimize_kappa(sequence, target_kappa,
                 
     # Convert ternarized sequences back to amino acid sequences
     if inputting_matrix==False:
-        modified_amino_sequences = optimized_convert_ternarized_to_amino(modified_sequences, sequence)
+        modified_amino_sequences = optimized_convert_ternarized_to_amino(modified_sequences, sequence, fixed_indices=fixed_indices)
     else:
         modified_amino_sequences=[]
         for n, s in enumerate(sequence):
             cur_ternarized_seq = np.array([modified_sequences[n]])
-            modified_amino_sequences.append(optimized_convert_ternarized_to_amino(cur_ternarized_seq, s)[0])
+            modified_amino_sequences.append(optimized_convert_ternarized_to_amino(cur_ternarized_seq, s, fixed_indices=fixed_indices)[0])
 
 
     if only_return_within_tolerance:
@@ -242,16 +242,18 @@ def optimize_kappa(sequence, target_kappa,
     return modified_amino_sequences
 
 
-def optimized_convert_ternarized_to_amino(ternarized_sequences, original_sequence):
+def optimized_convert_ternarized_to_amino(ternarized_sequences, original_sequence, fixed_indices=None):
     """
     Convert ternarized sequences back to amino acid sequences by mapping:
     - Negative charges (-1) back to their original negative amino acids
     - Positive charges (+1) back to their original positive amino acids
     - Neutral (0) back to their original neutral amino acids
+    - Fixed indices retain their original amino acids
     
     Args:
         ternarized_sequences (np.array): NxL array of ternarized sequences with values -1, 0, 1
         original_sequence (str): Single original amino acid sequence
+        fixed_indices (list or np.ndarray, optional): Indices to keep constant with original amino acids
         
     Returns:
         list: List of amino acid sequences with charges rearranged according to ternarized pattern
@@ -264,21 +266,37 @@ def optimized_convert_ternarized_to_amino(ternarized_sequences, original_sequenc
     # Get original sequence as list for easier manipulation
     original_chars = list(original_sequence)
 
+    # Handle fixed indices
+    if fixed_indices is not None:
+        fixed_indices = np.array(fixed_indices)
+        fixed_set = set(fixed_indices)
+    else:
+        fixed_set = set()
+
     # Separate amino acids by charge type from original sequence
-    positive_aas = [aa for aa in original_chars if aa in ['K','R']]
-    negative_aas = [aa for aa in original_chars if aa in ['D','E']]
-    neutral_aas = [aa for aa in original_chars if aa not in ['K','R','D','E']]
-    
-    # Count expected numbers for validation
-    expected_pos = len(positive_aas)
-    expected_neg = len(negative_aas)
-    expected_neut = len(neutral_aas)
-    
+    # Only include amino acids that are NOT in fixed positions
+    positive_aas = [aa for i, aa in enumerate(original_chars) if aa in ['K','R'] and i not in fixed_set]
+    negative_aas = [aa for i, aa in enumerate(original_chars) if aa in ['D','E'] and i not in fixed_set]
+    neutral_aas = [aa for i, aa in enumerate(original_chars) if aa not in ['K','R','D','E'] and i not in fixed_set]
     for seq_idx, ternary_seq in enumerate(ternarized_sequences):
-        # Validate that the ternarized sequence has the correct composition
-        actual_pos = np.sum(ternary_seq == 1)
-        actual_neg = np.sum(ternary_seq == -1)
-        actual_neut = np.sum(ternary_seq == 0)
+        # Count expected numbers for validation (excluding fixed positions)
+        expected_pos = len(positive_aas)
+        expected_neg = len(negative_aas)
+        expected_neut = len(neutral_aas)
+        
+        # Count actual numbers in ternarized sequence (excluding fixed positions)
+        if fixed_indices is not None:
+            # Create mask for non-fixed positions
+            non_fixed_mask = np.ones(len(ternary_seq), dtype=bool)
+            non_fixed_mask[fixed_indices] = False
+            
+            actual_pos = np.sum((ternary_seq == 1) & non_fixed_mask)
+            actual_neg = np.sum((ternary_seq == -1) & non_fixed_mask)
+            actual_neut = np.sum((ternary_seq == 0) & non_fixed_mask)
+        else:
+            actual_pos = np.sum(ternary_seq == 1)
+            actual_neg = np.sum(ternary_seq == -1)
+            actual_neut = np.sum(ternary_seq == 0)
         
         if actual_pos != expected_pos:
             raise ValueError(f"Sequence {seq_idx}: Expected {expected_pos} positive charges but found {actual_pos}")
@@ -292,16 +310,20 @@ def optimized_convert_ternarized_to_amino(ternarized_sequences, original_sequenc
         neg_pool = negative_aas.copy()
         neut_pool = neutral_aas.copy()
         
-        # Initialize result sequence
-        result_seq = [''] * len(ternary_seq)
+        # Initialize result sequence with original sequence (to preserve fixed positions)
+        result_seq = original_chars.copy()
         
         # Counters for each amino acid type
         pos_counter = 0
         neg_counter = 0
         neut_counter = 0
         
-        # Map ternarized values back to amino acids
+        # Map ternarized values back to amino acids, but only for non-fixed positions
         for j, ternary_val in enumerate(ternary_seq):
+            if j in fixed_set:
+                # Skip fixed positions - they already have the correct amino acid
+                continue
+                
             if ternary_val == 1:  # Positive charge
                 if pos_counter >= len(pos_pool):
                     raise ValueError(f"Sequence {seq_idx}: Ran out of positive amino acids at position {j}")
@@ -318,7 +340,7 @@ def optimized_convert_ternarized_to_amino(ternarized_sequences, original_sequenc
                 result_seq[j] = neut_pool[neut_counter]
                 neut_counter += 1
         
-        # Final validation: ensure we used all amino acids
+        # Final validation: ensure we used all available amino acids
         if pos_counter != len(pos_pool):
             raise ValueError(f"Sequence {seq_idx}: Used {pos_counter} positive amino acids but had {len(pos_pool)}")
         if neg_counter != len(neg_pool):

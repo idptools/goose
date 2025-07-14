@@ -113,8 +113,8 @@ def hydropathy_range(length, fraction, net_charge):
     positive_residues = charged_residues['positive']
 
     # calculate negative residue contribution (D and E are both 1.0 so length = possible value.)
-    min_negative_contribution = length
-    max_negative_contribution = length
+    min_negative_contribution = negative_residues
+    max_negative_contribution = negative_residues
     # get min positive contribution (R = 0, so 0 is the min.)
     min_positive_contribution = 0
     # get max positive contribution (K is 0.6 so 0.6 is the max)
@@ -124,10 +124,10 @@ def hydropathy_range(length, fraction, net_charge):
     non_charged_residues = length - (positive_residues + negative_residues)
 
     # now get min non-charged contribution (Q and N = 1.0.)
-    min_non_charged_contribution = length
+    min_non_charged_contribution = non_charged_residues
 
     # I = 9.0
-    max_non_charged_contribution = length * 9.0
+    max_non_charged_contribution = non_charged_residues * 9.0
 
     # calculate the min and max hydropathy values
     min_hydropathy = (min_negative_contribution + min_positive_contribution + min_non_charged_contribution) / length
@@ -566,8 +566,14 @@ def find_hydro_range_constant_class(
         A tuple containing the minimum and maximum hydropathy values for the constant class variant.
     """
     # convert input sequence to
-    min_hydro = sum([min_class_hydro[a] for a in input_sequence])/len(input_sequence)
-    max_hydro = sum([max_class_hydro[a] for a in input_sequence])/len(input_sequence)
+    min_hydro = sum([min_class_hydro[a] for a in input_sequence])
+    min_hydro = min_hydro / len(input_sequence)
+    max_hydro = sum([max_class_hydro[a] for a in input_sequence])
+    max_hydro = max_hydro / len(input_sequence)
+    if min_hydro < 0:
+        min_hydro=0
+    if max_hydro > 9:
+        max_hydro=9
     return round(min_hydro,5), round(max_hydro,5)
 
 

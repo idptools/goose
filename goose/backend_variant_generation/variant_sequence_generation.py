@@ -530,7 +530,8 @@ def constant_residues_and_properties_sequence(sequence: str,
                     continue
                 
                 # Get the first sequence from the list
-                final_sequence = final_sequence[0]
+                if isinstance(final_sequence, list) and len(final_sequence) > 0:
+                    final_sequence = final_sequence[0]
         
         # If we reach here, we have a valid sequence
         # Append the final sequence to the list of all sequences
@@ -600,7 +601,10 @@ def constant_properties_and_class_sequence(sequence: str,
             max_iterations=1000,
             hydropathy_tolerance=hydropathy_tolerance,
             only_return_within_tolerance=False
-        )[0]
+        )
+        if isinstance(new_sequence, list) and len(new_sequence) > 0:
+            new_sequence = new_sequence[0]
+
         if check_hydropathy(new_sequence, target_hydropathy, hydropathy_tolerance):
             break
 
@@ -628,7 +632,8 @@ def constant_properties_and_class_sequence(sequence: str,
             return None
     
     # Get the first sequence from the list
-    new_sequence = new_sequence[0]  
+    if isinstance(new_sequence, list) and len(new_sequence) > 0:
+        new_sequence = new_sequence[0]
     return new_sequence
 
 
@@ -681,7 +686,8 @@ def constant_properties_and_class_by_order_sequence(input_sequence: str,
         )
         # Extract first sequence from the returned list
         if variant_sequence is not None and len(variant_sequence) > 0:
-            variant_sequence = variant_sequence[0]
+            if isinstance(variant_sequence, list) and len(variant_sequence) > 0:
+                variant_sequence = variant_sequence[0]
     # if we didn't get anything back from the optimization, return None   
     if variant_sequence is None or (isinstance(variant_sequence, list) and len(variant_sequence) == 0):
         return None
@@ -725,7 +731,8 @@ def change_hydropathy_constant_class_sequence(sequence: str,
     )
     if optimized_sequence is None or len(optimized_sequence) == 0:
         return None
-    optimized_sequence = optimized_sequence[0]  # Get the first sequence from the list
+    if isinstance(optimized_sequence, list) and len(optimized_sequence) > 0:
+        optimized_sequence = optimized_sequence[0]  # Get the first sequence from the list
     
     return optimized_sequence
 
@@ -779,6 +786,10 @@ def change_fcr_minimize_class_changes_sequence(sequence: str,
     if round(target_FCR,8) == 0:
         starting_NCPR=0
 
+    # make sure we adjust target values based on NCPR. 
+    if target_NCPR is None:
+        if abs(starting_NCPR) > target_FCR:
+            starting_NCPR = target_FCR * np.sign(starting_NCPR)
     # get num residues needed for fcr and ncpr
     charged_residues = needed_charged_residues(
         length=len(sequence),
@@ -864,7 +875,8 @@ def change_fcr_minimize_class_changes_sequence(sequence: str,
     )
     if sequence is None or len(sequence) == 0:
         return None
-    sequence = sequence[0]  # Get the first sequence from the list
+    if isinstance(sequence, list) and len(sequence) > 0:
+        sequence = sequence[0]  # Get the first sequence from the list
     
     # make sure we can have a non negative kappa value. 
     if Protein(sequence).FCR != 0:
@@ -884,7 +896,8 @@ def change_fcr_minimize_class_changes_sequence(sequence: str,
                 )
                 if sequence is None or len(sequence) == 0:
                     return None
-                sequence = sequence[0]
+                if isinstance(sequence, list) and len(sequence) > 0:
+                    sequence = sequence[0]
 
     return sequence
 
@@ -956,7 +969,8 @@ def change_kappa_sequence(sequence,
     )
     if sequence is None or len(sequence) == 0:
         return None
-    sequence = sequence[0]
+    if isinstance(sequence, list) and len(sequence) > 0:
+        sequence = sequence[0]
     return sequence
 
 def change_properties_minimize_differences_sequence(input_sequence: str,
@@ -1120,7 +1134,9 @@ def change_properties_minimize_differences_sequence(input_sequence: str,
             max_iterations=max_iterations,
             hydropathy_tolerance=hydropathy_tolerance,
             only_return_within_tolerance=False
-        )[0]
+        )
+        if isinstance(input_sequence, list) and len(input_sequence) > 0:
+            input_sequence = input_sequence[0]  # Get the first sequence from the list
         
         # check hydropathy
         if not check_hydropathy(input_sequence, target_hydropathy, hydropathy_tolerance):
@@ -1142,16 +1158,14 @@ def change_properties_minimize_differences_sequence(input_sequence: str,
                 max_iterations=max_iterations,
                 hydropathy_tolerance=hydropathy_tolerance,
                 preserve_charged=True,
-                convert_input_seq_to_matrix=True,
                 return_when_num_hit=1,
-                avoid_shuffle=True,
-                num_copies=10,
                 convert_back_to_sequences= True,
                 need_to_convert_seqs=True
             )
             if input_sequence is None:
                 return None
-            input_sequence = input_sequence[0]  # Get the first sequence from the list
+            if isinstance(input_sequence, list) and len(input_sequence) > 0:
+                input_sequence = input_sequence[0]  # Get the first sequence from the list
 
     # Step 5: Optimize kappa
     if target_kappa is not None:
@@ -1169,7 +1183,8 @@ def change_properties_minimize_differences_sequence(input_sequence: str,
             )
             if input_sequence is None:
                 return None
-            input_sequence = input_sequence[0]
+            if isinstance(input_sequence, list) and len(input_sequence) > 0:
+                input_sequence = input_sequence[0]
     
     return input_sequence
 
@@ -1240,9 +1255,26 @@ def change_any_properties_sequence(sequence,
             hydropathy_tolerance=hydropathy_tolerance,
             only_return_within_tolerance=False
         )
-    sequence = sequence[0]  # Get the first sequence from the list
-    if check_hydropathy(sequence, target_hydropathy, hydropathy_tolerance) is False:
-        return None
+    if isinstance(sequence, list) and len(sequence) > 0:
+        sequence = sequence[0]  # Get the first sequence from the list
+
+    # check hydropathy again after minimal changes
+    if not check_hydropathy(sequence, target_hydropathy, hydropathy_tolerance):
+        # use optimize_hydropathy function
+        sequence = optimize_hydropathy(
+            [sequence],
+            target_hydropathy=target_hydropathy,
+            max_iterations=max_iterations,
+            hydropathy_tolerance=hydropathy_tolerance,
+            preserve_charged=True,
+            return_when_num_hit=1,
+            convert_back_to_sequences= True,
+            need_to_convert_seqs=True
+        )
+        if sequence is None:
+            return None
+        if isinstance(sequence, list) and len(sequence) > 0:
+            sequence = sequence[0]  # Get the first sequence from the list
     
     # now optimize kappa
     # get current kappa
@@ -1269,7 +1301,8 @@ def change_any_properties_sequence(sequence,
                     )
                     if sequence is None or len(sequence) == 0:
                         return None
-                    sequence = sequence[0]  # Get the first sequence from the list
+                    if isinstance(sequence, list) and len(sequence) > 0:
+                        sequence = sequence[0]  # Get the first sequence from the list
     # return sequence
     return sequence
 
@@ -1307,6 +1340,9 @@ def change_dimensions_sequence(sequence, increase_or_decrease, rg_or_re,
         num_intervals = 40
     else:
         num_intervals = 20
+
+    # make sure rg or re is lowercase. 
+    rg_or_re = rg_or_re.lower()
 
     if rg_or_re=='re':
         # If we are optimizing for radius of elongation (Re), we need to adjust the intervals accordingly

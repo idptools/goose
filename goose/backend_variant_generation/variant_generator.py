@@ -26,7 +26,7 @@ class VariantGenerator:
     """
     
     def __init__(self,
-                 num_attempts: int = 50,
+                 num_attempts: int = 200,
                  strict_disorder: bool = False,
                  disorder_cutoff: float = 0.5,
                  metapredict_version: int = 3,
@@ -739,6 +739,11 @@ class VariantGenerator:
         str
             A generated variant sequence that meets the disorder criteria.
         """
+        # make sure NCPR is not greater than FCR
+        protein = Protein(input_sequence)
+        if target_NCPR > protein.FCR:
+            raise ValueError("Target NCPR cannot be greater than FCR. Please provide a valid target NCPR value.")
+        
         for _ in range(self.num_attempts):
             variant_sequence = vsg.change_ncpr_constant_class_sequence(
                 input_sequence,
@@ -940,7 +945,14 @@ class VariantGenerator:
         str or list of str
         The generated variant(s) of the input sequence
         """ 
+        if isinstance(rg_or_re, str):
+            rg_or_re = rg_or_re.lower()
+        else:
+            raise ValueError("rg_or_re must be a string, either 'rg' or 're'.")
         
+        if rg_or_re not in ['rg', 're']:
+            raise ValueError("rg_or_re must be either 'rg' or 're'.")
+
         # iterate
         for _ in range(self.num_attempts):
             variant_sequence = vsg.change_dimensions_sequence(

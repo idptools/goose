@@ -4,7 +4,7 @@ Basic pytest tests for create.sequence variant functions.
 This module contains Basic tests for the main sequence variant functions.
 Tests should ensure that the functions behave as expected. 
 """
-
+import random
 import pytest
 from goose import create
 from goose import goose_exceptions
@@ -32,32 +32,7 @@ from goose.backend_variant_generation.verify_variant_functions import (
     verify_dimensions,
     verify_same_length)
 
-'''
-For each of the functions, we need to verify specific things, going to list that here:
-- ``'shuffle_specific_regions'`` - verify_constant_region, verify_region_changed, verify_residue_count
-- ``'shuffle_except_specific_regions'`` - verify_constant_region, verify_region_changed, verify_residue_count
-- ``'shuffle_specific_residues'`` - verify_constant_residue_positions, verify_region_changed, verify_residue_count
-- ``'shuffle_except_specific_residues'`` - verify_constant_residue_positions, verify_region_changed, verify_residue_count
-- ``'weighted_shuffle_specific_residues'`` - verify_constant_residue_positions, verify_region_changed, verify_residue_count
-- ``'targeted_reposition_specific_residues'`` - verify_constant_residue_positions, verify_region_changed, verify_residue_count
-- ``'change_residue_asymmetry'`` - verify_changed_iwd, verify_residue_count
-- ``'constant_properties'`` - verify_constant_properties
-- ``'constant_residues_and_properties'`` - verify_constant_properties, verify_constant_residue_positions
-- ``'constant_properties_and_class'`` - verify_constant_properties, verify_same_number_by_class
-- ``'constant_properties_and_class_by_order'`` -  verify_constant_properties, verify_same_number_by_class, verify_same_order_by_class
-- ``'change_hydropathy_constant_class'`` - verify_target_hydropathy, verify_same_number_by_class
-- ``'change_fcr_minimize_class_changes'`` - verify_target_FCR
-- ``'change_ncpr_constant_class'`` - verify_target_NCPR
-- ``'change_kappa'`` - verify_target_kappa, verify_residue_count
-- ``'change_properties_minimize_differences'`` - verify_target_hydropathy, verify_target_kappa, verify_target_FCR, verify_target_NCPR
-    Note: only verify things that are changed, otherwise make sure they are within tolerance
-- ``'change_any_properties'`` -verify_target_hydropathy, verify_target_kappa, verify_target_FCR, verify_target_NCPR
-    Note: only verify things that are changed, otherwise make sure they are within tolerance
-- ``'change_dimensions'`` - verify_dimensions
-
-Note: For all of them, we need to use verify_disorder and verify_same_length
-'''
-
+# =============================================================================
 # Test sequences - create a variety of test sequences with different properties
 @pytest.fixture
 def test_sequences():
@@ -171,10 +146,11 @@ def test_weighted_shuffle_specific_residues(test_sequences):
 def test_targeted_reposition_specific_residues(test_sequences):
     """Test targeted_reposition_specific_residues variant type."""
     seq = test_sequences['basic']
-    target_residues = ['F', 'Y', 'W']
+    possible_residues = list(set([a for a in seq]))
+    target_residue = random.choice(possible_residues)
     
     variant_seq = create.variant(seq, 'targeted_reposition_specific_residues',
-                                target_residues=target_residues)
+                                target_residues=target_residue)
     
     # Verify basic properties
     assert verify_same_length(seq, variant_seq)
@@ -403,7 +379,7 @@ def test_change_dimensions_increase_re(test_sequences):
     assert verify_disorder(seq, variant_seq)
     
     # Verify dimensions changed as expected
-    assert verify_dimensions(seq, variant_seq, 'Re', 'increase')
+    assert verify_dimensions(seq, variant_seq, 're', 'increase')
 
 def test_change_dimensions_decrease_rg(test_sequences):
     """Test change_dimensions variant type - decrease Rg."""
@@ -418,7 +394,7 @@ def test_change_dimensions_decrease_rg(test_sequences):
     assert verify_disorder(seq, variant_seq)
     
     # Verify dimensions changed as expected
-    assert verify_dimensions(seq, variant_seq, 'Rg', 'decrease')
+    assert verify_dimensions(seq, variant_seq, 'rg', 'decrease')
 
 # =============================================================================
 # ERROR HANDLING TESTS
