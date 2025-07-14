@@ -9,6 +9,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from goose import goose_exceptions
 from goose.backend import parameters
 from goose.backend_property_calculation.calculate_properties_batch import matrices_to_sequences
+from goose.backend_property_calculation.calculate_kappa import kappa
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa
 from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy
 from goose.backend_sequence_generation.sequence_by_probability import SequenceGenerator
@@ -291,28 +292,33 @@ def by_properties(length,
         if len(seqs) == 0:
             continue
 
-
         # see if we need to optimize kappa
-        if kappa is not None:
+        if kappa is not None and kappa != -1:
+            # set charge placement variable 
+            preserve_charge_placement = True
+            # make sure kappa is not -1
+            kappa_values = kappa(seqs)
+            # filter out sequences with kappa -1
+            valid_indices = np.where(kappa_values != -1)[0]
+            # get valid sequences
+            seqs = seqs[valid_indices]
+
             # iterate over sequences that have made it this far. 
             # get first successful kappa seq. This is needed because kappa is computationally intensive. 
             seqs = optimize_kappa(seqs, kappa, 
-                                             return_when_num_hit=required_kappa_batch_size, 
-                                             only_return_within_tolerance=True,
-                                             kappa_tolerance=kappa_tolerance)
-        
-        # make sure we still have sequences
-        if len(seqs) == 0:
-            continue
-        
-        # mapping sequences to ternarized values requires converting to sequences, so if we have kappa, we don't need to convert back to sequences.
-        if kappa is None:
-            # if not, convert matrix back to sequences 
+                                            return_when_num_hit=required_kappa_batch_size, 
+                                            only_return_within_tolerance=True,
+                                            kappa_tolerance=kappa_tolerance)
+            
+            # make sure we still have sequences
+            if len(seqs) == 0:
+                continue
+
+        else:
+            # if we are not optimizing kappa, we need to convert sequences back from matrices. 
             seqs = matrices_to_sequences(seqs)
             # set charge preservation for disorder optimization
             preserve_charge_placement = False
-        else:
-            preserve_charge_placement = True
 
         # if we are checking disorder, do that. 
         if check_sequence_disorder:

@@ -97,7 +97,7 @@ VALID_AMINO_ACIDS = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N',
 
 
 # functions to calculate max or min values. 
-def calculate_max_charge(hydropathy):
+def calculate_max_charge_emperical(hydropathy):
     '''    
     Function to determine the maximum charge value depending
     on the objective hydropathy of a sequence. Empirically 
@@ -127,6 +127,65 @@ def calculate_max_charge(hydropathy):
     # return the lower value between the 2 possibilities.
     # can't have FCR > 1. so 1 is also in the list
     return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2, 1])
+
+def calculate_max_charge_theoretical(length, hydropathy, net_charge=-1):
+    '''
+    Function to determine the maximum FCR value depending
+    on the objective hydropathy of a sequence. Uses mathematical
+    bounds based on hydropathy scale and contributions 
+    from charged and uncharged amino acids. 
+
+    Parameters
+    ----------
+    length : Int
+        The length of the sequence to be generated
+    hydropathy : Float
+        The objective hydropathy for the final sequence
+    net_charge : Float, optional
+        The objective net_charge for the final sequence. If not specified,
+        it will be set to -1.
+
+    Returns
+    -------
+        The maximum possible FCR that a sequence can have
+        for a specific hydropathy value. Uses the assumption
+        that we can use any residues, so non-charged residues
+        can have hydropathy as high as 9.0 and charged residues
+        can have hydropathy as high as 1.0.
+    '''
+    hydro_from_NCPR = (net_charge*0.2)+0.8
+    # determine the number of charged residues 
+    return length * (9-hydropathy) / (9.0 - hydro_from_NCPR)
+
+def calculate_max_charge(length, hydropathy, net_charge=-1, empirical=True):
+    '''
+    Function to determine the maximum FCR value depending
+    on the objective hydropathy of a sequence. Uses either
+    empirical or theoretical methods to determine the maximum
+    charge value.
+
+    Parameters
+    ----------
+    length : Int
+        The length of the sequence to be generated
+    hydropathy : Float
+        The objective hydropathy for the final sequence
+    net_charge : Float, optional
+        The objective net_charge for the final sequence. If not specified,
+        it will be set to -1.
+    empirical : Bool, optional
+        If True, uses empirical method; if False, uses theoretical method.
+
+    Returns
+    -------
+        The maximum possible FCR that a sequence can have
+        for a specific hydropathy value.
+    '''
+    if empirical:
+        return calculate_max_charge_emperical(hydropathy)
+    else:
+        return calculate_max_charge_theoretical(length, hydropathy, net_charge)
+
 
 # Empirically determined Rg / Re min and max based on length.
 def get_min_re(length):

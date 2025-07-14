@@ -12,7 +12,7 @@ import random
 from sparrow.protein import Protein
 from goose.backend import parameters
 from goose.backend_sequence_generation.sequence_generation import by_properties
-from goose.backend_variant_generation.helper_functions import check_variant_disorder_vectorized
+from goose.backend_variant_generation.helper_functions import check_variant_disorder_vectorized, hydropathy_range
 from goose.backend_variant_generation import variant_sequence_generation as vsg
 
 
@@ -26,7 +26,7 @@ class VariantGenerator:
     """
     
     def __init__(self,
-                 num_attempts: int = 5,
+                 num_attempts: int = 50,
                  strict_disorder: bool = False,
                  disorder_cutoff: float = 0.5,
                  metapredict_version: int = 3,
@@ -117,6 +117,19 @@ class VariantGenerator:
         str
             A generated variant sequence with specified regions shuffled.
         """
+        # validate that shuffle_regions are valid
+        if not all(isinstance(region, tuple) and len(region) == 2 for region in shuffle_regions):
+            raise ValueError("shuffle_regions must be a list of tuples with (start_index, end_index) pairs.")
+        # validate that start_index < end_index for each region
+        for region in shuffle_regions:
+            if region[0] >= region[1]:
+                raise ValueError("Each region's start_index must be less than end_index.")
+        # validate that start_index and end_index are within the bounds of the input_sequence
+        sequence_length = len(input_sequence)
+        for region in shuffle_regions:
+            if region[0] < 0 or region[1] > sequence_length:
+                raise ValueError("Each region's start_index and end_index must be within the bounds of the input_sequence.")
+
         for _ in range(self.num_attempts):
             shuffle_vars = []
             for _ in range(10):
@@ -147,6 +160,20 @@ class VariantGenerator:
         str
             A generated variant sequence with specified regions excluded from shuffling.
         """
+        # validate that excluded_regions are valid
+        if not all(isinstance(region, tuple) and len(region) == 2 for region in excluded_regions):
+            raise ValueError("excluded_regions must be a list of tuples with (start_index, end_index) pairs.")
+        # validate that start_index < end_index for each region
+        for region in excluded_regions:
+            if region[0] >= region[1]:
+                raise ValueError("Each region's start_index must be less than end_index.")
+        # validate that start_index and end_index are within the bounds of the input_sequence
+        sequence_length = len(input_sequence)
+        for region in excluded_regions:
+            if region[0] < 0 or region[1] > sequence_length:
+                raise ValueError("Each region's start_index and end_index must be within the bounds of the input_sequence.")
+
+
         for _ in range(self.num_attempts):
             shuffle_vars = []
             for _ in range(10):
@@ -194,6 +221,15 @@ class VariantGenerator:
                 # if target_aas is a single amino acid, convert to list
                 target_residues = list(target_residues)
 
+        # make sure that there is at least 1 target residue in the input sequence
+        if not any(residue in input_sequence for residue in target_residues):
+            raise ValueError("No target residues found in the input sequence. Please ensure that at least one of the target residues is present in the input sequence.")
+
+        # get the identity of the target residues in the sequence. 
+        target_residues_in_sequence = [residue for residue in target_residues if residue in input_sequence]
+        # make sure not only one residue getting shuffled, this does nothing.
+        if len(set(target_residues_in_sequence)) < 2:
+            raise ValueError("Only one target residue found in the input sequence. This will not change the sequence. Make sure at least two targets in input sequence.")
 
         for _ in range(self.num_attempts):
             shuff_seqs = []
@@ -241,6 +277,12 @@ class VariantGenerator:
                 # if target_aas is a single amino acid, convert to list
                 excluded_residues = list(excluded_residues) 
 
+        # get all residues to be excluded from the input sequence
+        excluded_residues_in_sequence = [residue for residue in excluded_residues if residue in input_sequence]
+        # make sure not all residues are excluded, this does nothing.
+        if len(set(excluded_residues_in_sequence)) == len(set(input_sequence)):
+            raise ValueError("All residues in the input sequence are excluded. This will not change the sequence. Make sure at least one residue is not in excluded_residues.")
+
         for _ in range(self.num_attempts):
             shuff_seqs = []
             for _ in range(10):
@@ -278,6 +320,7 @@ class VariantGenerator:
             A generated variant sequence with specified residues shuffled.
         """
 
+
         # dict of classes that are possible to choose
         classdict={'charged':['D', 'E', 'K', 'R'], 'polar':['Q', 'N', 'S', 'T'], 'aromatic':
         ['F', 'W', 'Y'], 'aliphatic': ['I', 'V', 'L', 'A', 'M'], 'negative':['D', 'E'], 'positive':['K', 'R']}
@@ -294,7 +337,19 @@ class VariantGenerator:
             else:
                 # if target_aas is a single amino acid, convert to list
                 target_residues = list(target_residues)
-                        
+
+
+        # make sure that there is at least 1 target residue in the input sequence
+        if not any(residue in input_sequence for residue in target_residues):
+            raise ValueError("No target residues found in the input sequence. Please ensure that at least one of the target residues is present in the input sequence.")
+
+        # get the identity of the target residues in the sequence. 
+        target_residues_in_sequence = [residue for residue in target_residues if residue in input_sequence]
+        # make sure not only one residue getting shuffled, this does nothing.
+        if len(set(target_residues_in_sequence)) < 2:
+            raise ValueError("Only one target residue found in the input sequence. This will not change the sequence. Make sure at least two targets in input sequence.")
+
+
         for _ in range(self.num_attempts):
             variant_sequence = vsg.weighted_shuffle_specific_residues_sequence(
                 input_sequence,
@@ -349,7 +404,12 @@ class VariantGenerator:
                 target_residues = amino_acid_classes[target_residues]
             else:
                 # Convert single amino acid string to list
-                target_residues = list(target_residues.upper())    
+                target_residues = list(target_residues.upper())   
+
+        # make sure that there is at least 1 target residue in the input sequence
+        if not any(residue in input_sequence for residue in target_residues):
+            raise ValueError("No target residues found in the input sequence. Please ensure that at least one of the target residues is present in the input sequence.")
+ 
 
         for _ in range(self.num_attempts):
             variant_sequence = vsg.targeted_reposition_specific_residues_sequence(
@@ -408,14 +468,14 @@ class VariantGenerator:
                 # if target_aas is a single amino acid, convert to list
                 target_residues = list(target_residues)
 
-
-        # Use a higher number of attempts for this method (as in original)
-        attempts = max(self.num_attempts, 50)
+        # make sure that there is at least 1 target residue in the input sequence
+        if not any(residue in input_sequence for residue in target_residues):
+            raise ValueError("No target residues found in the input sequence. Please ensure that at least one of the target residues is present in the input sequence.")
 
         if isinstance(target_residues, str):
             target_residues = list(target_residues)
         
-        for _ in range(attempts):
+        for _ in range(self.attempts):
             variant_sequence = vsg.change_residue_asymmetry_sequence(
                 input_sequence,
                 target_residues=target_residues,
@@ -504,10 +564,12 @@ class VariantGenerator:
         str
             A generated variant sequence that meets the disorder criteria.
         """
-        # Use a higher number of attempts for this method (as in original)
-        attempts = max(self.num_attempts, 50)
-        
-        for _ in range(attempts):
+        # make sure that there is at least 1 target residue in the input sequence
+        if not any(residue in input_sequence for residue in constant_residues):
+            raise ValueError("No constant residues found in the input sequence. Please ensure that at least one of the constant residues is present in the input sequence.")
+
+
+        for _ in range(self.attempts):
             variant_sequence = vsg.constant_residues_and_properties_sequence(
                 input_sequence,
                 constant_residues=constant_residues,
@@ -537,10 +599,8 @@ class VariantGenerator:
         str
             A generated variant sequence that meets the disorder criteria.
         """
-        # Use a higher number of attempts for this method (as in original)
-        attempts = max(self.num_attempts, 50)
         
-        for _ in range(attempts):
+        for _ in range(self.attempts):
             variant_sequence = vsg.constant_properties_and_class_sequence(
                 input_sequence,
                 kappa_tolerance=self.kappa_tolerance,
@@ -599,6 +659,19 @@ class VariantGenerator:
         str
             A generated variant sequence that meets the disorder criteria.
         """
+        # determine the possible hydropathy range
+        prot_object = Protein(input_sequence)
+        min_hydropathy, max_hydropathy = hydropathy_range(
+            len(input_sequence),
+            prot_object.FCR,
+            prot_object.NCPR
+        )
+
+        # check if target hydropathy is within the range
+        if target_hydropathy < min_hydropathy or target_hydropathy > max_hydropathy:
+            raise ValueError(f"Target hydropathy {target_hydropathy} is out of bounds based on required FCR and NCPR values for input sequence."
+                             f"Valid range is [{min_hydropathy}, {max_hydropathy}].")
+
         for _ in range(self.num_attempts):
             variant_sequence = vsg.change_hydropathy_constant_class_sequence(
                 input_sequence,
@@ -700,8 +773,16 @@ class VariantGenerator:
         str
             A generated variant sequence that meets the kappa criteria.
         """
+        # make sure input sequence has FCR > 0.
+        protein = Protein(input_sequence)
+        if protein.FCR <= 0:
+            raise ValueError("Input sequence must have charged residues (FCR > 0) to make kappa variant.")
+        # make sure FCR != NCPR
+        if protein.FCR == protein.NCPR:
+            raise ValueError("Input sequence must have at least one negatively charged and one positively charged residue to make kappa variant.")
         # make a copy of the input sequence so we can go back to it if we need to
         original_sequence = input_sequence
+        # iterate.
         for cur_iter in range(self.num_attempts):
             variant_sequence = vsg.change_kappa_sequence(
                 input_sequence,
@@ -858,7 +939,9 @@ class VariantGenerator:
         -------
         str or list of str
         The generated variant(s) of the input sequence
-        """
+        """ 
+        
+        # iterate
         for _ in range(self.num_attempts):
             variant_sequence = vsg.change_dimensions_sequence(
                 input_sequence,

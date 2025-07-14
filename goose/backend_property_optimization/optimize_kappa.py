@@ -33,7 +33,9 @@ def optimize_kappa(sequence, target_kappa,
     to reach a target kappa value. Optimized for performance.
     
     Args:
-        sequence (str): Single amino acid sequence to optimize
+        sequence (str or np.ndarray): Input sequence or matrix of sequences to optimize.
+            If a string, it is treated as a single sequence.
+            If a numpy array, it should be of shape (N, L) where N is the number of sequences and L is the length.
         target_kappa (float): Target kappa value to reach
         num_copies (int): Number of copies of the sequence to create for optimization
         max_change_iterations (int): Maximum iterations for each sequence modification
@@ -102,6 +104,12 @@ def optimize_kappa(sequence, target_kappa,
     if len(valid_indices) == 0:
         # raising an error because otherwise we risk looping other functions relying on this one. 
         raise ValueError("All sequences have kappa value of -1, cannot optimize kappa. Terminating optimization.")
+
+    # filter out sequences with kappa -1
+    ternarized_sequences = ternarized_sequences[valid_indices]
+    kappa_values = kappa_values[valid_indices]
+    # also filter out from sequence_matrix
+    sequence_matrix = sequence_matrix[valid_indices]
 
     prev_kappa_values = kappa_values.copy()  # Store initial kappa values for stagnation detection
 
@@ -178,20 +186,13 @@ def optimize_kappa(sequence, target_kappa,
             for i, idx in enumerate(recalc_indices):
                 kappa_val = current_kappa[i]
                 kappa_values[idx] = kappa_val
-                
-                # Update status of this sequence
-                old_status = (~reached_target[idx], needs_increase[idx], needs_decrease[idx])
-
+                # Update needs_increase and needs_decrease based on new kappa values
                 reached_target[idx] = abs(kappa_val - target_kappa) <= kappa_tolerance
                 needs_increase[idx] = kappa_val < target_kappa - kappa_tolerance
                 needs_decrease[idx] = kappa_val > target_kappa + kappa_tolerance
 
-                new_status = (~reached_target[idx], needs_increase[idx], needs_decrease[idx])
-                #print(f"  Sequence {idx}: kappa {kappa_val:.6f}, reached_target: {reached_target[idx]}")
-                    
             # Store current kappa values for stagnation detection
             prev_kappa_values[recalc_indices] = current_kappa
-            #print(f"After iteration {num_it}: {np.sum(reached_target)} sequences reached target")
 
             if num_not_improved > 2:
                 if window_size==5:

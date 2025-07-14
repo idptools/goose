@@ -94,6 +94,46 @@ def needed_charged_residues(length, fraction, net_charge):
 
     return {'positive':num_positive, 'negative':num_negative}
 
+def hydropathy_range(length, fraction, net_charge):
+    """
+    Determine the mathematically possible hydropathy values based on
+    the charge requirements. 
+    
+    parameters
+    ----------
+    length : int
+        The length of the sequence.
+    fraction : float
+        The fraction of charged residues in the sequence.
+    net_charge : float
+        The net charge of the sequence.
+    """
+    charged_residues = needed_charged_residues(length, fraction, net_charge)
+    negative_residues = charged_residues['negative']
+    positive_residues = charged_residues['positive']
+
+    # calculate negative residue contribution (D and E are both 1.0 so length = possible value.)
+    min_negative_contribution = length
+    max_negative_contribution = length
+    # get min positive contribution (R = 0, so 0 is the min.)
+    min_positive_contribution = 0
+    # get max positive contribution (K is 0.6 so 0.6 is the max)
+    max_positive_contribution = 0.6 * positive_residues
+
+    # figure out non-charged residue number
+    non_charged_residues = length - (positive_residues + negative_residues)
+
+    # now get min non-charged contribution (Q and N = 1.0.)
+    min_non_charged_contribution = length
+
+    # I = 9.0
+    max_non_charged_contribution = length * 9.0
+
+    # calculate the min and max hydropathy values
+    min_hydropathy = (min_negative_contribution + min_positive_contribution + min_non_charged_contribution) / length
+    max_hydropathy = (max_negative_contribution + max_positive_contribution + max_non_charged_contribution) / length
+    return min_hydropathy, max_hydropathy
+
 def change_all_residues_within_class(input_sequence):
     '''
     function to take in an input sequence and change all residues in

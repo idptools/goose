@@ -11,6 +11,8 @@ from goose.data import aa_list_probabilities as aa_probs
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
+from goose.backend.parameters import calculate_max_charge
+
 # Constants
 AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 HYDROPATHY_SCALE = np.array([6.3, 7.0, 1.0, 1.0, 7.3, 4.1, 1.3, 9.0, 
@@ -42,13 +44,7 @@ class SequenceParameters:
         Calculate the maximum fraction of charged residues based on target hydropathy.
             This was empirically determined...
         """
-        # calculate the maximum charge values for a given hydropathy
-        MAXIMUM_CHARGE_WITH_HYDRO_1 = 1.1907 + (-0.1389 * target_hydropathy)
-        MAXIMUM_CHARGE_WITH_HYDRO_2 = 1.2756 + (-0.1450 * target_hydropathy)
-        # return the lower value between the 2 possibilities.
-        # can't have FCR > 1. so 1 is also in the list
-        max_fcr = min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2, 1])
-        return np.clip(max_fcr, 0.0, 1.0) 
+        return calculate_max_charge(target_hydropathy)
 
 
     @staticmethod
@@ -202,20 +198,39 @@ class SequenceGenerator:
 
             # If hydropathy is specified, calculate other parameters based on it
             if hydropathy is not None:
-                # get max FCR
-                max_fcr = SequenceParameters._calculate_max_fcr(hydropathy)
+                # get max FCR, thereotical and empirical
+                max_fcr_theoretical = SequenceParameters._calculate_max_fcr(
+                        length=length,
+                        hydropathy=hydropathy,
+                        net_charge=ncpr,
+                        empirical=False
+                    )
+                max_fcr_empirical = SequenceParameters._calculate_max_fcr(
+                        length=length,
+                        hydropathy=hydropathy,
+                        net_charge=ncpr,
+                        empirical=True
+                    )
                 
                 # Validate provided FCR against hydropathy constraints
-                if fcr is not None and fcr > max_fcr:
-                    raise ValueError(f"FCR {fcr} exceeds maximum allowed FCR {max_fcr:.3f} for hydropathy {hydropathy}")
-                
+                if fcr is not None and fcr > max_fcr_theoretical:
+                    raise ValueError(f"FCR {fcr} exceeds maximum allowed FCR {max_fcr_theoretical:.3f} for hydropathy {hydropathy}")
+
                 # have max FCR already calculated. Just need to get min FCR and NCPR
                 if fcr is None:
+                    # set max_fcr to be the empirically possible max FCR if user does't specify it. 
+                    # this increases our likelihood of generating disordered sequences
+                    max_fcr = max_fcr_empirical
                     if ncpr is not None:
                         min_fcr = abs(ncpr)
                         # Check if constraints are satisfiable
                         if min_fcr > max_fcr:
-                            raise ValueError(f"Cannot satisfy constraints: |NCPR| {abs(ncpr)} > max FCR {max_fcr:.3f} for hydropathy {hydropathy}")
+                            # if min_fcr is greater than emperically determined max_fcr, try to use the theoretical max FCR
+                            if min_fcr > max_fcr_theoretical:
+                                # if min_fcr greater than max_fcr_theoretical, raise an error
+                                raise ValueError(f"Cannot satisfy constraints: |NCPR| {abs(ncpr)} > max FCR {max_fcr_theoretical:.3f} for hydropathy {hydropathy}")
+                            else:
+                                max_fcr = max_fcr_theoretical
                     else:
                         min_fcr = 0.0
                     fcr = np.random.uniform(low=min_fcr, high=max_fcr)

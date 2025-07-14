@@ -656,10 +656,10 @@ def seq_by_re(length, objective_re, allowed_error=parameters.MAXIMUM_RG_RE_ERROR
     # Validate sequence length and convert to int if needed
     goose_tools.length_check(length)
 
-    # Validate that the objective Re is within the possible range for this length
-    if objective_re < parameters.get_min_re(length) or objective_re > parameters.get_max_re(length):
-        min_possible_value = parameters.get_min_re(length)
-        max_possible_value = parameters.get_max_re(length)
+    # Validate that the objective Rg is within the possible range for this length
+    min_possible_value = parameters.get_min_re(length)
+    max_possible_value = parameters.get_max_re(length)
+    if objective_re < min_possible_value or objective_re > max_possible_value:
         raise goose_exceptions.GooseInputError(f'Cannot generate sequence, for length {length}, min Re = {min_possible_value}, max Re = {max_possible_value}.')
 
     # handle legacy parameter name: convert 'cutoff' to 'disorder_cutoff'
@@ -774,9 +774,9 @@ def seq_by_rg(length, objective_rg, allowed_error=parameters.MAXIMUM_RG_RE_ERROR
     goose_tools.length_check(length)
 
     # Validate that the objective Rg is within the possible range for this length
-    if objective_rg < parameters.get_min_rg(length) or objective_rg > parameters.get_max_rg(length):
-        min_possible_value = parameters.get_min_rg(length)
-        max_possible_value = parameters.get_max_rg(length)
+    min_possible_value = parameters.get_min_rg(length)
+    max_possible_value = parameters.get_max_rg(length)
+    if objective_rg < min_possible_value or objective_rg > max_possible_value:
         raise goose_exceptions.GooseInputError(f'Cannot generate sequence, for length {length}, min Rg = {min_possible_value}, max Rg = {max_possible_value}.')
 
     # handle legacy parameter name: convert 'cutoff' to 'disorder_cutoff'

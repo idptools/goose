@@ -247,7 +247,7 @@ def check_props_parameters(**kwargs):
         # now see if charge value used is within bounds
         if check_charge_val > max_possible_charge_value:
             curhydro = kwargs['hydropathy']
-            error_message = f'The specified hydropathy value if {curhydro} is not compatible with the specified charge value.'
+            error_message = f"The specified hydropathy value {curhydro} is not possible with the specified FCR value of {kwargs['FCR']}."
             raise GooseInputError(error_message)
     
     # check hydropathy_tolerance
