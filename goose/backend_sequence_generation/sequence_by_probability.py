@@ -39,12 +39,18 @@ class SequenceParameters:
         self.ncpr_range = (-1, 1)
 
     @staticmethod
-    def _calculate_max_fcr(target_hydropathy: float) -> float:
+    def _calculate_max_fcr(length: int, 
+                           target_hydropathy: float,
+                           net_charge: float = None,
+                           empirical: bool = True) -> float:
         """
         Calculate the maximum fraction of charged residues based on target hydropathy.
             This was empirically determined...
         """
-        return calculate_max_charge(target_hydropathy)
+        return calculate_max_charge(length,
+                                    target_hydropathy,
+                                    net_charge=net_charge,
+                                    empirical=empirical)
 
 
     @staticmethod
@@ -201,13 +207,13 @@ class SequenceGenerator:
                 # get max FCR, thereotical and empirical
                 max_fcr_theoretical = SequenceParameters._calculate_max_fcr(
                         length=length,
-                        hydropathy=hydropathy,
+                        target_hydropathy=hydropathy,
                         net_charge=ncpr,
                         empirical=False
                     )
                 max_fcr_empirical = SequenceParameters._calculate_max_fcr(
                         length=length,
-                        hydropathy=hydropathy,
+                        target_hydropathy=hydropathy,
                         net_charge=ncpr,
                         empirical=True
                     )

@@ -475,7 +475,7 @@ class VariantGenerator:
         if isinstance(target_residues, str):
             target_residues = list(target_residues)
         
-        for _ in range(self.attempts):
+        for _ in range(self.num_attempts):
             variant_sequence = vsg.change_residue_asymmetry_sequence(
                 input_sequence,
                 target_residues=target_residues,
@@ -569,7 +569,7 @@ class VariantGenerator:
             raise ValueError("No constant residues found in the input sequence. Please ensure that at least one of the constant residues is present in the input sequence.")
 
 
-        for _ in range(self.attempts):
+        for _ in range(self.num_attempts):
             variant_sequence = vsg.constant_residues_and_properties_sequence(
                 input_sequence,
                 constant_residues=constant_residues,
@@ -600,7 +600,7 @@ class VariantGenerator:
             A generated variant sequence that meets the disorder criteria.
         """
         
-        for _ in range(self.attempts):
+        for _ in range(self.num_attempts):
             variant_sequence = vsg.constant_properties_and_class_sequence(
                 input_sequence,
                 kappa_tolerance=self.kappa_tolerance,

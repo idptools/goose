@@ -168,7 +168,7 @@ def sequence(length, **kwargs):
     kwargs = goose_tools.check_and_correct_props_kwargs(**kwargs)
 
     # Validate that parameter values are within acceptable ranges
-    goose_tools.check_props_parameters(**kwargs)
+    goose_tools.check_props_parameters(length, **kwargs)
 
     # Validate common parameters shared across multiple functions
     # Ensures proper types and ranges for basic sequence generation parameters

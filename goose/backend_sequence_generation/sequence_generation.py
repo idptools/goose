@@ -9,7 +9,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from goose import goose_exceptions
 from goose.backend import parameters
 from goose.backend_property_calculation.calculate_properties_batch import matrices_to_sequences
-from goose.backend_property_calculation.calculate_kappa import kappa
+from goose.backend_property_calculation.calculate_kappa import kappa as calculate_kappa
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa
 from goose.backend_property_optimization.optimize_hydropathy import optimize_hydropathy
 from goose.backend_sequence_generation.sequence_by_probability import SequenceGenerator
@@ -297,7 +297,7 @@ def by_properties(length,
             # set charge placement variable 
             preserve_charge_placement = True
             # make sure kappa is not -1
-            kappa_values = kappa(seqs)
+            kappa_values = calculate_kappa(seqs)
             # filter out sequences with kappa -1
             valid_indices = np.where(kappa_values != -1)[0]
             # get valid sequences

@@ -153,7 +153,7 @@ def remove_None(**kwargs):
     return kwargs
 
 
-def check_props_parameters(**kwargs):
+def check_props_parameters(length, **kwargs):
     '''
     function that makes sure the values for a given seq are not 
     outside possible bounds. Only for generating
@@ -243,7 +243,10 @@ def check_props_parameters(**kwargs):
             check_charge_val = kwargs['FCR']
 
         # now calculate maximum charge value
-        max_possible_charge_value = calculate_max_charge(kwargs['hydropathy'])
+        max_possible_charge_value = calculate_max_charge(length=length,
+                                                         cur_hydropathy=kwargs['hydropathy'],
+                                                         net_charge=kwargs['NCPR'],
+                                                         empirical=False)
         # now see if charge value used is within bounds
         if check_charge_val > max_possible_charge_value:
             curhydro = kwargs['hydropathy']
