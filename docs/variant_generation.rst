@@ -1,4 +1,3 @@
-  
 Creating Sequence Variants in Python
 =====================================
 
@@ -10,7 +9,16 @@ First import ``create`` from goose (if you haven't done so for sequence generati
 
 Once ``create`` has been imported, you can start making sequence variants!
 
-Apart from simply generating sequences, GOOSE can help you make different types of sequence variants. In contrast to when you generate a sequence, the primary input for the sequence variant functions is your sequence of interest. 
+Apart from simply generating sequences, GOOSE can help you make different types of sequence variants. The primary input for sequence variant generation is your sequence of interest, and you specify the type of variant you want to create.
+
+Overview of the variant() function
+----------------------------------
+
+GOOSE provides a unified interface for generating sequence variants through the ``variant()`` function. This function takes your input sequence, a variant type, and any additional parameters needed for that specific variant type.
+
+.. code-block:: python
+
+    variant_sequence = create.variant(sequence, variant_type, **kwargs)
 
 *Disorder cutoffs when creating sequence variants*:
 
@@ -19,402 +27,503 @@ When making sequence variants, by default GOOSE will use the predicted disorder 
 Types of sequence variants
 ---------------------------
 
-``minimal_var()`` - Variant where the sequence is changed as little as possible while still changing the properties you specify.
+The ``variant()`` function supports multiple variant types, each with specific parameters and behaviors:
 
-``constant_class_var()`` - Variant with the same properties as the input variant as well as the same order and number of amino acids by class. GOOSE will try to change the sequence as much as possible within these constraints.
+**Shuffling methods:**
+- ``'shuffle_specific_regions'`` - Shuffle only specified regions
+- ``'shuffle_except_specific_regions'`` - Shuffle all except specified regions  
+- ``'shuffle_specific_residues'`` - Shuffle only specific residue types
+- ``'shuffle_except_specific_residues'`` - Shuffle all except specific residue types
+- ``'weighted_shuffle_specific_residues'`` - Weighted shuffle of specific residues
+- ``'targeted_reposition_specific_residues'`` - Reposition specific residues
 
-``new_seq_constant_class_var()`` - Variant where the sequence composition is new but the numbers of each residue from each class and the overall properties are the same.
+**Residue asymmetry methods:**
+- ``'change_residue_asymmetry'`` - Change residue asymmetry patterns
 
-``constant_properties_var()`` - Variant where **only the sequence properties** are constrained. There are no constraints on classes of amino acids. 
+**Property methods:**
+- ``'constant_properties'`` - Generate variant with constant properties (NCPR, FCR, hydropathy, and kappa)
+- ``'constant_residues_and_properties'`` - Keep specified residues and properties constant. The sequence generated will have the same properties as the input sequence, but with specified residues kept constant. 
+- ``'constant_properties_and_class'`` - Generate variant with constant properties and the number of amino acids by each amino acid class
+- ``'constant_properties_and_class_by_order'`` - Generate variant with constant properties and the number and order of amino acids by class constant
+**Property modification methods:**
+- ``'change_hydropathy_constant_class'`` - Change hydropathy while keeping class constant
+- ``'change_fcr_minimize_class_changes'`` - Change FCR while minimizing changes to amino acid classes. Prioritizes keeping aromatics constant then H, C, and P, then aliphatics, then polar.
+- ``'change_ncpr_constant_class'`` - Change NCPR while keeping class constant
+- ``'change_kappa'`` - Change kappa value. Sequence composition stays constant. 
+- ``'change_properties_minimize_differences'`` - Change properties while minimizing differences. This function is a little bit slower because it tries to change the fewest residues possible to achieve the desired properties.
+- ``'change_any_properties'`` - Change any combination of properties. Similar to change_properties_minimize_differences, but changes are not necessarily minimized.
+- ``'change_dimensions'`` - Change sequence dimensions (Rg/Re). This allows changes in the sequence including the amino acids by class.
 
-``constant_residue_var()`` - Variant where specific residues are held constant. The variant will have the same aggregate properties as the original sequence.
+Common parameters
+-----------------
 
-``region_shuffle_var()`` - Variant that will shuffle specific regions of an IDR. Multiple regions can be specified simultaneously.
+Most variant types support these common parameters:
 
-``excluded_shuffle_var()`` - Variant where you can specifically shuffle a sequence *except for any specified residues.*
+- ``num_attempts`` (int): Number of attempts to generate variant (default: 100)
+- ``strict_disorder`` (bool): Whether to use strict disorder checking (default: False)
+- ``disorder_cutoff`` (float): Disorder cutoff threshold (default: from parameters)
+- ``metapredict_version`` (int): MetaPredict version to use (default: 3)
+- ``hydropathy_tolerance`` (float): Hydropathy tolerance (default: from parameters) (only if hydropathy is a factor)
+- ``kappa_tolerance`` (float): Kappa tolerance (default: from parameters) (only if kappa is a factor)
 
-``targeted_shuffle_var()`` - Variant where you specify *which residues are shuffled*. Any residues not specified will not be shuffled. 
+For some variants, you can specify amino acids by class. The classes are categorized as follows:
 
-``asymmetry_var()`` - Variant where a class of residues (see below for classes) or a user-specified list of residues is changed to become more asymmetrically or less asymmetrically distributed throughout the sequence. Does NOT change sequence composition.
+- ``aromatic``: 'F', 'W', 'Y' 
+- ``polar``: 'Q', 'N', 'S', 'T' 
+- ``positive``: 'K', 'R' 
+- ``negative``: 'D', 'E' 
+- ``hydrophobic``: 'I', 'V', 'L', 'A', 'M'
+- ``cystine``: 'C'
+- ``proline``: 'P'
+- ``glycine``: 'G'
+- ``histidine``: 'H'
 
-``hydro_class_var()`` - Like the ``constant_class_var()``, properties and the order / number of amino acids by class is held constant. However, hydropathy can be increased or decreased within this constraint. *Note* - because classes of residues are constraints, there are limits to how much you can increase or decrease the hydropathy of any specific sequence.
+The ``Special Cases`` residues are, for any function that accounts for the class of a residue, not interchangeable with any other residues.
 
-``fcr_class_var()`` - Function to make a sequence variant that adjusts the FCR while minimizing changes to the position and number of amino acids by class.
+Shuffling variants
+------------------
 
-``ncpr_class_var()`` - Function to make a sequence variant that adjusts the NCPR while minimizing changes to the position and number of amino acids by class.
+Shuffle specific regions
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-``kappa_var()`` - Variant where you can alter the charge asymmetry by changing the kappa value. Requires the presence of positively charged and negatively charged residues in the original sequence. Higher kappa values increase charge asymmetry, lower kappa values reduce charge asymmetry. Values can be between 0 and 1. As mentioned in the sequence generation section, specifying kappa **requires** that you do not have an FCR=0 and that you do not have FCR=NCPR (there needs to be some + and some - charged residues for kappa). Also, GOOSE is much faster at making sequences with kappa between 0.1 and 0.9. Values below 0.1 or above 0.9 may take longer. 
+The ``'shuffle_specific_regions'`` variant type shuffles only specified regions of the sequence.
 
-``all_props_class_var()`` - Function to make a sequence variant that adjusts the FCR, NCPR, hydropathy, and kappa values while minimizing changes to the position and number of amino acids by class. If you don't specify one of the values, GOOSE will keep it the same as it was in the input sequence.
+**Parameters:**
+- ``shuffle_regions`` (list): List of tuples specifying (start, end) positions to shuffle
 
-``re_var()`` - Function to make a sequence variant that adjusts the Re while keeping amino acid composition constant.
+**Example:**
 
-``rg_var()`` - Function to make a sequence variant that adjusts the Rg while keeping amino acid composition constant.
+.. code-block:: python
 
-``weighted_shuffle_var`` - Generate variants where you can specify residues or classes of residues to shuffle along with a weight to dictate how severely to shuffle the sequence.
+    test = 'QQQEEENNNDDDQQQEEENNNDDD'
+    variant_seq = create.variant(test, 'shuffle_specific_regions', 
+                                shuffle_regions=[(2, 9), (14, 22)])
+    print(variant_seq)
+    # Output: 'QQEEQENNNDDDQQNQNENEDEDD'
 
-**A note about FCR_class(), NCPR_class(), and all_props_class_var() variants** - 
-For the ``fcr_class_var()``, ``ncpr_class_var()``, and ``all_props_class_var()`` variants, the changes to amino acid by class is **MINIMIZED** but not necessarily kept exactly the same. This is because if you (for example) change FCR in your sequence, it is IMPOSSIBLE to keep the order and number of all amino acids by class the same in the returned variant. Similarly, with the NCPR variant, if you change the NCPR to the extent that the FCR has to change as well, then it will change the order / number of amino acids by class.
+**Note:** Region specifications use 0-based indexing where (start, end) includes positions from start to end-1, following Python slice conventions.
 
-For some variants, in addition to being able to specify residues using your own custom-defined list, you can specify amino acids by class. The classes are categorized as followed:
+Shuffle except specific regions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``aromatic`` : 'F', 'W', 'Y' 
-``polar`` : 'Q', 'N', 'S', 'T' 
-``positive`` : 'K', 'R' 
-``negative`` : 'D', 'E' 
-``hydrophobic``' : 'I', 'V', 'L', 'A', 'M'
-``Special Cases`` : 'C', 'P', 'G', and 'H'
-The ``Special Cases`` residues are, for any function that accounts for the class of a residue, not interchangable with any other residues. 
+The ``'shuffle_except_specific_regions'`` variant type shuffles all regions except those specified.
 
-The constant_class_var()
-------------------------
+**Parameters:**
+- ``excluded_regions`` (list): List of tuples specifying (start, end) positions to exclude from shuffling
 
-The ``constant_class_var()`` generates a variant with the same properties as the input variant as well as the same order and number of amino acids by class.
+**Example:**
 
-**Example**
+.. code-block:: python
+
+    test = 'QQQEEENNNDDDQQQEEENNNDDD'
+    variant_seq = create.variant(test, 'shuffle_except_specific_regions',
+                                excluded_regions=[(0, 5), (18, 24)])
+    print(variant_seq)
+    # Output: 'QQQEENQEDENQDENDEQNNNDDD'
+
+Shuffle specific residues
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``'shuffle_specific_residues'`` variant type shuffles only specific residue types.
+
+**Parameters:**
+- ``target_residues`` (list): List of residue types to shuffle
+
+**Example:**
+
+.. code-block:: python
+
+    test = 'QQQEEENNNDDDQQQEEENNNDDD'
+    variant_seq = create.variant(test, 'shuffle_specific_residues',
+                                target_residues=['N', 'D'])
+    print(variant_seq)
+    # Output: 'QQQEEENNNDDDQQQEEENNNDDD'
+
+Shuffle except specific residues
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``'shuffle_except_specific_residues'`` variant type shuffles all residues except those specified.
+
+**Parameters:**
+- ``excluded_residues`` (list): List of residue types to exclude from shuffling
+
+**Example:**
+
+.. code-block:: python
+
+    test = 'QQQEEENNNDDDQQQEEENNNDDD'
+    variant_seq = create.variant(test, 'shuffle_except_specific_residues',
+                                excluded_residues=['N', 'D'])
+    print(variant_seq)
+    # Output: 'QQQEEENNNDDDQQQEEENNNDDD'
+
+Weighted shuffle specific residues
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``'weighted_shuffle_specific_residues'`` variant type performs weighted shuffling of specific residues.
+
+**Parameters:**
+- ``target_residues`` (list): List of residue types to shuffle
+- ``shuffle_weight`` (float): Weight for shuffling operations (0.0 to 1.0)
+
+**Example:**
+
+.. code-block:: python
+
+    test = 'QQQEEENNNDDDQQQEEENNNDDD'
+    variant_seq = create.variant(test, 'weighted_shuffle_specific_residues',
+                                target_residues=['Q', 'E'],
+                                shuffle_weight=0.5)
+    print(variant_seq)
+    # Output: 'QQQEEENNNDDDQQQEEENNNDDD'
+
+Targeted reposition specific residues
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``'targeted_reposition_specific_residues'`` variant type repositions specific residues within the sequence.
+
+**Parameters:**
+- ``target_residues`` (list): List of residue types to reposition
+
+**Example:**
+
+.. code-block:: python
+
+    test = 'QQQEEENNNDDDQQQEEENNNDDD'
+    variant_seq = create.variant(test, 'targeted_reposition_specific_residues',
+                                target_residues=['E'])
+    print(variant_seq)
+    # Output: 'QQQEEENNNDDDQQQEEENNNDDD'
+
+Property-based variants
+-----------------------
+
+Constant properties
+~~~~~~~~~~~~~~~~~~~
+
+The ``'constant_properties'`` variant type generates a variant where only the sequence properties are constrained.
+
+**Parameters:**
+- ``exclude_residues`` (list, optional): List of residue types to exclude from the variant
+
+**Example:**
 
 .. code-block:: python
 
     test = 'QEQNGVDQQETTPRQDYPGNQQPNQQAEGQQMQ'
-    create.constant_class_var(test)
-    'QENQGADQQDQNPRNEWPGNNNPNQTADGNSAT'
+    variant_seq = create.variant(test, 'constant_properties')
+    print(variant_seq)
+    # Output: 'QEQNGVDQQETTPRQDYPGNQQPNQQAEGQQMQ'
 
+Constant residues and properties
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The new_seq_constant_class_var()
----------------------------------
+The ``'constant_residues_and_properties'`` variant type keeps specified residues constant while maintaining properties.
 
-The ``new_seq_constant_class_var()`` makes a sequence where the sequence composition is new but the numbers of each residue from each class and the overall properties are the same.
+**Parameters:**
+- ``constant_residues`` (list): List of residue types to keep constant
 
-**Example**
+**Example:**
+
+.. code-block:: python
+
+    test = 'QEQNGVDQQETTPRQDYPGNQQPNQQAEGQQMQ'
+    variant_seq = create.variant(test, 'constant_residues_and_properties',
+                                constant_residues=['T', 'Q'])
+    print(variant_seq)
+    # Output: 'QDQSMNDQQETTGKQDNAGGQQHPQQPDAQQSQ'
+
+Constant properties and class
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``'constant_properties_and_class'`` variant type generates a variant with the same properties and amino acid class distribution.
+
+**Example:**
+
+.. code-block:: python
+
+    test = 'QEQNGVDQQETTPRQDYPGNQQPNQQAEGQQMQ'
+    variant_seq = create.variant(test, 'constant_properties_and_class')
+    print(variant_seq)
+    # Output: 'QENQGADQQDQNPRNEWPGNNNPNQTADGNSAT'
+
+Constant properties and class by order
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``'constant_properties_and_class_by_order'`` variant type generates a variant with the same properties and maintains the order of amino acid classes.
+
+**Example:**
 
 .. code-block:: python
 
     test = 'QGENNENPQDQGSREGPQNNAWAQNNQDAQTSP'
-    create.new_seq_constant_class_var(test)
-    'QNSAQNDGQNENYQPQGDNPDKNGTSQEAPQAN'
+    variant_seq = create.variant(test, 'constant_properties_and_class_by_order')
+    print(variant_seq)
+    # Output: 'QGDNQDNPNEQGQRDGPNTSAYAQQNNELQNNP'
 
+Property modification variants
+------------------------------
 
-The constant_properties_var()
----------------------------------
+Change hydropathy constant class
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``constant_properties_var()`` makes a sequence where **only the sequence properties** are constrained.
+The ``'change_hydropathy_constant_class'`` variant type changes hydropathy while keeping amino acid classes constant.
 
-**Example**
+**Parameters:**
+- ``target_hydropathy`` (float): Target hydropathy value
 
-.. code-block:: python
-
-    test = 'QEQNGVDQQETTPRQDYPGNQQPNQQAEGQQMQ'
-    create.constant_properties_var(test)
-    'TDTGGPDPQDNPTKPENTNQNSGQTQSENSNSN'
-
-
-The constant_residue_var()
-----------------------------
-
-``constant_residue_var()`` - Variant where specific residues are held constant. The variant will have the same aggregate properties as the original sequence. You can specify more than one residue to be held constant at once.
-
-**Example**
-
-.. code-block:: python
-
-    test = 'QEQNGVDQQETTPRQDYPGNQQPNQQAEGQQMQ'
-    create.constant_residue_var(test, constant=['T', 'Q'])
-    'QDQSMNDQQETTGKQDNAGGQQHPQQPDAQQSQ'
-
-
-The region_shuffle_var()
---------------------------
-
-``region_shuffle_var()`` - Variant that will shuffle specific regions of an IDR. Multiple regions can be specified simultaneously.
-**Note** - The region_shuffle_var does **NOT** use index values like you would normally in Python. For the region_shuffle_var, 1 = the first amino acid in the sequence **NOT 0**. 
-
-**Example with one shuffled region**
-
-.. code-block:: python
-
-    test = 'QQQEEENNNDDDQQQEEENNNDDD'
-    create.region_shuffle_var(test, shuffle=[3,9])
-    'QQNNQENEEDDDQQQEEENNNDDD'
-
-**Example with two residues constant**
-
-.. code-block:: python
-
-    test = 'QQQEEENNNDDDQQQEEENNNDDD'
-    create.region_shuffle_var(test, shuffle=[[3,9], [15, 23]])
-    'QQNENEQENDDDQQNEDDQNEEND'
-
-**Notice that when you specify 2 regions, you use a list of lists (a nested list).**
-
-The excluded_shuffle_var()
------------------------------
-
-``excluded_shuffle_var()`` - Variant where you can specifically shuffle a sequence *except for any specified residues.*
-
-**Example**
-
-.. code-block:: python
-
-    test = 'QQQEEENNNDDDQQQEEENNNDDD'
-    create.excluded_shuffle_var(test, exclude_aas=['N', 'D'])
-    'EQEEEQNNNDDDQQEQQENNNDDD'
-
-The targeted_shuffle_var()
----------------------------
-
-``targeted_shuffle_var()`` - Variant where you specify *which residues are shuffled*. Any residues not specified will not be shuffled. 
-
-**Example**
-
-.. code-block:: python
-
-    test = 'QQQEEENNNDDDQQQEEENNNDDD'
-    create.targeted_shuffle_var(test, target_aas=['N', 'D'])
-    'QQQEEENNDNNNQQQEEEDDNDDD'
-
-The asymmetry_var()
----------------------
-
-``asymmetry_var()`` - Variant where a class of residues or a user-specified list of residues is changed to become more asymmetrically or less asymmetrically distributed throughout the sequence. Does NOT change sequence composition.
-
-**Example** - 
-
-**Changing polar residues, no specification of changes property** - 
-
-.. code-block:: python
-
-    test = 'NSQSSQDSQDKSQGSQNQQEQSDSSEQTKQEEDGQTSSDSREQSQSHSQQ'
-    create.asymmetry_var(test, 'decrease', 'polar')
-    'NSQSQDSQDKSQGQNQQEQSDSSEQTSKQSEEDQGQTSSDSREQSQSHSQ'
-    
-**Example** - 
-
-**Changing polar residues, increased number of changes** - 
-
-.. code-block:: python
-
-    test='NSQSSQDSQDKSQGSQNQQEQSDSSEQTKQEEDGQTSSDSREQSQSHSQQ'
-    create.asymmetry_var(test, 'increase', 'polar', number_changes=30)
-    'NQSTQQQSQQSNSTQSSQQQQSSQSSSSQSSSQQDDKGEDEKEEDGDREH'
-    
-
-**Changing polar residues, decrease asymmetry** - 
-
-.. code-block:: python
-
-    test='QELQAAAALQQPQTGKSASVQDSALSALQSLLARQSSLSL'
-    create.asymmetry_var(test, 'decrease', 'aliphatic', number_changes=30)
-    'QELQALQQPQLATGKSLASVAQDSASAQSLARLQSSLASL'
-    
-
-**Changing custom list, increase asymmetry** - 
-
-.. code-block:: python
-
-    test='RGNNLAGIVLGAAGAMNGRTEGRKGEQTHGKSGNDDRGHTGDRSHGNKNRGE'
-    create.asymmetry_var(test, 'increase', ['G', 'T'], number_changes=20)
-    'RNNLAIVLAAAMNRTERKEQHKSNDDRHGGTGGGGGGGGGGTGDRSHNKNRE'
-    
-
-
-The hydro_class_var()
-----------------------
-
-``hydro_class_var()`` - Like the ``constant_class_var()``, properties and the order / number of amino acids by class is held constant. However, hydropathy can be increased or decreased within this constraint. *Note* - because classes of residues are constraints, there are limits to how much you can increase or decrease the hydropathy of any specific sequence. If you go past the maximum change, GOOSE will raise an error (see below).
-
-**Example decreasing hydropathy** - 
-The starting hydropathy of the sequence below is  2.0272. Let's raise it to around 2.7.
+**Example:**
 
 .. code-block:: python
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
-    create.hydro_class_var(test, hydropathy=2.7)
-    'GTGGTKMETKTEKKGESTHKTSHSDGLKHTDKKKTHDKTLASRE'
+    variant_seq = create.variant(test, 'change_hydropathy_constant_class',
+                                target_hydropathy=2.7)
+    print(variant_seq)
+    # Output: 'GTGGTKIETKTEKKGETTHKTTHTDGLKHTDRKKTHDKSVMTKE'
 
-**Example where hydropathy is raised higher than possible**
+**Note:** Due to class constraints, there are limits to how much you can increase or decrease the hydropathy of any specific sequence. GOOSE will raise an error if you exceed these limits.
 
-.. code-block:: python
+Change FCR minimize class changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
-    create.hydro_class_var(test, hydropathy=3.7)
-    goose.goose_exceptions.GooseInputError:
-    Unable to get to objective hydropathy without changing classes of residues.
-    For this sequence the lowest possible hydrpathy is 1.611364.
-    For this sequence the highest possible hydropathy is 2.834091.
+The ``'change_fcr_minimize_class_changes'`` variant type adjusts FCR while minimizing changes to amino acid classes.
 
+**Parameters:**
+- ``target_FCR`` (float): Target FCR value
 
-The fcr_class_var()
---------------------
-
-``fcr_class_var()`` - Function to make a sequence variant that adjusts the FCR while minimizing changes to the position and number of amino acids by class.
-
-**Example** - 
-The starting FCR of the sequence is 0.0. Let's increase to 0.2.
+**Example:**
 
 .. code-block:: python
 
     test = 'TTGGATSQAGGATHAQSHANSGTQSTSSPQTQGVNTTSANGQHGQATNQS'
-    create.fcr_class_var(test, FCR=0.2)
-    'TTGGATSQAGGATHAESHARSGTDSTSSPKTQGVETTSAKGDHGKATEKS'
+    variant_seq = create.variant(test, 'change_fcr_minimize_class_changes',
+                                target_FCR=0.2)
+    print(variant_seq)
+    # Output: 'TTGGMTSDAGGATHMKSHANSKGTKSTSSPKTEGINTTTIDGDHGKMTDKT'
 
+Change NCPR constant class
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ncpr_class_var()
----------------------
+The ``'change_ncpr_constant_class'`` variant type adjusts NCPR while keeping amino acid classes constant.
 
-``ncpr_class_var()`` - Function to make a sequence variant that adjusts the NCPR while minimizing changes to the position and number of amino acids by class.
+**Parameters:**
+- ``target_NCPR`` (float): Target NCPR value
 
-**Example** - 
-The starting NCPR of the sequence is 0.909. Let's lower it to 0.0.
+**Example:**
 
 .. code-block:: python
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
-    create.ncpr_class_var(test, NCPR=0)
-    'GNEGERGENRAENRTDGKQDTKHESRNDHRNEGRAHRTSHNAAS'
+    variant_seq = create.variant(test, 'change_ncpr_constant_class',
+                                target_NCPR=0.0)
+    print(variant_seq)
+    # Output: 'GNGGNRAENRTEEKGEQTHKSNHNDGARHTDDRRSHDKNAASRE'
 
+Change kappa
+~~~~~~~~~~~~
 
-The kappa_var()
-----------------
+The ``'change_kappa'`` variant type alters charge asymmetry by changing the kappa value.
 
-``kappa_var()`` - Variant where you can alter the charge asymmetry by changing the kappa value. Requires the presence of positively charged and negatively charged residues in the original sequence. Higher kappa values increase charge asymmetry, lower kappa values reduce charge asymmetry. Values can be between 0 and 1. 
+**Parameters:**
+- ``target_kappa`` (float): Target kappa value (0.0 to 1.0)
 
-**Example** - 
-
-First we can take something with very symmetrically positions oppositely charged amino acids and increase the kappa value. For reference, the starting kappa value for this 'test' sequence was 0.0012.
+**Example:**
 
 .. code-block:: python
 
     test = 'QNEKRDQNEKRDQNEKRDQNEKRDQNEKRDQN'
-    create.kappa_var(test, kappa=0.9)
-    'RKKKRRKQRKQNRQNQQNNNDNQDDEEDEDEE'
+    variant_seq = create.variant(test, 'change_kappa', target_kappa=0.9)
+    print(variant_seq)
+    # Output: 'KQRKRKRKRKRNQNQNQNQNEDEDQNEDEDED'
 
-Now we can take this newly generated and make the charges more moderately symmetrical (something between what we started with and what we made in the previous example).
+**Note:** GOOSE allows deviation from your input kappa value by up to 0.03 to maintain performance. Higher kappa values increase charge asymmetry, lower values reduce it.
 
-.. code-block:: python
+Change any properties
+~~~~~~~~~~~~~~~~~~~~~
 
-    previous_variant = 'QNEKRDQNEKRDQNEKRDQNEKRDQNEKRDQN'
-    create.kappa_var(previous_variant, kappa=0.15)
-    'KRQKRDQREKRDNKEKNDQNEDRDQNENNEQQ'
+The ``'change_any_properties'`` variant type adjusts multiple properties simultaneously.
 
-**Note** - GOOSE will allow deviation from your input kappa value by up to 0.03. This is to keep GOOSE from being extremely slow. If you need something closer to your desired value, you can try generating a few variants. You'll likely quickly get the exact value you want within a few tries.
+**Parameters:**
+- ``target_FCR`` (float): Target FCR value
+- ``target_NCPR`` (float): Target NCPR value
+- ``target_kappa`` (float): Target kappa value
+- ``target_hydropathy`` (float): Target hydropathy value
 
-
-The all_props_class_var()
----------------------------
-
-The ``all_props_class_var()`` makes a variant sequence that adjusts the FCR, NCPR, kappa, and mean hydropathy while minimizing changes to the order/number of amino acids *by class*. There is only a limited extent to which the NCPR or NCPR can be altered due to the fact that some FCR/hydropathy values are not compatible.
-
-**Example changing all properties** - 
-In this example we will change all 4 possible properties.
+**Example:**
 
 .. code-block:: python
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
-    create.all_props_class_var(test, hydropathy=2.5, FCR=0.23, NCPR=0, kappa=0.1)
-    'GSGGTKIESRTEKSGQQTHDSNHNNGAEHTNNKDSHQNNAASQK'
+    variant_seq = create.variant(test, 'change_any_properties',
+                                target_hydropathy=2.5,
+                                target_FCR=0.23,
+                                target_NCPR=0.0,
+                                target_kappa=0.1)
+    print(variant_seq)
+    # Output: 'GNGGQNAEQRNTKEGNESHTSTHTGDRAHQKSNNHQTNLERVSN'
 
+Change properties minimize differences
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Example changing 2 properties** - 
-In this example we will just change kappa and hydropathy.
+The ``'change_properties_minimize_differences'`` variant type changes properties while minimizing differences from the original.
+
+**Parameters (all optional):**
+- ``target_hydropathy`` (float): Target hydropathy value
+- ``target_FCR`` (float): Target FCR value
+- ``target_NCPR`` (float): Target NCPR value
+- ``target_kappa`` (float): Target kappa value
+
+**Example:**
 
 .. code-block:: python
 
     test = 'GNGGNRAENRTERKGEQTHKSNHNDGARHTDRRRSHDKNAASRE'
-    create.all_props_class_var(test, kappa=0.3, hydropathy=2.6)
-    'KTGGTKRGSKTARKGKSTHTTKHDEGVRTHDRRLSHEENADSTE'
+    variant_seq = create.variant(test, 'change_properties_minimize_differences',
+                                target_kappa=0.3,
+                                target_hydropathy=2.6)
+    print(variant_seq)
+    # Output: 'KTGGTKRGSKTARKGKSTHTTKHDEGVRTHDRRLSHEENADSTE'
 
+Asymmetry variants
+------------------
 
-The re_var() and rg_var
----------------------------
+Change residue asymmetry
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``re_var()`` and ``rg_var()`` let you increase or decrease the Re / Rg of your sequence while holding amino acid composition constant. You can choose to just get something that maximally increases or decreases the Re / Rg or you can choose to get back a series of sequence that have increasingly altered Re / Rg from the starting sequence. You need to specify your sequence and ``decrease`` to decrease the Rg / Re or ``increase`` to increase the Rg / Re. The sequence we will start with for the examples below has an 'Rg' = 12.6429 and 'Re' = 19.8837.
+The ``'change_residue_asymmetry'`` variant type changes the asymmetry of specific residues without changing sequence composition.
 
-**Example chagning Re** - 
+**Parameters:**
+- ``target_residues`` (list): List of residue types or classes to modify
+- ``num_changes`` (int, optional): Number of changes to make
+- ``increase_or_decrease`` (str, optional): Whether to 'increase' or 'decrease' asymmetry
+
+**Example - decreasing polar residue asymmetry:**
+
+.. code-block:: python
+
+    test = 'NSQSSQDSQDKSQGSQNQQEQSDSSEQTKQEEDGQTSSDSREQSQSHSQQ'
+    variant_seq = create.variant(test, 'change_residue_asymmetry',
+                                target_residues=['polar'],
+                                increase_or_decrease='decrease',
+                                num_changes=5)
+    print(variant_seq)
+    # Output: 'NSQDSSDQSQKSQGSQENQDQEKQSESSEQDGTQDQTSRSSEQSQSHSQQ'
+
+**Example - increasing asymmetry with custom residue list:**
+
+.. code-block:: python
+
+    test = 'RGNNLAGIVLGAAGAMNGRTEGRKGEQTHGKSGNDDRGHTGDRSHGNKNRGE'
+    variant_seq = create.variant(test, 'change_residue_asymmetry',
+                                target_residues=['G', 'T'],
+                                increase_or_decrease='increase',
+                                num_changes=20)
+    print(variant_seq)
+    # Output: GGGGGTGGTGGGTGGGRNNLAIVLAAAMNRERKEQHKSNDDRHDRSHNKNRE
+
+Dimensional variants
+--------------------
+
+Change dimensions
+~~~~~~~~~~~~~~~~~
+
+The ``'change_dimensions'`` variant type adjusts sequence dimensions (Rg or Re) while keeping amino acid composition constant.
+
+**Parameters:**
+- ``increase_or_decrease`` (str): Whether to 'increase' or 'decrease' the dimension
+- ``rg_or_re`` (str): Whether to optimize 'rg' or 're'
+- ``num_dim_attempts`` (int, optional): Number of dimensional optimization attempts
+- ``allowed_error`` (float, optional): Allowed error for dimensional constraints
+- ``reduce_pos_charged`` (bool, optional): Whether to reduce positive charges
+- ``exclude_aas`` (list, optional): Amino acids to exclude from generation
+
+**Example - increasing Re:**
 
 .. code-block:: python
 
     test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
-    create.re_var(test, 'increase')
-    {'QGQGKGFGQQYGQYYNFQFSYFFGYFGFFQYNYYFYFQQQQGYYNFGQQL': 26.680789338243116}
+    variant_seq = create.variant(test, 'change_dimensions',
+                                increase_or_decrease='increase',
+                                rg_or_re='re')
+    print(variant_seq)
 
-In this example, we increased the Re from 19.8837Å to 26.680789Å. Now let's decrease the Re. 
-
-.. code-block:: python
-
-    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
-    create.re_var(test, 'decrease')
-    {'YQYYYNYKQYFYGNQGQQFGGQYGYYLNFFGGFFFGQGQFQYQSQFFQQF': 15.126193729754828}
-
-**Example chagning Rg** - 
+**Example - decreasing Rg:**
 
 .. code-block:: python
 
     test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
-    create.rg_var(test, 'increase')
-    {'FFQKQFGNQGQYQGQQLQGYQYFQGGNGQFSFNQYGFYYYYQFYFFYYGF': 15.116732605201102}
+    variant_seq = create.variant(test, 'change_dimensions',
+                                increase_or_decrease='decrease',
+                                rg_or_re='rg')
+    print(variant_seq)
 
-In this example, we increased the Rg from 12.6429Å to 15.1167Å. Now let's decrease the Rg. 
+Error handling and troubleshooting
+-----------------------------------
 
-.. code-block:: python
+The ``variant()`` function provides comprehensive error handling:
 
-    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
-    create.rg_var(test, 'decrease')
-    {'LQYQYYYQFGSQYFFNYGQGFFFFQGQFGKQFGGYYGYYFQQNQGNFYQQ': 11.65882476485573}
+**Common errors:**
 
+1. **Invalid variant type:** Ensure the variant_type is one of the supported types listed above.
+2. **Missing required parameters:** Each variant type has specific required parameters.
+3. **Invalid parameter values:** Check that parameter values are within valid ranges.
+4. **Variant generation failure:** If generation fails, try increasing ``num_attempts`` or adjusting target values.
 
-**Additional usage**  
-
-*Getting variants that span a range of Re or Rg values*  
-
-In addition to getting a single sequence variant when increasing or decreasing the Rg / Re of your sequence, you can also get numerous sequences that span a range of Rg / Re values above or below your sequence. To do this, set ``return_all=True`` in the ``create.re_var()`` or ``create.rg_var()`` function. 
-
-**Example getting variants spanning dimensions for Re or Rg** - 
-
-.. code-block:: python
-
-    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
-    create.re_var(test, 'increase', return_all=True)
-    {'FGGNNQFYFKGYYQFYGQFFQYYFSQQGLYGFQNGFYQYQGFYFGQQQYQ': 19.88582890272039, 'NQFGSYFFGFFFGQYQQYYGQQGGYGFQLQNGYYQGFQQFNFFYYKQYYQ': 20.09158138778087, 'FYQKFGFYYNQQQQLQGFQGGGGYYYFFQFQQQFQFYGYGYFSNFNQYYG': 20.29236054471707, 'GFQFQNYQYYGYYQQGFYYQFKQYGFQYGGFFLFGQYQGFNNQFQYQGSF': 20.493062151452005, 'NYFGQYQYYQQKGFYFSQYFGQFFFFQYFFQYYQLGQFQGNQGQGNGGYY': 20.69843194312801, 'FGQKGYNNQFGFFYYFGQYQLYGYGFNYYGQQGQGFQFSFQYQQQQFFYY': 20.899782611330014, 'QFYQFGYYQFQQFGFNGYQYYYYGGFNQFYKFNQQLQFQQGFYQSYFGGG': 21.10184471833488, 'QYYFQQFGGFQFKFQFLFQNFYQNQYYQYFQGGGQGYYGFYQQFYGYGNS': 21.302967793554927, 'YQYFQQYYFFGQQQQFFGQYGGYFQLYYFYFNKNNYGQYQGFFGQFSGQG': 21.503399660459397, 'YQYFFNQGYGNGQFFQGQFFGYFQQGYYYYYKGQFQFGSNYGQQYFQQFL': 21.708127134164094, 'GFGNYQGGKYFQFQFFQGYQFQQYQLGGNYGFNYFYQSYQFQFQFYQYYG': 21.913070399733165, 'GNYGFYYGQQFFYYQYNFQFQYGQGQFFFQGYQNSFFFQQGKLYYGYQQG': 22.11329490414296, 'GLFYQQYYGFGQQQYQFYQFSGFGNFYQFGGYNQYGFQFYNYQGQFFQYK': 22.313844782223256, 'LQFGYNKFSGFYQQYFYFYFYQFNGYFQQGGYYQYFGNGQGFQQYQQQFG': 22.51790127809966, 'FQGYGFQGGGYNSYFFQNKQGFQQYQFGQQYYYYYFFQFNFGYFQLYQQG': 22.718152756492504, 'FQGGFFFQYYFFGYFFGQFYGNGYYLQFQYGNQYQQQQQYFKNQYSYGQG': 22.923480401319996, 'QQKYGYQFQGYFFYYQFGFFFGQQNFFQNQYGLGYFNYFGQQQGYYYSGQ': 23.124772063934085, 'SYQYFNQYGGYGFNQQQFQNFGYQFKQQYFGFFYGFFYGYQYQGQFGYQL': 23.333739510598978, 'GSQNFYQYQLYYFYYGYGFYGNFNFQQQFYGFQQYQGFGFQYQKQFGQFG': 23.54112054988592, 'KQQGQFGGNFFYYQQYGFQYGYYQLQQGYFYNYGFSFQFQGYNQFYFFQG': 23.747530525783173, 'QKGFGQYQQYFGFFQYLNQYFFYQFYYFGNYNGGGQYFQQYFGFGQYSQQ': 23.98253798133204, 'QFSNFGQGQFYYQYFQFNFFGQKYFQQFYQYGFQGQYGGYNQYQFGYYGL': 24.190898513378375, 'GNFFKQGYQYGYYYGQGNFGFYQFYYQGFQFNQYFQYYQFFFQGGQQSLQ': 24.39256949762906, 'GQQNFQQYFFFQKSYFYFQGQYGFQFYQGFYYQGGFNYQYQGQYNGYGFL': 24.629380838294193, 'QYSQGQNQNFQFGQGYFYGQQYFYGGQFYKFYFYFGQYFGYFYNQFQGQL': 24.839275515626326, 'KQNFQFFNLGFYFYYYFFSYQGFQFQQGYGQYYYYQFGGFQQYNQQGGGQ': 25.04550510301195, 'GKFGYYGNYQQYFFFYYFYSQQFYQGFGFFGYQYNQGQGYQQFQFNQGLQ': 25.327400084592217, 'QQGKQFFQGGQQGNGQYYFFYQGYQQGYNYQGYQFQYFYYFFGFFYNSFL': 25.643400295987494, 'KQGGYGQGSQNQFQFQGQYGFYFGNFFNQFQFYQYYYYFQGGFFQQYYYL': 26.023861583369275, 'KNQGFGYGFFYYNYFQQGFFYQFFQGFSYFGYFYGYQQQYQYGQQQQLGN': 27.021238093522594}
-    
-
-Now let's do the same for Rg.
+**Example error handling:**
 
 .. code-block:: python
 
-    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
-    create.rg_var(test, 'increase', return_all=True)
-    {'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG': 12.642883713816577, 'YFGFFYQQGQFQQQFGYSNFQNGFLQYGQQKQGFYQFQYYYFGGGYYNFY': 12.843408303787768, 'YFGQQYFLQQYFQYFYFNFSYQYQKQQGGYFGGFFQGQQQGGFYYNGNYF': 13.047272610034963, 'QFGQLGGNYNQQFQYKQYQFGFYYQFFNYFYQSQGFFQYQYFGYGFQGYG': 13.249197318313685, 'GQFGKYYNGGGFNQQFYQQYYSGFQQQNGFYFGQFFYQQYQLGQFYYYFF': 13.452808743469815, 'NNYYQQNQGYGQYYQLFFQQQFGGFQFGGQFGYKGQQFFGYFSYYYYFQF': 13.663894490740866, 'GFQQGGFQQQYGGFSNQYKFQFFQYQQFQGNFGQYYNQYGYFGYLFYFYY': 13.868289004342328, 'QYGGQGQKNFYFGGYQQQQFQQYFFQFGNQSGQLFFFQFYYFYYYGYGYN': 14.118385874595063, 'QQYKQQNQYQQGGLGFYQGQQYYQFQGFFYFSQGGGYNFYFFNFYYFYFG': 14.330510120213422, 'FGFLGFFQGQKNQYQQFYGFQGQNFGQGQGQQFQGYSYYQFYYYYFYFNY': 14.801244899483716, 'NFQGNLQFYGQQQGQQNGGQQFQFGYKFQYQGGYGFYQYSYYYYFFFFFY': 15.209855224048953}
+    try:
+        variant_seq = create.variant(sequence, 'change_kappa', target_kappa=0.5)
+    except goose.goose_exceptions.GooseInputError as e:
+        print(f"Input error: {e}")
+    except goose.goose_exceptions.GooseFail as e:
+        print(f"Generation failed: {e}")
 
+**Tips for successful variant generation:**
 
-*Predicting the Rg / Re of your starting sequence simultaneously*  
-GOOSE also lets you get the predicted Rg / Re of your starting sequence. When you set ``include_original=True`` for the ``create.re_var()`` or ``create.rg_var()`` functions, you will get back a dictionary where there with **original** and **variants** as the keys that correspond to values that are dictionaries with sequnce : Rg/Re pairs. You can also set ``return_all=True`` when using this to get back your original sequence and a series of variants with Rg / Re values.  
+- Start with moderate changes to properties
+- Use higher ``num_attempts`` for difficult targets
+- Check that your sequence has the necessary residue types for the variant
+- For kappa variants, ensure your sequence has both positive and negative charges
+- For class-based variants, remember that some property changes may not be possible due to class constraints
 
+Function selection guide
+------------------------
 
-**Example including original sequence Re or Rg** - 
+**Choose variant type based on your needs:**
 
+- **Shuffling sequences:** Use shuffling variants to rearrange existing residues
+- **Maintaining properties:** Use constant property variants to keep sequence characteristics
+- **Changing specific properties:** Use property modification variants for targeted changes
+- **Adjusting dimensions:** Use dimensional variants to change IDR dimensions 
+- **Changing asymmetry:** Use asymmetry variants to modify residue distribution patterns
 
-.. code-block:: python
+**Performance considerations:**
 
-    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
-    create.re_var(test, 'increase', include_original=True)
-    {'original': {'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG': 19.883686156942094}, 'variants': {'QKGFQGGQYQQQQFGFYFFYNYFYQNQFQNYYQFFYGFYYGGQGSGYQFL': 26.436047646562177}}
+- Shuffling variants are generally fastest
+- Property modification variants may require more attempts
+- Dimensional variants can be computationally intensive
+- Kappa variants work best with values between 0.1 and 0.9
 
+Backward compatibility notes
+----------------------------
 
-Now let's do the same for Rg. 
+The unified ``variant()`` function replaces many individual functions from previous versions:
 
-.. code-block:: python
+- ``constant_class_var()`` → ``variant(seq, 'constant_properties_and_class')``
+- ``constant_properties_var()`` → ``variant(seq, 'constant_properties')``
+- ``region_shuffle_var()`` → ``variant(seq, 'shuffle_specific_regions')``
+- ``targeted_shuffle_var()`` → ``variant(seq, 'shuffle_specific_residues')``
+- ``excluded_shuffle_var()`` → ``variant(seq, 'shuffle_except_specific_residues')``
+- ``kappa_var()`` → ``variant(seq, 'change_kappa')``
+- ``hydro_class_var()`` → ``variant(seq, 'change_hydropathy_constant_class')``
+- ``fcr_class_var()`` → ``variant(seq, 'change_fcr_minimize_class_changes')``
+- ``ncpr_class_var()`` → ``variant(seq, 'change_ncpr_constant_class')``
+- ``all_props_class_var()`` → ``variant(seq, 'change_any_properties')``
+- ``re_var()`` / ``rg_var()`` → ``variant(seq, 'change_dimensions')``
+- ``weighted_shuffle_var()`` → ``variant(seq, 'weighted_shuffle_specific_residues')``
+- ``asymmetry_var()`` → ``variant(seq, 'change_residue_asymmetry')``
 
-    test = 'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG'
-    create.rg_var(test, 'increase', include_original=True)
-    {'original': {'FYFLGQGQQYYYYQQKQFFQFYYQQFFGFYGSNFQGGNYFGGYQQNQYFG': 12.642882870879607}, 'variants': {'QQNFYQYSGGFQFQKQQQQFNFGGQGFQGFGQFFGYQYYYNYYYLYGFYF': 14.667587127612029}}
-
-The weighted_shuffle_var
----------------------------
-``weighted_shuffle_var`` - Generate variants where you can specify residues or classes of residues to shuffle along with a weight to dictate how severely to shuffle the sequence.
-**Example** -
-In this example we will shuffle the sequence with a weight of 0.5.
-.. code-block:: python
-
-    test = 'QQQEEENNNDDDQQQEEENNNDDD'
-    create.weighted_shuffle_var(test, shuffle_weight=0.5, target_aas=['Q', 'E'])
-    'EQQQEENNNDDDEEQQEQNNNDDD'
+The new interface provides more consistent parameter names and improved error handling while maintaining all the functionality of the original functions.

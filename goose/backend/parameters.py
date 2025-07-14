@@ -5,7 +5,11 @@ Can change parameters here and it will change paramters in GOOSE globally
 # need this for the min and max Rg / Re functions
 import statistics as stat
 
+METAPREDICT_VERSIONS=[1,2,3]
 METAPREDICT_DEFAULT_VERSION = 3
+
+ALLOWED_CONSECUTIVE_ORDERED = 3
+ALLOWED_TOTAL_ORDERED_FRACTION = 0.05
 
 MINIMUM_LENGTH = 10
 MAXIMUM_LENGTH = 10000
@@ -23,20 +27,10 @@ MINIMUM_KAPPA = 0.00
 MAXIMUM_KAPPA = 1
 
 # allowed error
-HYDRO_ERROR = 0.07
+MAXIMUM_HYDRO_ERROR = 0.07
 MAXIMUM_KAPPA_ERROR=0.03
-re_error=0.5
-rg_error=0.5
+MAXIMUM_RG_RE_ERROR=0.5
 
-# Empirically determined Rg / Re min and max based on length.
-def get_min_re(length):
-  return stat.sqrt(length+(length/2.8))+5
-def get_max_re(length):
-  return stat.sqrt(length+(length*140))-10
-def get_max_rg(length):
-  return stat.sqrt(length+(length*24))-4
-def get_min_rg(length):
-  return stat.sqrt(length+(length/200))+2
 
 # thresholds
 DISORDER_THRESHOLD = 0.5
@@ -45,7 +39,7 @@ MINIMUM_DISORDER = 0
 
 # attempts
 DEFAULT_ATTEMPTS = 200
-rg_re_attempt_num=200
+RG_RE_ATTEMPT_NUMBER=200
 
 # maximums for fractions of amino acids
 '''
@@ -87,4 +81,120 @@ MAX_FRACTION_V = 0.71
 # dict of max fractions
 MAX_FRACTION_DICT = {'A' : MAX_FRACTION_A, 'R' : MAX_FRACTION_R, 'N' : MAX_FRACTION_N, 'D' : MAX_FRACTION_D, 'C' : MAX_FRACTION_C, 'Q' : MAX_FRACTION_Q, 'E' : MAX_FRACTION_E, 'G' : MAX_FRACTION_G, 'H' : MAX_FRACTION_H, 'I' : MAX_FRACTION_I, 'L' : MAX_FRACTION_L, 'K' : MAX_FRACTION_K, 'M' : MAX_FRACTION_M, 'F' : MAX_FRACTION_F, 'P' : MAX_FRACTION_P, 'S' : MAX_FRACTION_S, 'T' : MAX_FRACTION_T, 'W' : MAX_FRACTION_W, 'Y' : MAX_FRACTION_Y, 'V' : MAX_FRACTION_V}
 
+MAX_CLASS_FRACTIONS = {
+  'aromatic': max(MAX_FRACTION_F, MAX_FRACTION_W, MAX_FRACTION_Y),
+  'aliphatic': max(MAX_FRACTION_A, MAX_FRACTION_I, MAX_FRACTION_L, MAX_FRACTION_M, MAX_FRACTION_V),
+  'polar': max(MAX_FRACTION_N, MAX_FRACTION_Q, MAX_FRACTION_S, MAX_FRACTION_T),
+  'positive': max(MAX_FRACTION_R, MAX_FRACTION_K),
+  'negative': max(MAX_FRACTION_D, MAX_FRACTION_E),
+  'proline': MAX_FRACTION_P,
+  'glycine': MAX_FRACTION_G,
+  'cysteine': MAX_FRACTION_C,
+  'histidine': MAX_FRACTION_H
+}
 
+VALID_AMINO_ACIDS = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+
+
+# functions to calculate max or min values. 
+def calculate_max_charge_emperical(cur_hydropathy):
+    '''    
+    Function to determine the maximum charge value depending
+    on the objective hydropathy of a sequence. Empirically 
+    determined by having GOOSE try to generate tons of different
+    FCR / NCPR / hydropathy sequences and determining the slope of
+    the line that is the cutoff between values that can generate
+    disordered sequences vs. those that can't. 
+
+    Parameters
+    ----------
+    hydropathy : Float
+        The objective hydropathy for the final sequence
+
+    Returns
+    -------
+        The maximum possible charge that a sequence can have
+        for a specific hydropathy value. Two different equations
+        were determined that differ slightly depending on the version
+        of metapredict used. Takes the minimum of both in order to maximize
+        chances that the user stays in a regime where a disordered sequence
+        can be generated.
+
+    '''
+    # calculate the maximum charge values for a given hydropathy
+    MAXIMUM_CHARGE_WITH_HYDRO_1 = 1.1907 + (-0.1389 * cur_hydropathy)
+    MAXIMUM_CHARGE_WITH_HYDRO_2 = 1.2756 + (-0.1450 * cur_hydropathy)
+    # return the lower value between the 2 possibilities.
+    # can't have FCR > 1. so 1 is also in the list
+    return min([MAXIMUM_CHARGE_WITH_HYDRO_1, MAXIMUM_CHARGE_WITH_HYDRO_2, 1])
+
+def calculate_max_charge_theoretical(length, cur_hydropathy, net_charge=-1):
+    '''
+    Function to determine the maximum FCR value depending
+    on the objective hydropathy of a sequence. Uses mathematical
+    bounds based on hydropathy scale and contributions 
+    from charged and uncharged amino acids. 
+
+    Parameters
+    ----------
+    length : Int
+        The length of the sequence to be generated
+    cur_hydropathy : Float
+        The objective hydropathy for the final sequence
+    net_charge : Float, optional
+        The objective net_charge for the final sequence. If not specified,
+        it will be set to -1.
+
+    Returns
+    -------
+        The maximum possible FCR that a sequence can have
+        for a specific hydropathy value. Uses the assumption
+        that we can use any residues, so non-charged residues
+        can have hydropathy as high as 9.0 and charged residues
+        can have hydropathy as high as 1.0.
+    '''
+    hydro_from_NCPR = (net_charge*0.2)+0.8
+    # determine the number of charged residues 
+    return length * (9-cur_hydropathy) / (9.0 - hydro_from_NCPR)
+
+def calculate_max_charge(length, cur_hydropathy, net_charge=-1, empirical=True):
+    '''
+    Function to determine the maximum FCR value depending
+    on the objective hydropathy of a sequence. Uses either
+    empirical or theoretical methods to determine the maximum
+    charge value.
+
+    Parameters
+    ----------
+    length : Int
+        The length of the sequence to be generated
+    hydropathy : Float
+        The objective hydropathy for the final sequence
+    net_charge : Float, optional
+        The objective net_charge for the final sequence. If not specified,
+        it will be set to -1.
+    empirical : Bool, optional
+        If True, uses empirical method; if False, uses theoretical method.
+
+    Returns
+    -------
+        The maximum possible FCR that a sequence can have
+        for a specific hydropathy value.
+    '''
+    if net_charge==None:
+       net_charge = -1
+    if empirical:
+        return calculate_max_charge_emperical(cur_hydropathy)
+    else:
+        return calculate_max_charge_theoretical(length, cur_hydropathy, net_charge)
+
+
+# Empirically determined Rg / Re min and max based on length.
+def get_min_re(length):
+  return stat.sqrt(length+(length/2.8))+5
+def get_max_re(length):
+  return stat.sqrt(length+(length*140))-10
+def get_max_rg(length):
+  return stat.sqrt(length+(length*24))-4
+def get_min_rg(length):
+  return stat.sqrt(length+(length/200))+2

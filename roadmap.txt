@@ -1,16 +1,9 @@
 Tracking future changes...
-• Update sequence_generation.py, sequence_generation_backend.py, and variant_generation.py functions to use numpy vectorize operations
-• Slim down code base significantly
 • Add explicit sequence feature verification post sequence generation. 
 • reverify what fractions of amino acids should be max fractions. 
-• Update all sequence generation methods including by interactions and for bydimensions to use numpy vectorized operations
-• Fix the computeIWD parameter in the optimizer_parameters
-• improve documentation, add more defualt probabilities based off of different genomes.
-• Update the library generation functionality. 
 • Update autosummary in docs. 
-• Make sure no residual kappa errors (-1 for no charge or only same charge) arising from the new kappa code
-• Reassess logic in making hydropathy by class variants, add in numpy vectorization version. 
 • Fix the Colab Notebook!
 • Add more explicit examples of properties and their use in the SequenceOptimizer
 • Retest install instructions in README and ReadTheDocs
 
+**NEED TO ADD THE EDGE CASES OT SEQUENCE GENERATION TESTING**

@@ -5,7 +5,6 @@ asically a wrapper over SPARROW.
 
 import random
 
-from goose.backend.amino_acids import AminoAcid
 from sparrow import Protein as SparrowProtein
 from goose.goose_exceptions import GooseInputError
 
@@ -25,7 +24,8 @@ class Protein:
         self.seq = seq.upper()
         
         # Check if all amino acids in the sequence are standard
-        if not set(seq).issubset(AminoAcid.standard_amino_acids):
+        standard_amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+        if not set(seq).issubset(standard_amino_acids):
             raise GooseInputError("Invalid amino acid detected. Make sure sequence only has canonical amino acids.")
 
         # build a new sparrow Protein object which can then be called as needed
@@ -142,7 +142,8 @@ class Protein:
         return properties_dict
 
     def auto_name(self):
+        standard_amino_acids = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
         # generates an autoname based on the sequence properties
-        return '>' + ''.join(f"{random.choice(list(AminoAcid.standard_amino_acids))}{random.randint(0, 9)}" for _ in range(5))
+        return '>' + ''.join(f"{random.choice(list(standard_amino_acids))}{random.randint(0, 9)}" for _ in range(5))
 
 
