@@ -29,7 +29,7 @@ The main functionalities of GOOSE are:
 
 **3.** Generate IDR variants. There are now 16 different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 
-**4.** Analyze sequences. Although this is possible in GOOSE, I recommend using[SPARROW](https://github.com/idptools/sparrow) for sequence analysis. 
+**4.** Analyze sequences. Although this is possible in GOOSE, I recommend using [SPARROW](https://github.com/idptools/sparrow) for sequence analysis. 
 
 ## How to use GOOSE
 
