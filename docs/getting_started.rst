@@ -76,7 +76,7 @@ GOOSE requires the package ``sparrow``. Sparrow should be downloaded automatical
 This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have numpy or cython installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. See step 1. of Installation for instructions on installing cython and numpy. 
 
 
-Important limitations
+Important Limitations
 ======================
 GOOSE has some important limitations that users should be aware of. First, GOOSE makes sequences **predicted** to be disordered based on the disorder predictor metapredict. Although modern disorder predictors have proven to be *quite good*, one should aways keep in mind that predicted disorder is **not** gaurenteed disorder. 
 

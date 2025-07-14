@@ -1,5 +1,5 @@
-Creating Sequence Variants in Python
-=====================================
+Creating Sequence Variants
+=============================
 
 First import ``create`` from goose (if you haven't done so for sequence generation).
 

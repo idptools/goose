@@ -1,5 +1,5 @@
-Creating sequences with GOOSE
-===============================
+Creating Sequences
+====================
 
 GOOSE provides several functions for generating intrinsically disordered protein sequences with specific properties. This guide covers the main sequence generation functions:
 

@@ -1,5 +1,5 @@
-Sequence Optimization with GOOSE
-================================
+Using the SequenceOptimizer
+==============================
 
 **SUPER DUPER IMPORTANT NOTE**: GOOSE is an IDR design tool. **HOWEVER**, when using SequenceOptimizer, you can design anything you want. Thus, sequences are not guaranteed to be disordered unless you specify the ``FractionDisorder`` property. You can also use the ``MatchSequenceDisorder`` property if you'd like to make a variant that maintains the disorder profile of your original sequence (either exactly or as a minimum threshold).
 
