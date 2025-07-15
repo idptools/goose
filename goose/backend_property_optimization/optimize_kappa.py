@@ -169,7 +169,11 @@ def optimize_kappa(sequence, target_kappa,
                         current_seq = decrease_kappa(current_seq, fixed_indices=fixed_indices)
                     modified_sequences[idx] = current_seq[-1]
                 else:
-                    result = efficient_kappa_minimization(current_seq, iters, fixed_indices=fixed_indices)
+                    # alternate between decrease and efficient minimization
+                    if num_not_improved%2==0:
+                        result = decrease_kappa(current_seq, fixed_indices=fixed_indices)
+                    else:
+                        result = efficient_kappa_minimization(current_seq, iters, fixed_indices=fixed_indices)
                     modified_sequences[idx] = result[0]
                 
         # Recalculate kappa for sequences that haven't reached target

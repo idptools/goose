@@ -158,7 +158,7 @@ You can optimize for several properties at once. The ``weight`` argument control
     print(f"Final NCPR: {final_protein.NCPR:.2f}")
 
 .. note::
-   The optimizer minimizes a weighted sum of property errors: sum(weight * |calculated - target|).
+   The optimizer minimizes a weighted sum of property errors: sum(weight * \|calculated - target\|).
 
 Advanced Features
 -----------------

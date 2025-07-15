@@ -6,11 +6,13 @@ What can GOOSE do?
 --------------------
 The main functionalities of GOOSE are:
 
-- Generate synthetic IDRs where you can specify length and
+- Generate synthetic IDRs where you can specify length and:
+
   #. Simultaneously specify average hydrophobicity, fraction of charged residues (FCR), net charge per residue (NCPR), and kappa (quantifies opposite charge distribution)  
   #. Fractions of amino acids (multiple fractions simultaneously)  
   #. Classes of amino acids (multiple classes simultaneously)  
   #. End-to-end distance (Re) or radius of gyration (Rg)  
+
 - Generate sequences by sequence optimization. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can define your own functions to design sequences!
 - Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 
@@ -29,14 +31,14 @@ The higlights of the new features in GOOSE V0.2.1 are:
 * Many many bug fixes. 
 
 
-For full details, see the change log `here <https://github.com/idptools/goose>`_ 
+For full details, see the change log `on GitHub <https://github.com/idptools/goose>`_ 
 
 How can I use GOOSE?
 --------------------
 You can use GOOSE from Python or from Goole Colab.
   
 NOTE: The colab notebook is currently not up to date, this will be fixed soon (July 2025).
-We also have a Google Colab notebook. The Colab notebook can be found `here <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
+We also have a Google Colab notebook. The Colab notebook can be found `in this link <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
 
 
 Installation - GOOSE takes flight!
