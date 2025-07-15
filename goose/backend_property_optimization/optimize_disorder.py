@@ -44,7 +44,8 @@ def optimize_disorder(input_sequence, disorder_cutoff=0.5,
     sequence = input_sequence
     
     # get initial disorder score
-    best_disorder_score = np.min(meta.predict_disorder(sequence, version=metapredict_version))
+    disorder_scores = meta.predict_disorder(sequence, version=metapredict_version)
+    best_disorder_score = np.min(disorder_scores)
 
     # convert sequence to numpy array for vectorized operations
     sequence_array = np.array(list(sequence))
@@ -58,11 +59,19 @@ def optimize_disorder(input_sequence, disorder_cutoff=0.5,
         # all positions are potential targets
         potential_targets = np.arange(len(sequence))
 
+    # if no potential targets, return the original sequence
+    if len(potential_targets) == 0:
+        return sequence
+
+    # set to True so we don't predict disorder on the first iteration
+    first_iteration = True
 
     # iterate through optimization attempts
     for _ in range(max_iterations):
-        # find the region of the sequence below the disorder cutoff
-        disorder_scores = meta.predict_disorder(sequence, version=metapredict_version)
+        if not first_iteration:
+            # find the region of the sequence below the disorder cutoff
+            disorder_scores = meta.predict_disorder(sequence, version=metapredict_version)
+            first_iteration = False
 
         # use vectorized operations to find top disordered indices
         # filter potential targets and get their disorder scores

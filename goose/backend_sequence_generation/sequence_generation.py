@@ -333,8 +333,8 @@ def by_properties(length,
             if isinstance(seqs, str):
                 # only use optimization when we have failed to make a sequence consistently. 
                 if batch_size >= 100:
-                    seqs=optimize_disorder(seqs, disorder_cutoff=disorder_cutoff,
-                            max_iterations=50, 
+                    seqs=optimize_disorder(seqs, disorder_cutoff=disorder_cutoff, 
+                            max_iterations=20, 
                             preserve_charge_placement=preserve_charge_placement,
                             metapredict_version=metapredict_version)
                     # check if the optimized sequence meets the disorder cutoffa
