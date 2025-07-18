@@ -36,8 +36,7 @@ For full details, see the change log `on GitHub <https://github.com/idptools/goo
 How can I use GOOSE?
 --------------------
 You can use GOOSE from Python or from Goole Colab.
-  
-NOTE: The colab notebook is currently not up to date, this will be fixed soon (July 2025).
+
 We also have a Google Colab notebook. The Colab notebook can be found `in this link <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
 
 

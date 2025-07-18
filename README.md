@@ -33,7 +33,7 @@ The main functionalities of GOOSE are:
 
 ## How to use GOOSE
 
-You can use GOOSE from Python. I am working on remaking the Colab Notebook as it no longer works with the current version of GOOSE.
+You can use GOOSE from Python. There is also most of the functionality in GOOSE available in a [Google Colab notebook](https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing).
 
 ## Installation - GOOSE takes flight!
 
