@@ -123,7 +123,7 @@ class SequenceParametersByFractions:
                    of amino acids not specified in fractions, and normalized_probs is
                    the corresponding normalized probability distribution.
         """
-        unspecified = [aa for aa in AMINO_ACIDS if aa not in self.fractions or self.fractions[aa] == 0]
+        unspecified = [aa for aa in AMINO_ACIDS if aa not in self.fractions]
         
         if not unspecified:
             return [], []
