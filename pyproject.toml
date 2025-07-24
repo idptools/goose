@@ -31,7 +31,7 @@ dependencies = [
     "tqdm",
     "alphaPredict>=1.3.0",
     "getSequence >= 2.2.1",
-    "sparrow @ git+https://git@github.com/idptools/sparrow.git@numpy2",
+    "sparrow @ git+https://git@github.com/idptools/sparrow.git",
     "finches @ git+https://git@github.com/idptools/finches.git",
 ]
 
