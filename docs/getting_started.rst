@@ -42,19 +42,16 @@ We also have a Google Colab notebook. The Colab notebook can be found `in this l
 
 Installation - GOOSE takes flight!
 ===================================
+Right now you can only install GOOSE through Github. It will be on PyPi to allow for pip installation... soon!  
+
 A few notes on how to best use GOOSE.
 * We strongly recommend using GOOSE in a virtual environment. This is not required, but it will help you avoid any issues with package dependencies. See conda or venv for more information on how to set up a virtual environment.
 * GOOSE was tested largely in Python 3.11, so you will likely run into the fewest issues if you use that version. 
 * As of GOOSE v0.2.0, GOOSE should work with Python 3.12 and above. However, if you run into issues, let us know and we will do our best to fix them.
-  
 
-The easiest way to install GOOSE is using pip.
 
-.. code-block:: bash
+As of GOOSE V0.2.0, you should be able to install GOOSE with a single command. 
 
-    $ pip install goose
-
-  
 To install directly from the git repository simply run:
 
 .. code-block:: bash
