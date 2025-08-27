@@ -37,9 +37,11 @@ You can use GOOSE from Python. There is also most of the functionality in GOOSE 
 
 ## Installation - GOOSE takes flight!
 
-Right now you can only install GOOSE through Github. We plan to put it on PyPi at some point to allow for install via pip!  
-
-After moving GOOSE to use pyproject.toml, you should be able to install GOOSE in a single step. 
+The easiest way to install GOOSE is to use pip. Simply run 
+```bash
+pip install goose
+```
+  
 
 To install directly from the git repository simply run:
 
