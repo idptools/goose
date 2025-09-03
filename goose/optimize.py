@@ -11,12 +11,38 @@ import pickle
 import sparrow
 
 from goose.data import amino_acids
+from goose.backend import optimizer_properties
 from goose.backend.optimizer_properties import ProteinProperty
+
 
 # code that allows access to the data directory
 _ROOT = os.path.abspath(os.path.dirname(__file__))
 def get_data(path):
     return os.path.join(_ROOT, 'data', path)
+
+def _get_property_class(class_name: str) -> type:
+    """
+    Get a property class by name from the optimizer_properties module.
+    
+    Parameters
+    ----------
+    class_name : str
+        The name of the property class
+        
+    Returns
+    -------
+    type
+        The property class
+        
+    Raises
+    ------
+    ValueError
+        If the property class is not found
+    """
+    try:
+        return getattr(optimizer_properties, class_name)
+    except AttributeError:
+        raise ValueError(f"Property class '{class_name}' not found in optimizer_properties module")
 
 # define kmer dict. 
 class KmerDict:
@@ -126,6 +152,41 @@ class SequenceOptimizer:
         self._configure_logger() #this configures a data logger to ensure that the process is recordered
         self._load_kmer_dict()
         self.properties_dict = {}  # Dictionary to store properties for faster lookup
+        self._property_counter = {} # counter for generating unique property ids
+        self.initial_property_values = {}
+        self.property_scaling_ranges = {}
+
+    def _calculate_initial_property_values(self, initial_sequence: str):
+        """Calculate initial property values to establish scaling ranges."""
+        if not self.initial_property_values:
+            protein = sparrow.Protein(initial_sequence)
+            
+            for prop in self.properties:
+                property_name = prop.__class__.__name__
+                initial_value = prop.calculate_raw_value(protein)
+                
+                # Store initial value and set it in the property
+                self.initial_property_values[property_name] = initial_value
+                prop.set_initial_value(initial_value)
+                
+                # Calculate scaling range using property's own method
+                self.property_scaling_ranges[property_name] = prop.get_scaling_range()
+
+    def _scale_property_error(self, property_name: str, raw_error: float, 
+                             property_instance: ProteinProperty, weight: float) -> float:
+        """
+        Scale property error to 0-1 range using property's scaling characteristics.
+        """
+        if property_instance.is_naturally_normalized():
+            # Already 0-1 properties: error is naturally 0-1 scaled
+            normalized_error = raw_error
+        else:
+            # Scale based on property's scaling range
+            scale_range = self.property_scaling_ranges.get(property_name, 1.0)
+            normalized_error = min(raw_error / scale_range, 1.0)  # Cap at 1.0
+        
+        return normalized_error * weight
+
 
     def _configure_logger(self):
         '''Initializes a data logger to store data and capture sequence optimization.'''
@@ -199,15 +260,24 @@ class SequenceOptimizer:
         if config['initial_sequence']:
             optimizer.set_initial_sequence(config['initial_sequence'])
 
-        # Load properties
-        for prop_name, target_value, weight in config['properties']:
+        # Load properties with enhanced multi-target support
+        for prop_config in config['properties']:
             try:
-                # properties being optimized must be in global namespace
-                property_class = globals()[prop_name]
-            except KeyError:
-                raise ValueError(f"property class {prop_name} not found.")
-
-            optimizer.add_property(property_class, target_value, weight)
+                # Get property class using the registry function
+                property_class = _get_property_class(prop_config['class_name'])
+                
+                # Use the stored initialization arguments to recreate the property
+                init_args = prop_config.get('init_args', {})
+                new_property = property_class.from_init_args(init_args)
+                
+                # Add the property using the internal method to preserve unique keys for multi-target
+                if prop_config.get('multi_target', False) and 'unique_key' in prop_config:
+                    optimizer.properties_dict[prop_config['unique_key']] = new_property
+                else:
+                    optimizer.properties_dict[prop_config['class_name']] = new_property
+                
+            except (KeyError, AttributeError, TypeError) as e:
+                raise ValueError(f"Error loading property {prop_config['class_name']}: {str(e)}")
 
         optimizer.logger.info(f"Configuration loaded from {config_file}")
         return optimizer
@@ -236,15 +306,31 @@ class SequenceOptimizer:
         new_property = property_class(*args, **kwargs)
         property_name = property_class.__name__
 
-        # Replace if property already exists
-        if property_name in self.properties_dict:
-            self.properties_dict[property_name] = new_property
+        # Check if this property type allows multiple targets
+        allows_multiple = getattr(new_property, 'multi_target', False)
+        constraint = getattr(new_property, 'constraint_type')
+        # if allowed to add multiple...
+        if allows_multiple:
+            # Generate unique identifier for multi-target properties
+            if property_name not in self._property_counter:
+                self._property_counter[property_name] = 0
+            self._property_counter[property_name] += 1
+            
+            unique_key = f"{property_name}_{self._property_counter[property_name]}"
+            self.properties_dict[unique_key] = new_property
+            
             if self.verbose:
-                self.logger.info(f"Replaced existing property {property_name}")
+                self.logger.info(f"Added property constraining {property_name} to {constraint.value} value of {new_property.target_value} as {unique_key}")
         else:
-            self.properties_dict[property_name] = new_property
-            if self.verbose:
-                self.logger.info(f"Added new property {property_name}")
+            # Replace if property already exists
+            if property_name in self.properties_dict:
+                self.properties_dict[property_name] = new_property
+                if self.verbose:
+                    self.logger.info(f"Replaced existing property {property_name} to {constraint.value} value of {new_property.target_value}")
+            else:
+                self.properties_dict[property_name] = new_property
+                if self.verbose:
+                    self.logger.info(f"Added new property {property_name} to {constraint.value} value of {new_property.target_value}")
 
     def set_fixed_ranges(self, ranges: List[Tuple[int, int]]):
         if not all(isinstance(r, tuple) and len(r) == 2 for r in ranges):
@@ -327,8 +413,8 @@ class SequenceOptimizer:
         self.logger.info(f"Optimized Sequence: {sequence}")
         protein = sparrow.Protein(sequence)
         for prop in self.properties_dict.values():
-            value = prop.calculate(protein)
-            self.logger.info(f"{prop.__class__.__name__}: {value:.2f} (Target: {prop.target_value:.2f})")
+            value = prop.calculate_raw_value(protein)
+            self.logger.info(f"{prop.__class__.__name__}: {value:.2f} (Target: {prop.constraint_type.value} {prop.target_value:.2f})")
     
     def save_configuration(self, filename: str):
         '''Saves the current configurations for the optimizer to a json file.
@@ -338,9 +424,32 @@ class SequenceOptimizer:
         filename : str
             This is the json filename where you want to store the parameters for this optimization.
         '''
+        # Enhanced to handle multi-target properties
+        properties_config = []
+        for key, prop in self.properties_dict.items():
+            # For multi-target properties, store additional metadata
+            if hasattr(prop, 'multi_target') and prop.multi_target:
+                properties_config.append({
+                    "class_name": prop.__class__.__name__,
+                    "unique_key": key,
+                    "target_value": prop.target_value,
+                    "weight": prop.weight,
+                    "multi_target": True,
+                    # Store initialization args - this would need property-specific handling
+                    "init_args": self._get_property_init_args(prop)
+                })
+            else:
+                properties_config.append({
+                    "class_name": prop.__class__.__name__,
+                    "target_value": prop.target_value, 
+                    "weight": prop.weight,
+                    "multi_target": False,
+                    "init_args": self._get_property_init_args(prop)
+                })
+        
         config = {
             "target_length": self.target_length,
-            "properties": [(prop.__class__.__name__, prop.target_value, prop.weight) for prop in self.properties_dict.values()],
+            "properties": properties_config,
             "fixed_ranges": self.fixed_ranges,
             "max_iterations": self.max_iterations,
             "tolerance": self.tolerance,
@@ -352,6 +461,22 @@ class SequenceOptimizer:
         with open(filename, 'w') as f:
             json.dump(config, f, indent=2)
         self.logger.info(f"Configuration saved to {filename}")
+
+    def _get_property_init_args(self, prop: ProteinProperty) -> dict:
+        """
+        Extract initialization arguments from a property instance.
+        
+        Parameters
+        ----------
+        prop : ProteinProperty
+            The property instance to extract arguments from
+            
+        Returns
+        -------
+        dict
+            Dictionary containing initialization arguments
+        """
+        return prop.get_init_args()
 
     def get_defined_properties(self) -> List[Dict[str, Any]]:
         '''This returns a list of the properties you are trying to optimize for during sequence generation.
@@ -477,7 +602,6 @@ def get_global_and_window_shuffles(sequence: str, num_shuffles: int, window_size
     return shuffled_sequences
 
 
-
 def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[str, Dict[str, Any]], fixed_residue_ranges: List[Tuple[int, int]]) -> Dict[int, List[str]]:
     """
     Filter candidate k-mers based on their property values, directionality, and fixed residue ranges.
@@ -499,36 +623,64 @@ def filter_candidate_kmers(sequence: str, kmer_dict: KmerDict, directions: Dict[
         A dictionary mapping k-mer lengths to lists of valid candidate k-mers.
     """
     current_properties = {method_name: info["current_value"] for method_name, info in directions.items()}
-
-    # Filter candidate kmers based on their property values, directionality, and fixed residue ranges
+    target_properties = {method_name: info["target_value"] for method_name, info in directions.items()}
+    weights = {method_name: info["weight"] for method_name, info in directions.items()}
+    
+    # Calculate weighted combined improvement for each k-mer
     candidate_kmers = defaultdict(list)
+    kmer_scores = []
+    
     for kmer, prop_dict in kmer_dict.kmer_properties.items():
-        valid_kmer = True
         kmer_range = (sequence.find(kmer), sequence.find(kmer) + len(kmer) - 1)
-
+        
         # Check if the k-mer overlaps with any fixed residue range
-        #if any(max(start, kmer_range[0]) <= min(end, kmer_range[1]) for start, end in fixed_residue_ranges):
         if any(start <= kmer_range[0] <= end and start <= kmer_range[1] <= end for start, end in fixed_residue_ranges):
             continue
-
+        
+        # Calculate weighted improvement score
+        weighted_improvement = 0.0
+        total_weight = 0.0
+        
         for method_name, info in directions.items():
-            direction = info["direction"]
             if method_name in prop_dict:
-                if (prop_dict[method_name] - current_properties[method_name]) * direction < 0:
-                    valid_kmer = False
-                    break
-
-        if valid_kmer:
-            candidate_kmers[len(kmer)].append(kmer)
-
+                current_value = info["current_value"]
+                target_value = info["target_value"]
+                weight = info["weight"]
+                scale_range = info["scale_range"]
+                
+                # Calculate current error (normalized)
+                current_error = abs(current_value - target_value) / scale_range
+                
+                # Calculate projected error with this k-mer
+                kmer_value = prop_dict[method_name]
+                projected_error = abs(kmer_value - target_value) / scale_range
+                
+                # Improvement is reduction in error (positive = better)
+                improvement = (current_error - projected_error) * weight
+                weighted_improvement += improvement
+                total_weight += weight
+        
+        if total_weight > 0:
+            # Normalize by total weight
+            normalized_score = weighted_improvement / total_weight
+            kmer_scores.append((kmer, normalized_score))
+    
+    # Sort k-mers by their improvement score and take top candidates
+    kmer_scores.sort(key=lambda x: x[1], reverse=True)
+    
+    # Take top 50% of k-mers or at least 10 k-mers per length
+    num_to_keep = max(10, len(kmer_scores) // 2)
+    top_kmers = kmer_scores[:num_to_keep]
+    
+    for kmer, score in top_kmers:
+        candidate_kmers[len(kmer)].append(kmer)
+    
+    # Fallback: if no good k-mers found, allow all k-mers
     if not candidate_kmers:
-        # Fallback: group all kmers by their length
-        candidate_kmers = defaultdict(list)
         for kmer in kmer_dict.kmer_properties:
             candidate_kmers[len(kmer)].append(kmer)
-
+    
     return candidate_kmers
-
 
 def select_kmer_to_replace(sequence: str, min_k: int, max_k: int, fixed_residue_ranges: List[Tuple[int, int]]) -> str:
     """
@@ -660,7 +812,8 @@ def mutate_sequence(sequence: str, kmer_dict: KmerDict,
                     properties: List[ProteinProperty], num_shuffles: int = 0, 
                     window_size: int = 10, 
                     fixed_residue_ranges: List[Tuple[int, int]] = [],
-                    just_shuffle: bool = False) -> Tuple[str, float, Dict[str, Dict[str, Any]]]:
+                    just_shuffle: bool = False,
+                     optimizer: SequenceOptimizer = None) -> Tuple[str, float, Dict[str, Dict[str, Any]]]:
     """
     Mutate a sequence by replacing a k-mer with a new k-mer and generate shuffled sequences.
 
@@ -731,7 +884,7 @@ def mutate_sequence(sequence: str, kmer_dict: KmerDict,
 
     for seq in sequences:
         protein = sparrow.Protein(seq)
-        combined_err, directions = calculate_errors(protein, properties)
+        combined_err, directions = calculate_errors(protein, properties, optimizer)
 
         if combined_err < min_combined_error:
             min_combined_error = combined_err
@@ -783,11 +936,19 @@ def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[
     str
         The optimized sequence.
     """
+    # Create optimizer instance for scaling
+    optimizer_tracker = SequenceOptimizer(target_length)
+    optimizer_tracker.properties_dict = {prop.__class__.__name__: prop for prop in properties}
+    
+    # check initial sequence    
     if initial_sequence is not None:
         best_sequence = initial_sequence
     else:
         best_sequence = build_sequence(kmer_dict, target_length)
-    
+
+    # Calculate initial property values for scaling - this is crucial!
+    optimizer_tracker._calculate_initial_property_values(best_sequence)    
+
     best_error, directions = calculate_errors(sparrow.Protein(best_sequence), properties)
 
     # Start progress bar
@@ -803,11 +964,15 @@ def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[
                                                               num_shuffles=current_num_shuffles, 
                                                               window_size=window_size, 
                                                               fixed_residue_ranges=fixed_residue_ranges, 
-                                                              just_shuffle=just_shuffle)
+                                                              just_shuffle=just_shuffle,
+                                                              optimizer=optimizer_tracker)
     
         if new_error < best_error:
             best_sequence = new_sequence
             best_error = new_error
+            for p in properties:
+                p._best_value = directions[p.__class__.__name__]['scaled_error']
+                p._current_raw_value=directions[p.__class__.__name__]['current_value']
 
         if best_error < tolerance:
             break
@@ -815,57 +980,62 @@ def optimize_sequence(kmer_dict: KmerDict, target_length: int, properties: List[
         # Update progress bar
         if i!=0 and i % gap_to_report == 0:
             pbar.update(gap_to_report)
-            pbar.set_description(f"Best Error = {best_error:.2f}")
+            pbar.set_description(f"Best Error = {best_error:.5f}")
         
         # make sure we update at last step
         if i == max_iterations - 1:
             pbar.update(gap_to_report)
-            pbar.set_description(f"Best Error = {best_error:.2f}")
+            pbar.set_description(f"Best Error = {best_error:.5f}")
 
-        # of verbose..
+        # if verbose..
         if verbose and i % gap_to_report == 0:
-            print(f"Iteration {i}: Best Error = {best_error}")
-            print(f"Iteration {i}: Best Sequence = {best_sequence}")
-            for prop_name in directions:
-                print(f"Iteration {i}: Target {prop_name} = {directions[prop_name]['target_value']:.3f}")
-                print(f"Iteration {i}: Current {prop_name} = {directions[prop_name]['current_value']:.3f}")
+            print(f"Iteration {i}:\nBest Error = {best_error:.5f}")
+            print(f"Best Sequence = {best_sequence}")
+            for prop in properties:
+                current_value = prop._current_raw_value
+                current_str = f"{current_value:.3f}" if current_value is not None else "None"
+                best_value = prop._best_value  
+                best_str = f"{best_value:.3f}" if best_value is not None else "None"
+                print(f"{prop.__class__.__name__} targeting {prop.constraint_type.value} value of {prop.target_value}: raw value is {current_str}, scaled error is {best_str}")
 
     # Close progress bar
     pbar.close()
-
     return best_sequence
 
-
-def calculate_errors(protein: sparrow.Protein, properties: List[ProteinProperty]) -> Tuple[float, Dict[str, Dict[str, Any]]]:
-    """
-    Calculate the errors between the computed property values and the target values for a given protein sequence.
-
-    Parameters
-    ----------
-    protein : sparrow.Protein
-        The protein sequence to evaluate.
-    properties : List[ProteinProperty]
-        A list of protein properties to evaluate.
-
-    Returns
-    -------
-    Tuple[float, Dict[str, Dict[str, Any]]]
-        A tuple containing the combined error and a dictionary of direction information for each property.
-    """
+def calculate_errors(protein: sparrow.Protein, properties: List[ProteinProperty], 
+                    optimizer: SequenceOptimizer = None) -> Tuple[float, Dict[str, Dict[str, Any]]]:
+    """Enhanced error calculation with property-aware scaling."""
     errors = []
     directions = {}
-
+    
     for prop in properties:
-        value = prop.calculate(protein)
-        direction = 1 if prop.target_value > value else -1
-        direction_info = {"current_value": value, "target_value": prop.target_value, "direction": direction}
-        directions[prop.__class__.__name__] = direction_info
-
-        error = abs(value - prop.target_value) * prop.weight
-        errors.append(error)
-
+        property_name = prop.__class__.__name__
+        current_value = prop.calculate_raw_value(protein)
+        raw_error = prop.calculate_error(current_value)  # Use property's error calculation
+        
+        # Apply scaling if optimizer provided
+        if optimizer:
+            scaled_error = optimizer._scale_property_error(property_name, raw_error, prop, prop.weight)
+        else:
+            # Fallback to raw weighted error
+            scaled_error = raw_error * prop.weight
+        
+        errors.append(scaled_error)
+        
+        # Store comprehensive direction info
+        directions[property_name] = {
+            'raw_error': raw_error,
+            'scaled_error': scaled_error,
+            'current_value': current_value,
+            'target_value': prop.target_value,
+            'weight': prop.weight,
+            'is_normalized': prop.is_naturally_normalized(),
+            'scale_range': optimizer.property_scaling_ranges.get(property_name, 1.0) if optimizer else 1.0
+        }
+    
     combined_error = sum(errors)
     return combined_error, directions
+
 
 
 def build_sequence(kmer_dict: KmerDict, target_length: int) -> str:

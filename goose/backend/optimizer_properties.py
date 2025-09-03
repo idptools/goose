@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Tuple, Dict, Callable
+from enum import Enum
 import inspect
 import numpy as np
 
@@ -8,15 +9,168 @@ import metapredict as meta
 import finches
 from finches.utils.folded_domain_utils import FoldedDomain
 
+from goose.backend.optimizer_tools import MatrixManipulation
+
+class ConstraintType(Enum):
+    """Enumeration for different constraint types in property optimization."""
+    EXACT = "exact"      # Minimize absolute difference from target
+    MINIMUM = "minimum"  # Penalize only when below target
+    MAXIMUM = "maximum"  # Penalize only when above target
+
+def _normalize_constraint_type(constraint_type) -> ConstraintType:
+    """
+    Normalize constraint_type input to ConstraintType enum.
+    Follows GOOSE's parameter normalization pattern.
+    
+    Parameters
+    ----------
+    constraint_type : str, ConstraintType, or None
+        The constraint type specification
+        
+    Returns
+    -------
+    ConstraintType
+        The normalized constraint type enum
+        
+    Raises
+    ------
+    ValueError
+        If the constraint type is not recognized
+    """
+    if constraint_type is None:
+        return ConstraintType.EXACT
+    
+    if isinstance(constraint_type, ConstraintType):
+        return constraint_type
+    
+    if isinstance(constraint_type, str):
+        # Normalize string input (case-insensitive)
+        constraint_str = constraint_type.lower().strip()
+        
+        # Handle common aliases following GOOSE's flexible parameter handling
+        constraint_mapping = {
+            'exact': ConstraintType.EXACT,
+            'equal': ConstraintType.EXACT,
+            'equals': ConstraintType.EXACT,
+            'match': ConstraintType.EXACT,
+            
+            'minimum': ConstraintType.MINIMUM,
+            'min': ConstraintType.MINIMUM,
+            'at_least': ConstraintType.MINIMUM,
+            'greater_than': ConstraintType.MINIMUM,
+            
+            'maximum': ConstraintType.MAXIMUM,
+            'max': ConstraintType.MAXIMUM,
+            'at_most': ConstraintType.MAXIMUM,
+            'less_than': ConstraintType.MAXIMUM,
+        }
+        
+        if constraint_str in constraint_mapping:
+            return constraint_mapping[constraint_str]
+        else:
+            valid_options = list(constraint_mapping.keys())
+            raise ValueError(f"Invalid constraint_type '{constraint_type}'. Valid options are: {valid_options}")
+    
+    raise TypeError(f"constraint_type must be a string or ConstraintType enum, got {type(constraint_type)}")
+
 class ProteinProperty(ABC):
     """
     Abstract base class for protein sequence properties to be optimized.
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
+    # the multi_target attribute let's us specify which things can actually be specified towards multiple values. 
+    # for example, FCR should only be specified once. However, something like epsilon towards a target 
+    # protein could be specified towards multiple targets and therefore we want this to be True for those classes. 
+    # default is False
+    multi_target = True  # Class-level attribute - override to limit ability to have multiple targest. 
+
+    # currently testing this to get rid of the problem whereby properties that have larger
+    # values are overweighted due to their having larger absolute error... Hope it worsk. 
+    # Class-level normalization attributes - override in subclasses
+    IS_NATURALLY_NORMALIZED = False  # True if property naturally ranges 0-1
+
+    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         assert isinstance(target_value, (int,float)), f"target_value must be numerical. Received {type(target_value)}"
         assert isinstance(weight, (int,float)), f"Weight must be numerical. Received {type(weight)}"
+
+        # handle constraint type if user inputs a string instead of Enum
+        self.constraint_type = _normalize_constraint_type(constraint_type)
         self._target_value = target_value
         self._weight = weight
+        self._current_raw_value=None
+        self._best_value=None
+        # this should update at initialization to allow for relative error values 
+        # for non 0 to 1 properties. 
+        self.initial_value = None  # Will be set during optimization setup
+        
+
+    ## note: the is_naturally_normalized, set_initial_value and get_scaling_range, 
+    # are all things to be checked carefully if there are problems. I'm still not confident
+    # that relative error value normalization is actually the best way to do this. 
+    def is_naturally_normalized(self) -> bool:
+        """Check if this property is naturally 0-1 scaled."""
+        return self.IS_NATURALLY_NORMALIZED
+    
+    def set_initial_value(self, value: float):
+        """Set the initial value for relative scaling"""
+        self.initial_value = value
+    
+    def get_scaling_range(self) -> float:
+        """
+        Get the scaling range based on initial vs target values.
+        Used for relative error normalization.
+        """
+        if self.is_naturally_normalized():
+            return 1.0  # Already normalized, max possible error is 1.0
+        
+        if self.initial_value is not None:
+            # Use actual initial-to-target range for scaling
+            return max(abs(self.target_value - self.initial_value), 0.01)
+        
+        # Fallback if no initial value (shouldn't happen in normal usage)
+        return 1.0    
+    
+    @property
+    def constraint_type(self) -> ConstraintType:
+        return self._constraint_type
+
+    @constraint_type.setter
+    def constraint_type(self, value: ConstraintType):
+        # Flexible type setter that allows strings or enums as input
+        self._constraint_type = _normalize_constraint_type(value)
+
+    def get_init_args(self) -> dict:
+        """
+        Get the initialization arguments for this property instance.
+        Override in subclasses that have additional parameters.
+        
+        Returns
+        -------
+        dict
+            Dictionary containing the initialization arguments
+        """
+        return {
+            "target_value": self.target_value,
+            "weight": self.weight,
+            "constraint_type": self.constraint_type.value  # Store as string for JSON compatibility
+        }
+
+    @classmethod
+    def from_init_args(cls, args_dict: dict):
+        """
+        Create a property instance from initialization arguments.
+        
+        Parameters
+        ----------
+        args_dict : dict
+            Dictionary containing initialization arguments
+            
+        Returns
+        -------
+        ProteinProperty
+            New instance of the property class
+        """
+        return cls(**args_dict)
+        
 
     @property
     def target_value(self) -> float:
@@ -36,78 +190,132 @@ class ProteinProperty(ABC):
         assert isinstance(value, (int,float)), f"weight must be numerical. Received {type(value)}"
         self._weight = value
 
-    @abstractmethod
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_error(self, current_value: float) -> float:
         """
-        Calculate the property value for a given protein.
+        Calculate the error between the current value and the target value based on the constraint type.
 
         Parameters:
-        protein (sparrow.Protein): The protein instance.
+        current_value (float): The current value of the property.
 
         Returns:
-        float: The calculated property value.
+        float: The calculated error (always positive).
+        """
+        if self.constraint_type == ConstraintType.EXACT:
+            return abs(current_value - self.target_value)
+        elif self.constraint_type == ConstraintType.MINIMUM:
+            if current_value >= self.target_value:
+                return 0.0  # No penalty if above minimum
+            else:
+                return self.target_value - current_value  # Penalty for being below minimum
+        elif self.constraint_type == ConstraintType.MAXIMUM:
+            if current_value <= self.target_value:
+                return 0.0  # No penalty if below maximum
+            else:
+                return current_value - self.target_value  # Penalty for being above maximum
+        else:
+            raise ValueError(f"Unknown constraint type: {self.constraint_type}")
+
+    @abstractmethod
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        """
+        Calculate the raw property value for a given protein.
+        Subclasses should implement this instead of calculate().
+
+        Parameters
+        ----------
+        protein : sparrow.Protein
+            The protein instance
+
+        Returns
+        -------
+        float
+            The calculated raw property value
         """
         pass
+
+    def calculate(self, protein: 'sparrow.Protein') -> float:
+        """
+        Calculate the final error value for optimization.
+        This applies the constraint type to the raw value.
+
+        Parameters
+        ----------
+        protein : sparrow.Protein
+            The protein instance
+
+        Returns
+        -------
+        float
+            The error value for optimization
+        """
+        
+        raw_value = self.calculate_raw_value(protein)
+        self._current_raw_value = raw_value
+        if self._best_value is None:
+            self._best_value = raw_value
+        return self.calculate_error(raw_value)
+
 
 
 class ComputeIWD(ProteinProperty):
     """
     Compute the Inversed Weighted Distance (IWD) property for the target residues in the sequence.
-
-    Example usage:
-    import goose
-    from sparrow.protein import Protein as pr
-    # initialize optimizer
-    optimizer=goose.SequenceOptimizer(target_length=50, 
-                                gap_to_report=1000, num_shuffles=1)
-
-    # set optimization parameters
-    optimizer.set_optimization_params(max_iterations=50000, 
-                                    tolerance=1e-2,
-                                    shuffle_interval=5)
-    # add IWD as a property to optimize
-    optimizer.add_property(goose.IWD, residues=('S'), target_value=3)
-    # set best_seq to the optimized sequence
-    best_seq=optimizer.run()
-    # print the IWD for S for the best_seq and then print it. 
-    print(pr(best_seq).compute_iwd('S'))
-    print(best_seq)
     """
-    def __init__(self, residues: Tuple[str, ...], target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = False  
+    
+    def __init__(self, residues: Tuple[str, ...], target_value: float, 
+                 weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
         self.residues = residues
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    # note: This only needs to be overridden in subclasses that have additional parameters
+    def get_init_args(self) -> dict:
+        """Override to include residues parameter"""
+        return {
+            "residues": self.residues,
+            "target_value": self.target_value,
+            "weight": self.weight,
+            "constraint_type": self.constraint_type.value  # Store as string for JSON compatibility
+        }    
+
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.compute_iwd(list(self.residues))
+
 
 class Hydrophobicity(ProteinProperty):
     """
     Calculate the hydrophobicity property.
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = False  # Hydrophobicity scale is typically 0-6.6
+    
+    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.hydrophobicity
 
 class FCR(ProteinProperty):
     """
     Calculate the FCR property.
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = True  # FCR ranges 0-1
+    
+    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.FCR
 
 class NCPR(ProteinProperty):
     """
     Calculate the NCPR property.
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = True  # NCPR ranges -1 to 1, but effectively normalized
+    
+    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.NCPR
 
 
@@ -115,175 +323,103 @@ class Kappa(ProteinProperty):
     """
     Calculate the kappa property.
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = True  # Kappa ranges 0-1
+    
+    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.kappa
 
 class RadiusOfGyration(ProteinProperty):
     """
     Calculate the Radius of gyration
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = False  # Rg values depend on sequence length
+    
+    def __init__(self, target_value: float, weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.predictor.radius_of_gyration()
 
 class EndToEndDistance(ProteinProperty):
     """
     Calculate the Radius of gyration
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = False  # End-to-end distance depends on sequence length
+    
+    def __init__(self, target_value: float, weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.predictor.end_to_end_distance()
 
 
-class TargetAminoAcidFractions(ProteinProperty):
+class AminoAcidFractions(ProteinProperty):
     """
     Compute the difference between the target amino acid fractions and the current amino acid fractions.
     """
-    def __init__(self, target_fractions: Dict[str, float], weight: float = 1.0):
-        """
-        Parameters:
-        target_fractions (Dict[str, float]): A dictionary where keys are single-letter amino acid codes,
-            and values are the target fractions for each amino acid.
-        weight (float): The weight of this property in the combined objective function.
-        """
-        super().__init__(0.0, weight)  # Target value is set to 0.0 since we want to minimize the difference
+    IS_NATURALLY_NORMALIZED = False  # Fractions range 0-1
+    
+    def __init__(self, target_fractions: Dict[str, float], weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
+        # For fractions, target value is not meaningful at class level since we have multiple amino acids
+        super().__init__(0.0, weight, constraint_type)
         self.target_fractions = target_fractions
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def get_init_args(self) -> dict:
+        """Override to include target_fractions parameter"""
+        return {
+            "target_fractions": self.target_fractions,
+            "weight": self.weight,
+            "constraint_type": self.constraint_type.value
+        }
+
+    def calculate_error_for_fraction(self, current_frac: float, target_frac: float) -> float:
+        """Calculate error for a single amino acid fraction based on constraint type."""
+        if self.constraint_type == ConstraintType.EXACT:
+            return abs(target_frac - current_frac)
+        elif self.constraint_type == ConstraintType.MINIMUM:
+            # Only penalize if below minimum
+            return max(0, target_frac - current_frac)
+        elif self.constraint_type == ConstraintType.MAXIMUM:
+            # Only penalize if above maximum
+            return max(0, current_frac - target_frac)
+        else:
+            raise ValueError(f"Unknown constraint type: {self.constraint_type}")
+
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         """
-        Calculate the difference between the target amino acid fractions and the current amino acid fractions.
-
-        Parameters:
-        protein (sparrow.Protein): The protein instance.
-
-        Returns:
-        float: The difference between the target and current amino acid fractions.
+        Calculate the total error across all amino acid fractions.
+        This is the final error value, not a raw property value.
         """
         current_fractions = protein.amino_acid_fractions
+        total_error = 0.0
 
-        diff_sum = 0.0
         for aa, target_frac in self.target_fractions.items():
             current_frac = current_fractions.get(aa, 0.0)
-            diff_sum += abs(target_frac - current_frac)
+            total_error += self.calculate_error_for_fraction(current_frac, target_frac)
 
-        return diff_sum
-
-class MaxFractions(ProteinProperty):
-    """
-    Compute the difference between the max amino acid fractions and the current amino acid fractions.
-
-    Example usage:
-    import goose
-    from sparrow.protein import Protein as pr
-
-    # initialize optimizer
-    optimizer=goose.SequenceOptimizer(target_length=100, 
-                                gap_to_report=1000, num_shuffles=1)
-
-    # set optimization params
-    optimizer.set_optimization_params(max_iterations=10000, 
-                                    tolerance=1e-2,
-                                    shuffle_interval=5)
-
-    # add property
-    optimizer.add_property(goose.MaxFractions, {'A':0.1, 'S':0.1, 'G':0.1})
-    best_seq=optimizer.run()
-
-    print(pr(best_seq).amino_acid_fractions)
-    print(best_seq)    
-    """
-    def __init__(self, max_fractions: Dict[str, float], weight: float = 1.0):
-        """
-        Parameters:
-        max_fractions (Dict[str, float]): A dictionary where keys are single-letter amino acid codes,
-            and values are the max fractions for each amino acid.
-        weight (float): The weight of this property in the combined objective function.
-        
-        """
-        super().__init__(0.0, weight)  # Target value is set to 0.0 since we want to minimize the difference
-        self.max_fractions = max_fractions
+        return total_error
 
     def calculate(self, protein: 'sparrow.Protein') -> float:
         """
-        Calculate the difference between the max amino acid fractions and the current amino acid fractions.
-
-        Parameters:
-        protein (sparrow.Protein): The protein instance.
-
-        Returns:
-        float: The difference between the max and current amino acid fractions.
+        Override calculate to handle multi-target amino acid optimization.
+        Following GOOSE patterns for complex properties.
         """
-        current_fractions = protein.amino_acid_fractions
-
-        diff_sum = 0.0
-        for aa, target_frac in self.max_fractions.items():
-            current_frac = current_fractions.get(aa, 0.0)
-            if current_frac > target_frac:
-                diff_sum += abs(target_frac - current_frac)
-
-        return diff_sum
-
-class MinFractions(ProteinProperty):
-    """
-    Compute the difference between the max amino acid fractions and the current amino acid fractions.
-
-    Example usage:
-    import goose
-    from sparrow.protein import Protein as pr
-
-    # initialize optimizer
-    optimizer=goose.SequenceOptimizer(target_length=100, 
-                                gap_to_report=1000, num_shuffles=1)
-
-    # set optimization params
-    optimizer.set_optimization_params(max_iterations=10000, 
-                                    tolerance=1e-2,
-                                    shuffle_interval=5)
-
-    # add property
-    optimizer.add_property(goose.MinFractions, {'A':0.1, 'S':0.1, 'G':0.1})
-    best_seq=optimizer.run()
-
-    print(pr(best_seq).amino_acid_fractions)
-    print(best_seq)    
-    """
-    def __init__(self, min_fractions: Dict[str, float], weight: float = 1.0):
-        """
-        Parameters:
-        min_fractions (Dict[str, float]): A dictionary where keys are single-letter amino acid codes,
-            and values are the min fractions for each amino acid.
-        weight (float): The weight of this property in the combined objective function.
+        # Calculate the final error value
+        final_error = self.calculate_raw_value(protein)
         
-        """
-        super().__init__(0.0, weight)  # Target value is set to 0.0 since we want to minimize the difference
-        self.min_fractions = min_fractions
-
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        """
-        Calculate the difference between the min amino acid fractions and the current amino acid fractions.
-
-        Parameters:
-        protein (sparrow.Protein): The protein instance.
-
-        Returns:
-        float: The difference between the min and current amino acid fractions.
-        """
-        current_fractions = protein.amino_acid_fractions
-
-        diff_sum = 0.0
-        for aa, target_frac in self.max_fractions.items():
-            current_frac = current_fractions.get(aa, 0.0)
-            if current_frac < target_frac:
-                diff_sum += abs(target_frac - current_frac)
-
-        return diff_sum
+        # Update tracking attributes following base class patterns
+        self._current_raw_value = final_error
+        if self._best_value is None:
+            self._best_value = final_error
+        
+        # Return final error (no additional constraint processing needed)
+        return final_error
 
 
 class SCD(ProteinProperty):
@@ -297,10 +433,13 @@ class SCD(ProteinProperty):
     dependent configurational properties in charged polymers and proteins.
     The Journal of Chemical Physics, 143(8), 085101.
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = False  # SCD values are arbitrary scale
+    
+    def __init__(self, target_value: float, weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.SCD
 
 
@@ -315,10 +454,13 @@ class SHD(ProteinProperty):
     dependent configurational properties in charged polymers and proteins.
     The Journal of Chemical Physics, 143(8), 085101.
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = False  # SHD values are arbitrary scale
+    
+    def __init__(self, target_value: float, weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.SHD
 
 class Complexity(ProteinProperty):
@@ -326,48 +468,42 @@ class Complexity(ProteinProperty):
     Calculates the Wootton-Federhen complexity of a sequence (also called
     seg complexity, as this the theory used in the classic SEG algorithm.
     """
-    def __init__(self, target_value: float, weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = True  # Complexity values are arbitrary scale
+    
+    def __init__(self, target_value: float, weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.complexity
-
 
 
 class FractionDisorder(ProteinProperty):
     """
     Calculates the amount of disorder in
     the current sequence. 
-
-    Example usage:
-
-    # imports
-    import goose
-    from sparrow.protein import Protein as pr
-    import metapredict as meta
-
-    optimizer = goose.SequenceOptimizer(target_length=200, verbose=True, gap_to_report=100)
-    optimizer.add_property(goose.FractionDisorder, weight=1, target_value=1)
-    optimizer.set_optimization_params(max_iterations=2000, tolerance=0.01)
-    sequence=optimizer.run()
-    print(sequence)
-
-    # double check
-    disorder=meta.predict_disorder(sequence)
-    print((disorder>0.5).sum()/len(disorder))
-
     """
-    def __init__(self, 
-                 target_value: float, 
-                 weight: float = 1.0,
-                 disorder_cutoff = 0.5):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = True  # Fraction ranges 0-1
+    
+    def __init__(self, target_value: float, weight: float = 1.0, disorder_cutoff = 0.5,
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
         self.disorder_cutoff = disorder_cutoff
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def get_init_args(self) -> dict:
+        """Override to include disorder_cutoff parameter"""
+        return {
+            "target_value": self.target_value,
+            "weight": self.weight,
+            "disorder_cutoff": self.disorder_cutoff,
+            "constraint_type": self.constraint_type.value
+        }
+
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         disorder=meta.predict_disorder(protein.sequence)
-        percent_disorder = (disorder>self.disorder_cutoff).sum()/len(disorder)
-        return percent_disorder
+        return (disorder>self.disorder_cutoff).sum()/len(disorder)
+
+        
     
 
 class MatchSequenceDisorder(ProteinProperty):
@@ -376,44 +512,32 @@ class MatchSequenceDisorder(ProteinProperty):
     specified sequence sets the MINIMUM disorder. 
     You can also try to get the exact disorder.
 
-    Example usage:
-
-    # imports
-    import goose
-    from sparrow.protein import Protein as pr
-    import metapredict as meta
-
-    target_seq='MPHIQKKAQGWCNNPGQQLNPHLQWQWQNQQYIDFDPYNY'
-    optimizer = goose.SequenceOptimizer(target_length=200, verbose=True, gap_to_report=100)
-    optimizer.add_property(goose.MatchSequenceDisorder, target_sequence=target_seq, weight=1)
-    optimizer.set_optimization_params(max_iterations=2000, tolerance=0.01)
-    sequence=optimizer.run()
-    print(sequence)
-
-    # double check
-    disorder=meta.predict_disorder(sequence)
-    print((disorder>0.5).sum()/len(disorder))
-
     """
-    def __init__(self, 
-                 target_sequence: str, 
-                 exact_match: bool = False,
-                 target_value : float = 0,
-                 weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = True  # Normalized by sequence length, ranges 0-1
+    
+    def __init__(self, target_sequence: str, exact_match: bool = False, target_value : float = 0,
+                 weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
         self.target_sequence = target_sequence
         self.exact_match = exact_match
         self.target_disorder = None
 
+    def get_init_args(self) -> dict:
+        """Override to include target_sequence and exact_match parameters"""
+        return {
+            "target_sequence": self.target_sequence,
+            "exact_match": self.exact_match,
+            "target_value": self.target_value,
+            "weight": self.weight,
+            "constraint_type": self.constraint_type.value
+        }
 
-    def set_initial_disorder(self, target_sequence=None):
-        if type(self.target_disorder) != np.array:
-            if target_sequence==None:
-                target_sequence=self.target_sequence
-            self.target_disorder = meta.predict_disorder(target_sequence)
+    def set_initial_disorder(self):
+        if self.target_disorder is None:
+            self.target_disorder = meta.predict_disorder(self.target_sequence)
         return self.target_disorder
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         target_disorder=self.set_initial_disorder()
         disorder=meta.predict_disorder(protein.sequence)
         if self.exact_match==True:
@@ -424,390 +548,659 @@ class MatchSequenceDisorder(ProteinProperty):
         return err/len(target_disorder)
 
 
-
 class MatchingResidues(ProteinProperty):
     '''
     Determines the number of residues that match a target sequence in the current sequence.
     '''
-    def __init__(self, 
-                 target_sequence: str,
-                 target_value: float, 
-                 weight: float = 1.0):
-        super().__init__(target_value, weight)
+    IS_NATURALLY_NORMALIZED = False  # Count of residues, depends on sequence length
+    
+    def __init__(self, target_sequence: str, target_value: float, weight: float = 1.0,
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type)
         self.target_sequence = target_sequence
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        return sum([1 for i in range(len(protein.sequence)) if protein.sequence[i] == self.target_sequence[i]])
-    
-    
-class MaxMatchingResidues(ProteinProperty):
-    '''
-    Determines the number of residues that match a target sequence in the current sequence.
-    Penalizes the score if the number of matching residues is greater than the target value.
-    '''
-    def __init__(self, 
-                 target_sequence: str,
-                 target_value: float, 
-                 weight: float = 1.0):
-        super().__init__(target_value, weight)
-        self.target_sequence = target_sequence
+    def get_init_args(self):
+        """Override to include target_sequence parameter"""
+        return {
+            "target_sequence": self.target_sequence,
+            "target_value": self.target_value,
+            "weight": self.weight,
+            "constraint_type": self.constraint_type.value
+        }
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        matches = sum([1 for i in range(len(protein.sequence)) if protein.sequence[i] == self.target_sequence[i]])
-        if matches > self.target_value:
-            return matches - self.target_value
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        return sum([1 for i in range(len(protein.sequence)) 
+                    if protein.sequence[i] == self.target_sequence[i]])
+
+#=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+#=-=-=-=-=-=- EpsilonProperty base class for relatively simple epsilon properties -=-=-=-=-=-=
+#=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+class EpsilonProperty(ProteinProperty):
+    """
+    Abstract base class for properties that use epsilon calculations.
+    Provides common model loading functionality following GOOSE patterns.
+    """
+    IS_NATURALLY_NORMALIZED = False  # Epsilon values are arbitrary scale
+    
+    def __init__(self, target_value: float, weight: float = 1.0, 
+                 constraint_type = ConstraintType.EXACT, model: str = 'mpipi', 
+                 preloaded_model = None):
+        super().__init__(target_value, weight, constraint_type)
+        self.model = model.lower()
+        self._loaded_model = preloaded_model
+        self._loaded_imc_object = None
+        
+        # Handle preloaded model type detection following GOOSE's validation patterns
+        if preloaded_model is not None:
+            self._detect_preloaded_model_type(preloaded_model)
+
+    def _detect_preloaded_model_type(self, preloaded_model):
+        """
+        Detect and set model type from preloaded model instance.
+        Follows GOOSE's parameter validation patterns.
+        """
+        full_model_name = preloaded_model.__class__.__name__
+        if full_model_name == 'CALVADOS_frontend':
+            self.model = 'calvados'
+        elif full_model_name == 'Mpipi_frontend':
+            self.model = 'mpipi'
         else:
-            return self.target_value
-          
-# making a min matching residues param. 
-class MinMatchingResidues(ProteinProperty):
-    '''
-    Determines the number of residues that match a target sequence in the current sequence.
-    Penalizes the score if the number of matching residues is greater than the target value.
-    '''
-    def __init__(self, 
-                 target_sequence: str,
-                 target_value: float, 
-                 weight: float = 1.0):
-        super().__init__(target_value, weight)
-        self.target_sequence = target_sequence
+            # Following GOOSE's error handling patterns
+            raise ValueError(f"Unsupported preloaded model type: {full_model_name}")
 
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        matches = sum([1 for i in range(len(protein.sequence)) if protein.sequence[i] == self.target_sequence[i]])
-        if matches < self.target_value:
-            return abs(matches - self.target_value)
+    def load_model(self, model: str = None):
+        """
+        Load the epsilon model following GOOSE's lazy loading patterns.
+        
+        Parameters
+        ----------
+        model : str, optional
+            Model type ('mpipi' or 'calvados'). Uses instance model if None.
+            
+        Returns
+        -------
+        Frontend model instance
+            The loaded model ready for epsilon calculations
+            
+        Raises
+        ------
+        ValueError
+            If model type is not supported
+        """
+        if self._loaded_model is not None:
+            return self._loaded_model
+            
+        # Use instance model if none specified
+        if model is None:
+            model = self.model
         else:
-            return self.target_value
-
-class EpsilonVectorBySequence(ProteinProperty):
-    """
-    Calculate the difference in the epsilon attractive and repulsive matrices,
-    returns the diff.
-
-    Usage example:
-    # imports
-    import numpy as np
-    import finches
-    import goose
-    from sparrow.protein import Protein as pr
-
-
-    seq='NGDNFNRTPASSSEMDDGPSRRDHFMKSGFASGRNFGNRDAGECNKRDNTSTMG'
-    target='ATQSYGAYPTQPGQGYSQQSSQPYGQQSYSGYSQSTDTSGYGQSSYSSYGQSQNTGYGT'
-    optimizer = goose.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
-    optimizer.add_property(goose.EpsilonVectorBySequence, weight=1.0, 
-                            original_sequence=seq,
-                            target_interacting_sequence=target, 
-                            model='mpipi')
-    optimizer.set_optimization_params(max_iterations=5000, tolerance=1)
-    best_seq=optimizer.run()
-    print(best_seq)
-
-    # double check
-    model=finches.frontend.mpipi_frontend.Mpipi_frontend()
-    original_vectors=model.epsilon_vectors(seq, target)
-    current_vectors = model.epsilon_vectors(best_seq, target)
-    attractive_vectors=current_vectors[0]
-    repulsive_vectors=current_vectors[1]
-
-    attractive_diff = np.abs(original_vectors[0] - attractive_vectors).sum()
-    repulsive_diff = np.abs(original_vectors[1] - repulsive_vectors).sum()
-
-    print(attractive_diff+repulsive_diff)
-
-    """
-    def __init__(self, 
-                 original_sequence: str,
-                 target_interacting_sequence: str,
-                 target_value: float = 0, 
-                 weight: float = 1.0,
-                 model: str = 'mpipi'):
-        super().__init__(target_value, weight)
-        self.model = model
-        self.original_sequence = original_sequence
-        self.target_interacting_sequence = target_interacting_sequence
-        self.original_epsilon_vectors = None
-        self.loaded_model = None
-
-    def load_model(self, model: str = None):
-        """
-        Load the model to be used for the calculation.
-
-        Parameters:
-        model (str): The model to be used for the calculation.
-        """
-        if model is None:
-            model = self.model.lower()
+            model = model.lower()
         
-        if self.loaded_model==None:
-            if model == 'mpipi':
-                self.loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
-            elif model == 'calvados':
-                self.loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
-            else:
-                raise ValueError(f"Model {model} not supported.")
-        return self.loaded_model
+        # Import and load following GOOSE's dynamic import patterns
+        if model == 'mpipi':
+            self._loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
+        elif model == 'calvados':
+            self._loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
+        else:
+            raise ValueError(f"Unsupported model '{model}'. Valid options are: ['mpipi', 'calvados']")
+            
+        return self._loaded_model
 
-    def get_original_epsilon_vectors(self, original_sequence: str = None, target_sequence: str = None):  
+    def load_imc_object(self, model: str = None):
         """
-        Calculate the original epsilon value of the target sequence.
-
-        Parameters:
-        sequence (str): The sequence.
-        target_sequence (str): The target sequence.
-
-        Returns:
-        float: The original epsilon value of the target sequence.
-        """
-        if self.original_epsilon_vectors is not None:
-            return self.original_epsilon_vectors
+        Load the IMC object for surface calculations.
         
-        if original_sequence is None:
-            original_sequence = self.original_sequence
-        if target_sequence is None:
-            target_sequence = self.target_interacting_sequence
-        self.loaded_model = self.load_model()
-        self.original_epsilon_vectors = self.loaded_model.epsilon_vectors(original_sequence, target_sequence)
-        return self.original_epsilon_vectors
-
-
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        # make sure we have the original epsilon vectors
-        self.original_epsilon_vectors = self.get_original_epsilon_vectors()
-        self.loaded_model = self.load_model()
-        current_vectors = self.loaded_model.epsilon_vectors(protein.sequence, self.target_interacting_sequence)
-        attractive_vectors=current_vectors[0]
-        repulsive_vectors=current_vectors[1]
-        # calculate the difference between the original and current matrix
-        attractive_diff = np.abs(self.original_epsilon_vectors[0] - attractive_vectors).sum()
-        repulsive_diff = np.abs(self.original_epsilon_vectors[1] - repulsive_vectors).sum()
-        return attractive_diff + repulsive_diff
-
-
-
-
-class EpsilonByValue(ProteinProperty):
-    """
-    Make a sequence that interacts with a specific sequence with a specific epsilon value. 
-
-    Usage example:
-    import finches
-    import goose
-    from sparrow.protein import Protein as pr
-
-    seq='MGDEDWEAEINPHMSSYVPIFEKDRYSGENGDNFNRTPASSSEMDDGPSRRDHFMKSGFASGRNFGNRDAGECNKRDNTSTMGGFGVGKSFGNRGFSNSR'
-    optimizer = goose.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
-    optimizer.add_property(goose.properties.EpsilonByValue, target_value=5, weight=1.0, 
-                            target_sequence=seq,
-                            model='mpipi')
-
-    optimizer.set_optimization_params(max_iterations=5000, tolerance=1e-2)
-    best_seq=optimizer.run()
-    print(best_seq)
-
-    # double check
-    model=finches.frontend.mpipi_frontend.Mpipi_frontend()
-    interaction_value=model.epsilon(best_seq, seq)
-
-    print(interaction_value)
-
-
-    """
-    def __init__(self, 
-                 target_value: float, 
-                 target_sequence: str,
-                 weight: float = 1.0,
-                 model = 'mpipi'):
-        super().__init__(target_value, weight)
-        self.target_sequence : str = target_sequence
-        self.loaded_model = None
-        self.model = model
-
-    def load_model(self, model: str = None):
+        Parameters
+        ----------
+        model : str, optional
+            Model type. Uses instance model if None.
+            
+        Returns
+        -------
+        IMC object
+            The loaded IMC object for surface epsilon calculations
         """
-        Load the model to be used for the calculation.
+        if self._loaded_imc_object is not None:
+            return self._loaded_imc_object
+            
+        # Load the full model first
+        loaded_model = self.load_model(model)
+        self._loaded_imc_object = loaded_model.IMC_object
+        return self._loaded_imc_object
 
-        Parameters:
-        model (str): The model to be used for the calculation.
+    def get_init_args(self) -> dict:
         """
-        if model is None:
-            model = self.model.lower()
-        
-        if self.loaded_model==None:
-            if model == 'mpipi':
-                self.loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
-            elif model == 'calvados':
-                self.loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
-            else:
-                raise ValueError(f"Model {model} not supported.")
-        return self.loaded_model
-
-
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        self.loaded_model = self.load_model()
-        current_epsilon = self.loaded_model.epsilon(protein.sequence, self.target_sequence)
-        # calculate the difference between the original and current matrix
-        return current_epsilon
-
-
-class EpsilonBySequence(ProteinProperty):
-    """
-    Calculate the difference in total epsilon value between 2 sequences. 
-
-    Usage example:
-
-    import finches
-    import goose
-    from sparrow.protein import Protein as pr
-
-    seq='MGDEDWEAEINPHMSSYVPIFEKDRYSGENGDNFNRTPASSSEMDDGPSRRDHFMKSGFASGRNFGNRDAGECNKRDNTSTMGGFGVGKSFGNRGFSNSR'
-    target='MASNDYTQQATQSYGAYPTQPGQGYSQQSSQPYGQQSYSGYSQSTDTSGYGQSSYSSYGQSQNTGYGTQSTPQGYGSTGGYGSSQSSQSSYGQQSSYPGY'
-
-    optimizer = goose.SequenceOptimizer(target_length=len(seq), verbose=True, gap_to_report=100)
-
-    optimizer.add_property(goose.EpsilonBySequence, weight=1.0, 
-                            original_sequence=seq,
-                            target_interacting_sequence=target,
-                            model='mpipi')
-
-    optimizer.set_optimization_params(max_iterations=5000, tolerance=1e-2)
-    best_seq=optimizer.run()
-    print(best_seq)
-
-    # double check
-    model=finches.frontend.mpipi_frontend.Mpipi_frontend()
-    orignal_interaction_value = model.epsilon(seq, target)
-    designed_seq_interaction_value=model.epsilon(best_seq, target)
-
-    print(orignal_interaction_value, '\n', designed_seq_interaction_value)
-
-    """
-    def __init__(self, 
-                 original_sequence: str,
-                 target_interacting_sequence: str,                 
-                 target_value: float = 0, 
-                 weight: float = 1.0,
-                
-                 model = 'mpipi'):
-        super().__init__(target_value, weight)
-        self.target_interacting_sequence : str = target_interacting_sequence
-        self.original_sequence : str = original_sequence
-        self.original_epsilon = None
-        self.loaded_model = None
-        self.model = model
-
-    def load_model(self, model: str = None):
+        Get initialization arguments including model parameter.
+        Override in subclasses with additional parameters.
         """
-        Load the model to be used for the calculation.
-
-        Parameters:
-        model (str): The model to be used for the calculation.
-        """
-        if model is None:
-            model = self.model.lower()
-        
-        if self.loaded_model==None:
-            if model == 'mpipi':
-                self.loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
-            elif model == 'calvados':
-                self.loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
-            else:
-                raise ValueError(f"Model {model} not supported.")
-        return self.loaded_model
-    
-    def get_original_epsilon(self, original_sequence: str = None, target_sequence: str = None):  
-        """
-        Calculate the original epsilon value of the target sequence.
-
-        Parameters:
-        sequence (str): The sequence.
-        target_sequence (str): The target sequence.
-
-        Returns:
-        float: The original epsilon value of the target sequence.
-        """
-        if self.original_epsilon is not None:
-            return self.original_epsilon
-        
-        if original_sequence is None:
-            original_sequence = self.original_sequence
-        if target_sequence is None:
-            target_sequence = self.target_interacting_sequence
-        self.loaded_model = self.load_model()
-        self.original_epsilon = self.loaded_model.epsilon(original_sequence, target_sequence)
-        return self.original_epsilon
-
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        self.original_epsilon_value = self.get_original_epsilon()
-        self.loaded_model = self.load_model()
-        current_epsilon = self.loaded_model.epsilon(protein.sequence, self.target_interacting_sequence)
-        # calculate the difference between the original and current matrix
-        return np.abs(self.original_epsilon_value-current_epsilon)
+        base_args = super().get_init_args()
+        base_args['model'] = self.model
+        return base_args
 
 
-class SelfEpsilon(ProteinProperty):
+class MeanSelfEpsilon(EpsilonProperty):
     """
     Calculate the self interaction epsilon value of a sequence.
+    Note: this simply uses the mean epsilon value. 
+    """
+    IS_NATURALLY_NORMALIZED = False  # Epsilon values are arbitrary scale
+    
+    def __init__(self, target_value: float, weight: float = 1.0,
+                 model: str = 'mpipi', preloaded_model = None, 
+                 constraint_type = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
 
-    Example usage:
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        loaded_model = self.load_model()
+        return loaded_model.epsilon(protein.sequence, protein.sequence)
 
-    import finches
-    import goose
-    from sparrow.protein import Protein as pr
 
-    optimizer = goose.SequenceOptimizer(target_length=100, verbose=True, gap_to_report=100)
-    optimizer.add_property(goose.SelfEpsilon, target_value=5, weight=1.0,
-                            model='mpipi')
+class MatchSelfIntermap(EpsilonProperty):
+    """
+    Calculates self interaction using matrix representation for closer target matching.
+    """
+    IS_NATURALLY_NORMALIZED = False  # Matrix differences are arbitrary scale
+    
+    def __init__(self, target_sequence: str, weight: float = 1.0, 
+                 model: str = 'mpipi', preloaded_model = None, 
+                 inverse: bool = False, window_size=15, constraint_type = ConstraintType.EXACT):
+        # Always target 0.0 since we minimize matrix differences
+        super().__init__(0.0, weight, constraint_type, model, preloaded_model)
+        self.target_sequence = target_sequence
+        self.inverse = inverse
+        self.window_size = window_size
+        self._original_epsilon_matrix = None
 
-    optimizer.set_optimization_params(max_iterations=5000, tolerance=1e-2)
-    best_seq=optimizer.run()
-    print(best_seq)
+    def get_init_args(self) -> dict:
+        """Override to include target_sequence and inverse parameters"""
+        base_args = super().get_init_args()
+        base_args.update({
+            "target_sequence": self.target_sequence,
+            "inverse": self.inverse,
+            "window_size": self.window_size
+        })
+        return base_args
 
-    # double check
-    model=finches.frontend.mpipi_frontend.Mpipi_frontend()
-    interaction_value=model.epsilon(best_seq, best_seq)
+    def _calculate_matrix(self, sequence: str, window_size: int) -> np.ndarray:
+        """Calculate epsilon matrix for a sequence"""
+        loaded_model = self.load_model()
+        return loaded_model.intermolecular_idr_matrix(
+            sequence, sequence, window_size=window_size,
+            disorder_1=False, disorder_2=False
+        )[0][0]
 
-    print(interaction_value)
-
-    """    
-    def __init__(self, 
-                 target_value: float, 
-                 weight: float = 1.0,
-                 model = 'mpipi',
-                 preloaded_model=None):
-        super().__init__(target_value, weight)
-        self.loaded_model = None
-        self.model = model
-
-        if preloaded_model != None:
-            self.loaded_model = preloaded_model
-
-    def load_model(self, model: str = None):
-        """
-        Load the model to be used for the calculation.
-
-        Parameters:
-        model (str): The model to be used for the calculation.
-        """
-        if self.loaded_model==None:
-            # get self.model
-            if model is None:
-                model = self.model.lower()
-            # make sure is valid, then load
-            if model == 'mpipi':
-                self.loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
-            elif model == 'calvados':
-                self.loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
+    def _get_original_epsilon_matrix(self) -> np.ndarray:
+        """Get cached original epsilon matrix"""
+        if self._original_epsilon_matrix is None:
+            matrix = self._calculate_matrix(self.target_sequence, self.window_size)
+            if self.inverse:
+                self._original_epsilon_matrix = matrix * -1
             else:
-                raise ValueError(f"Model {model} not supported.")
-        return self.loaded_model
+                self._original_epsilon_matrix = matrix    
+        return self._original_epsilon_matrix
     
-    
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        self.loaded_model = self.load_model()
-        current_epsilon = self.loaded_model.epsilon(protein.sequence, protein.sequence)
-        return current_epsilon
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        original_matrix = self._get_original_epsilon_matrix()
+        current_matrix = self._calculate_matrix(protein.sequence, self.window_size)
+        # Normalize by sequence length 
+        return np.sum(np.abs(original_matrix - current_matrix)) / len(protein.sequence)
 
+
+class MeanEpsilonWithTarget(EpsilonProperty):
+    """
+    Make a sequence that interacts with a specific sequence with a specific mean epsilon value. 
+    """
+    IS_NATURALLY_NORMALIZED = False  # Epsilon values are arbitrary scale
+    
+    def __init__(self, target_value: float, target_sequence: str, weight: float = 1.0,
+                 model: str = 'mpipi', preloaded_model = None, 
+                 constraint_type = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
+        self.target_sequence = target_sequence
+
+    def get_init_args(self) -> dict:
+        """Override to include target_sequence parameter"""
+        base_args = super().get_init_args()
+        base_args['target_sequence'] = self.target_sequence
+        return base_args
+
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        loaded_model = self.load_model()
+        return loaded_model.epsilon(protein.sequence, self.target_sequence)
+
+
+class MatchIntermap(EpsilonProperty):
+    """
+    Optimize a sequence to match the epsilon matrix that is formed 
+    between an original sequence and a target interacting sequence.
+    Note: the original sequence must be the same length as the sequence being optimized. 
+    """
+    IS_NATURALLY_NORMALIZED = False  # Matrix differences are arbitrary scale
+    
+    def __init__(self, target_sequence: str, interacting_sequence: str, weight: float = 1.0,
+                 model: str = 'mpipi', preloaded_model = None, 
+                 window_size=15, constraint_type = ConstraintType.EXACT):
+        # target_value always 0.0
+        super().__init__(0.0, weight, constraint_type, model, preloaded_model)
+        self.target_sequence = target_sequence
+        self.interacting_sequence = interacting_sequence
+        self.window_size = window_size
+        self._target_matrix = None
+
+    def get_init_args(self) -> dict:
+        """Override to include sequence parameters"""
+        base_args = super().get_init_args()
+        base_args.update({
+            "target_sequence": self.target_sequence,
+            "interacting_sequence": self.interacting_sequence,
+            "window_size": self.window_size
+        })
+        return base_args
+
+    def _calculate_matrix(self, sequence1: str, sequence2: str, window_size: int) -> np.ndarray:
+        """Calculate epsilon matrix for a sequence"""
+        loaded_model = self.load_model()
+        return loaded_model.intermolecular_idr_matrix(sequence1, sequence2,
+            disorder_1=False, disorder_2=False, window_size=window_size )[0][0]
+
+    def _get_target_matrix(self) -> float:
+        """Get cached target matrix"""
+        if self._target_matrix is None:
+            self._target_matrix = self._calculate_matrix(self.target_sequence, self.interacting_sequence, self.window_size)
+        return self._target_matrix
+    
+    def calculate_raw_value(self, protein):
+        target_matrix = self._get_target_matrix()
+        current_matrix = self._calculate_matrix(protein.sequence, self.interacting_sequence, self.window_size)
+        # make sure the matrices are the same size otherwise scale.
+        if current_matrix.shape != target_matrix.shape:
+            # scale target to be same dims as current
+            target_matrix = MatrixManipulation.scale_matrix_to_size(target_matrix, current_matrix.shape)
+            # store scaled target so we don't need to recalculate
+            self._target_matrix = target_matrix
+        return np.sum(np.abs(target_matrix - current_matrix)) / len(protein.sequence)
+
+
+
+class ChemicalFingerprint(EpsilonProperty):
+    """
+    Uses the chemical foot print from the FINCHES manuscript to generate a sequence with
+    a similar chemical fingerprint to the target sequence.
+
+    The chemical fingerprint is calculated by taking the difference between the target
+    and the current sequence and summing the differences in the epsilon matrix.
+    """
+    IS_NATURALLY_NORMALIZED = False  # Fingerprint differences are arbitrary scale
+    
+    def __init__(self, target_sequence: str, target_value: float = 0.0, 
+                 weight: float = 1.0, model: str = 'mpipi', preloaded_model = None, 
+                 window_size:int = 15, constraint_type = ConstraintType.EXACT):
+        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
+        self.target_sequence = target_sequence
+        self._target_sequence_fingerprint = None
+        self._chemistries = None
+        self._matrix_shape=None
+        self.window_size = window_size
+
+    def get_init_args(self) -> dict:
+        """Override to include target_sequence parameter"""
+        base_args = super().get_init_args()
+        base_args['target_sequence'] = self.target_sequence
+        base_args['window_size'] = self.window_size
+        return base_args
+
+    def _get_chemistries(self) -> dict:
+        """
+        Get the chemistries to be used for the calculation.
+        """
+        if self._chemistries is None:
+            if self.model == 'mpipi':
+                self._chemistries = {'c1': 'KRKRKRKRKRKRKRKRKRKR', 'c2': 'RRRRRRRRRRRRRRRRRRRR', 'c3': 'KKKKKKKKKKKKKKKKKKKK', 'c4': 'HRHRHRHRHRHRHRHRHRHR', 'c5': 'HKHKHKHKHKHKHKHKHKHK', 'c6': 'AKAKAKAKAKAKAKAKAKAK', 'c7': 'KQKQKQKQKQKQKQKQKQKQ', 'c8': 'QRQRQRQRQRQRQRQRQRQR', 'c9': 'GRGRGRGRGRGRGRGRGRGR', 'c10': 'MRMRMRMRMRMRMRMRMRMR', 'c11': 'RWRWRWRWRWRWRWRWRWRW', 'c12': 'HHHHHHHHHHHHHHHHHHHH', 'c13': 'HYHYHYHYHYHYHYHYHYHY', 'c14': 'HQHQHQHQHQHQHQHQHQHQ', 'c15': 'HLHLHLHLHLHLHLHLHLHL', 'c16': 'AIAIAIAIAIAIAIAIAIAI', 'c17': 'AGAGAGAGAGAGAGAGAGAG', 'c18': 'ININININININININININ', 'c19': 'GQGQGQGQGQGQGQGQGQGQ', 'c20': 'GSGSGSGSGSGSGSGSGSGS', 'c21': 'DKDKDKDKDKDKDKDKDKDK', 'c22': 'ERERERERERERERERERER', 'c23': 'DHDHDHDHDHDHDHDHDHDH', 'c24': 'QQQQQQQQQQQQQQQQQQQQ', 'c25': 'FGFGFGFGFGFGFGFGFGFG', 'c26': 'QYQYQYQYQYQYQYQYQYQY', 'c27': 'AFAFAFAFAFAFAFAFAFAF', 'c28': 'LWLWLWLWLWLWLWLWLWLW', 'c29': 'FYFYFYFYFYFYFYFYFYFY', 'c30': 'WWWWWWWWWWWWWWWWWWWW', 'c31': 'DWDWDWDWDWDWDWDWDWDW', 'c32': 'EYEYEYEYEYEYEYEYEYEY', 'c33': 'EGEGEGEGEGEGEGEGEGEG', 'c34': 'EPEPEPEPEPEPEPEPEPEP', 'c35': 'AEAEAEAEAEAEAEAEAEAE', 'c36': 'DEDEDEDEDEDEDEDEDEDE'}
+            elif self.model == 'calvados':
+                self._chemistries = {'c1': 'DEDEDEDEDEDEDEDEDEDE', 'c2': 'EGEGEGEGEGEGEGEGEGEG', 'c3': 'DSDSDSDSDSDSDSDSDSDS', 'c4': 'EVEVEVEVEVEVEVEVEVEV', 'c5': 'DMDMDMDMDMDMDMDMDMDM', 'c6': 'EWEWEWEWEWEWEWEWEWEW', 'c7': 'AVAVAVAVAVAVAVAVAVAV', 'c8': 'APAPAPAPAPAPAPAPAPAP', 'c9': 'AQAQAQAQAQAQAQAQAQAQ', 'c10': 'GQGQGQGQGQGQGQGQGQGQ', 'c11': 'HQHQHQHQHQHQHQHQHQHQ', 'c12': 'QQQQQQQQQQQQQQQQQQQQ', 'c13': 'DRDRDRDRDRDRDRDRDRDR', 'c14': 'DKDKDKDKDKDKDKDKDKDK', 'c15': 'LMLMLMLMLMLMLMLMLMLM', 'c16': 'IMIMIMIMIMIMIMIMIMIM', 'c17': 'LWLWLWLWLWLWLWLWLWLW', 'c18': 'FMFMFMFMFMFMFMFMFMFM', 'c19': 'AWAWAWAWAWAWAWAWAWAW', 'c20': 'IQIQIQIQIQIQIQIQIQIQ', 'c21': 'LQLQLQLQLQLQLQLQLQLQ', 'c22': 'HLHLHLHLHLHLHLHLHLHL', 'c23': 'AMAMAMAMAMAMAMAMAMAM', 'c24': 'FQFQFQFQFQFQFQFQFQFQ', 'c25': 'HWHWHWHWHWHWHWHWHWHW', 'c26': 'FWFWFWFWFWFWFWFWFWFW', 'c27': 'MRMRMRMRMRMRMRMRMRMR', 'c28': 'RWRWRWRWRWRWRWRWRWRW', 'c29': 'KYKYKYKYKYKYKYKYKYKY', 'c30': 'ARARARARARARARARARAR', 'c31': 'KLKLKLKLKLKLKLKLKLKL', 'c32': 'AKAKAKAKAKAKAKAKAKAK', 'c33': 'KSKSKSKSKSKSKSKSKSKS', 'c34': 'KKKKKKKKKKKKKKKKKKKK', 'c35': 'KRKRKRKRKRKRKRKRKRKR', 'c36': 'RRRRRRRRRRRRRRRRRRRR'}
+            else:
+                raise ValueError(f"Model {self.model} not supported.")
+        return self._chemistries
+
+    def _calculate_matrix(self, sequence1: str, sequence2: str, window_size: int) -> np.ndarray:
+        """Calculate epsilon matrix for a sequence"""
+        loaded_model = self.load_model()
+        return loaded_model.intermolecular_idr_matrix(
+            sequence1, sequence2,
+            disorder_1=False, disorder_2=False, window_size=window_size
+        )[0][0]
+
+    def calculate_fingerprint(self, sequence: str):
+        """
+        Calculate the chemical fingerprint of the target sequence.
+        """
+        chemistries = self._get_chemistries()
+
+        # now for each chemistry, we calculate the epsilon matrix. 
+        sequence_fingerprint = {}
+        for chemistry, chemistry_sequence in chemistries.items():
+            sequence_fingerprint[chemistry] = self._calculate_matrix(sequence, chemistry_sequence, self.window_size)
+        return sequence_fingerprint
+
+    def get_target_fingerprint(self):
+        """
+        Calculate the chemical fingerprint of the target sequence.
+        """
+        if self._target_sequence_fingerprint is None:
+            self._target_sequence_fingerprint = self.calculate_fingerprint(self.target_sequence)
+            # make sure all matrices are the same shape as the current matrix
+            for key in self._target_sequence_fingerprint.keys():
+                if self._target_sequence_fingerprint[key].shape != self._matrix_shape:
+                    self._target_sequence_fingerprint[key] = MatrixManipulation.scale_matrix_to_size(
+                        self._target_sequence_fingerprint[key], self._matrix_shape)
+                    
+        return self._target_sequence_fingerprint
+    
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        current_fingerprint = self.calculate_fingerprint(protein.sequence)
+        # get shape of one of the matrices in the current fingerprint.
+        if self._matrix_shape is None:
+            self._matrix_shape = next(iter(current_fingerprint.values())).shape
+        # get the target fingerprint and rescale if necessary. 
+        target_fingerprint = self.get_target_fingerprint()
+        # calculate the difference between the original and current matrix
+        diff = 0
+        for key in target_fingerprint.keys():
+            diff += np.sum(np.abs(target_fingerprint[key] - current_fingerprint[key]))/len(protein.sequence)
+        return diff
+
+
+
+
+#=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+#=- Epsilon matrix properties based on adjusting the interaction strength using the matrix. -=
+#=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+class EpsilonMatrixProperty(EpsilonProperty):
+    """
+    Abstract base class for properties that use epsilon matrix calculations between
+    a protein sequence and a target sequence with matrix manipulation capabilities.
+
+    To do a self interaction, set target_sequence to None. This should be done in the
+    subclass if you want to do this with self interaction. 
+
+    The only thing you need to set is _manipulate_matrix. This will let you manipulate
+    the matrix to (for example) increase hte interaction strength. 
+
+    """
+    IS_NATURALLY_NORMALIZED = False  # Matrix manipulations are arbitrary scale
+    
+    def __init__(self, interacting_sequence:str, target_interacting_sequence: str, 
+                 target_value: float = 0.0, 
+                 weight: float = 1.0, constraint_type = ConstraintType.EXACT,
+                 model: str = 'mpipi', preloaded_model = None,
+                 window_size: int = 15):
+        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
+        self.interacting_sequence = interacting_sequence
+        self.target_interacting_sequence = target_interacting_sequence
+        self.window_size = window_size
+        self.target_matrix = None  # Cache for expensive matrix calculations
+        
+    def get_init_args(self) -> dict:
+        """Override to include matrix-specific parameters"""
+        base_args = super().get_init_args()
+        base_args.update({
+            "interacting_sequence": self.interacting_sequence,
+            "target_interacting_sequence": self.target_interacting_sequence,
+            "window_size": self.window_size
+        })
+        return base_args
+    
+    def _calculate_matrix(self, sequence1: str, sequence2: str) -> np.ndarray:
+        """
+        Calculate epsilon matrix between two sequences.
+        Uses cached matrix for performance if available.
+        
+        Parameters
+        ----------
+        sequence1 : str
+            First sequence for matrix calculation
+        sequence2 : str
+            Second sequence for matrix calculation
+            
+        Returns
+        -------
+        np.ndarray
+            Epsilon interaction matrix
+        """
+        loaded_model = self.load_model()
+        return loaded_model.intermolecular_idr_matrix(sequence1, sequence2,
+                window_size=self.window_size, disorder_1=False, disorder_2=False)[0][0]
+
+
+    def _manipulate_matrix(self, matrix: np.ndarray) -> np.ndarray:
+        """
+        Apply matrix manipulations before comparison.
+        Override in subclasses to implement specific transformations.
+        """
+        # Default: return matrix unchanged
+        return matrix
+
+    def _initialize_target_matrix(self) -> np.ndarray:
+        """
+        Initialize the target matrix for comparison.
+        Override in subclasses to implement specific initialization logic.
+
+        Returns
+        -------
+        np.ndarray
+            Initialized target matrix
+        """
+        if self.target_matrix is None:
+            self.target_matrix = self._manipulate_matrix(self._calculate_matrix(
+                self.interacting_sequence, self.target_interacting_sequence))
+        return self.target_matrix
+        
+
+    def _calculate_matrix_difference(self, target_matrix: np.ndarray, 
+                                   current_matrix: np.ndarray,
+                                   normalize_by_length: bool = True) -> float:
+        """
+        Calculate difference between matrices following GOOSE error patterns.
+        
+        Parameters
+        ----------
+        target_matrix : np.ndarray
+            Target/reference matrix
+        current_matrix : np.ndarray
+            Current matrix to compare
+        normalize_by_length : bool, optional
+            Whether to normalize by sequence length (default: True)
+            
+        Returns
+        -------
+        float
+            Matrix difference value for optimization
+        """
+
+        # Calculate absolute difference
+        difference = np.sum(np.abs(target_matrix - current_matrix))
+        
+        # Normalize by sequence length following GOOSE patterns
+        if normalize_by_length:
+            sequence_length = min(target_matrix.shape[0], current_matrix.shape[0])
+            difference = difference / sequence_length
+            
+        return difference
+
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        """
+        Calculate the raw matrix difference value.
+        Template method that coordinates matrix calculation and comparison.
+        
+        Parameters
+        ----------
+        protein : sparrow.Protein
+            The protein sequence being optimized
+            
+        Returns
+        -------
+        float
+            Raw difference value for optimization
+        """
+        # if set to None, we are doing a self interaction. 
+        if self.interacting_sequence is None:
+            self.interacting_sequence = protein.sequence
+        
+        # Get target matrix. this will apply matrix manipulation only on the
+        # first calculation. After that, it just returns the target. 
+        target_matrix = self._initialize_target_matrix()
+        
+        # Calculate current interaction matrix
+        current_matrix = self._calculate_matrix(protein.sequence, 
+                                                self.target_interacting_sequence)
+        
+        # Calculate and return difference
+        return self._calculate_matrix_difference(target_matrix, current_matrix)
+
+
+class ModifyAttractiveValues(EpsilonMatrixProperty):
+    """
+    Modify the attractive values. 
+    
+    Setting attraction_multiplier to a value less than 1 and greater than 0
+    will reduce the strength of attractive interactions across the matrix. 
+
+    Setting attraction_multiplier to a value greater than 1 will increase the strength
+    of attractive interactions across the matrix. 
+
+    Setting attraction_multiplier to a value less than 0 will invert the attractive
+    values to become repulsive. 
+        Values less than 0 and greater than -1 will reduce the strength and invert to repulsive. 
+        Values less than -1 will flip the repulsive values and increase their strength. 
+
+    """
+    IS_NATURALLY_NORMALIZED = False  # Modified matrix values are arbitrary scale
+    
+    def __init__(self, interacting_sequence:str, target_interacting_sequence: str, 
+                 multiplier: float,
+                 weight: float = 1.0, model: str = 'mpipi', 
+                 preloaded_model = None, window_size: int = 15,
+                 constraint_type = ConstraintType.EXACT):
+        super().__init__(interacting_sequence,target_interacting_sequence, 
+                         0.0, weight, constraint_type,
+                        model, preloaded_model, window_size)
+        self.multiplier = multiplier
+
+    def get_init_args(self) -> dict:
+        """Override to include enhancement parameters"""
+        base_args = super().get_init_args()
+        base_args.update({
+            'multiplier': self.multiplier
+        })
+        return base_args
+
+    def _manipulate_matrix(self, matrix: np.ndarray) -> np.ndarray:
+        """Enhance attractive interactions following GOOSE patterns"""
+        # Only enhance the target matrix
+        return MatrixManipulation.multiply_values_of_matrix(
+            matrix, self.multiplier, only_negative=True
+        )
+
+class ModifyRepulsiveValues(EpsilonMatrixProperty):
+    """
+    Increase the repulsive value based on the Epsilon intermap. 
+
+    Setting repulsive_multiplier to a value less than 1 and greater than 0
+    will reduce the strength of repulsive interactions across the matrix. 
+
+    Setting repulsive_multiplier to a value greater than 1 will increase the strength
+    of repulsive interactions across the matrix. 
+
+    Setting repulsive_multiplier to a value less than 0 will invert the repulsive
+    values to become attractive. 
+        Values less than 0 and greater than -1 will reduce the strength and invert to attractive. 
+        Values less than -1 will flip the repulsive values and increase their strength. 
+    """
+    IS_NATURALLY_NORMALIZED = False  # Modified matrix values are arbitrary scale
+    
+    def __init__(self, interacting_sequence:str, target_interacting_sequence: str, 
+                 multiplier: float,
+                 weight: float = 1.0, model: str = 'mpipi', 
+                 preloaded_model = None, window_size: int = 15,
+                 constraint_type = ConstraintType.EXACT):
+        super().__init__(interacting_sequence,target_interacting_sequence, 
+                         0.0, weight, constraint_type,
+                        model, preloaded_model, window_size)
+        self.multiplier = multiplier
+
+    def get_init_args(self) -> dict:
+        """Override to include enhancement parameters"""
+        base_args = super().get_init_args()
+        base_args.update({
+            'multiplier': self.multiplier
+        })
+        return base_args
+
+    def _manipulate_matrix(self, matrix: np.ndarray) -> np.ndarray:
+        """Enhance attractive interactions following GOOSE patterns"""
+        # Only enhance the target matrix
+        return MatrixManipulation.multiply_values_of_matrix(
+            matrix, self.multiplier, only_positive=True
+        )
+
+
+class ModifyMatrixValues(EpsilonMatrixProperty):
+    """
+    combined to allow modulation of attractive and repulsive interactions in a single
+    property. Tends to work better than trying to manipulate them individually and is 
+    more computationally efficient. 
+    """
+    IS_NATURALLY_NORMALIZED = False  # Modified matrix values are arbitrary scale
+    
+    def __init__(self, interacting_sequence:str, target_interacting_sequence: str, 
+                 repulsive_multiplier: float, attractive_multiplier,
+                 weight: float = 1.0, model: str = 'mpipi', 
+                 preloaded_model = None, window_size: int = 15,
+                 constraint_type = ConstraintType.EXACT):
+        super().__init__(interacting_sequence,target_interacting_sequence, 
+                         0.0, weight, constraint_type,
+                        model, preloaded_model, window_size)
+        self.repulsive_multiplier = repulsive_multiplier
+        self.attractive_multiplier = attractive_multiplier
+
+    def get_init_args(self) -> dict:
+        """Override to include enhancement parameters"""
+        base_args = super().get_init_args()
+        base_args.update({
+            'repulsive_multiplier': self.multiplier,
+            'attractive_multiplier': self. attractive_multiplier,
+        })
+        return base_args
+
+    def _manipulate_matrix(self, matrix: np.ndarray) -> np.ndarray:
+        """manipulate that matrix. """
+        return MatrixManipulation.multiply_values_of_matrix(
+            MatrixManipulation.multiply_values_of_matrix(
+            matrix, self.attractive_multiplier, only_negative=True),
+            self.repulsive_multiplier, only_positive=True)
+        
+        
+
+
+'''
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+NOTE TO SELF
+NOTE TO SELF
+NOTE TO SELF
+NOTE TO SELF
+
+Still need to update all code below!!
+
+NOTE TO SELF
+NOTE TO SELF
+NOTE TO SELF
+NOTE TO SELF
+
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+'''
 
 class FDSurfaceInteractionByRepulsiveAndAttractiveValues(ProteinProperty):
     """
@@ -851,6 +1244,8 @@ class FDSurfaceInteractionByRepulsiveAndAttractiveValues(ProteinProperty):
 
 
     """
+    IS_NATURALLY_NORMALIZED = False  # Epsilon surface values are arbitrary scale
+    
     def __init__(self,  
                  repulsive_target : float,
                  attractive_target : float,
@@ -959,6 +1354,8 @@ class FDSurfaceInteractionByMean(ProteinProperty):
     Try to get a specific Net attraction. 
 
     """
+    IS_NATURALLY_NORMALIZED = False  # Mean surface epsilon values are arbitrary scale
+    
     def __init__(self,  
                  weight: float = 1.0,
                  target_value: float = 0,
@@ -1055,501 +1452,3 @@ class FDSurfaceInteractionByMean(ProteinProperty):
         return cur_net
 
 
-
-class ChemicalFingerprint(ProteinProperty):
-    """
-    Uses the chemical foot print from the FINCHES manuscript to generate a sequence with
-    a similar chemical fingerprint to the target sequence.
-
-    The chemical fingerprint is calculated by taking the difference between the target
-    and the current sequence and summing the differences in the epsilon matrix.
-
-    usage example:
-    import goose
-
-    target='MASNDYTQQATQSYGAYPTQPGQGYSQQSSQPYGQQSYSGYSQSTDTSGYGQSSYSSYGQSQNTGYGTQSTPQGYGSTGGYGSSQSSQSSYGQQSSYPGY'
-    optimizer = goose.SequenceOptimizer(target_length=len(target), verbose=True, gap_to_report=100)
-    optimizer.add_property(goose.ChemicalFingerprint, target_value=0.0, weight=1.0, 
-                            target_sequence=target, 
-                            model='mpipi')
-    optimizer.set_optimization_params(max_iterations=2000, tolerance=100)
-    opt=optimizer.run()
-
-    """
-    def __init__(self, 
-                 target_sequence: str,
-                 target_value: float = 0.0, 
-                 weight: float = 1.0,
-                 model = 'mpipi'):
-        super().__init__(target_value, weight)
-        self.target_sequence = target_sequence
-        self.loaded_model  = None
-        self.target_sequence_fingerprint = None
-        self.model = model
-        self.chemistries = None
-
-    def set_chemistries(self, model: str=None):
-        """
-        Set the chemistries to be used for the calculation.
-
-        Parameters:
-        model (str): The model to be used for the calculation.
-        """
-        if self.chemistries is not None:
-            return self.chemistries
-        if model is None:
-            model = self.model.lower()
-        if model == 'mpipi':
-            self.chemistries = {'c1': 'KRKRKRKRKRKRKRKRKRKR', 'c2': 'RRRRRRRRRRRRRRRRRRRR', 'c3': 'KKKKKKKKKKKKKKKKKKKK', 'c4': 'HRHRHRHRHRHRHRHRHRHR', 'c5': 'HKHKHKHKHKHKHKHKHKHK', 'c6': 'AKAKAKAKAKAKAKAKAKAK', 'c7': 'KQKQKQKQKQKQKQKQKQKQ', 'c8': 'QRQRQRQRQRQRQRQRQRQR', 'c9': 'GRGRGRGRGRGRGRGRGRGR', 'c10': 'MRMRMRMRMRMRMRMRMRMR', 'c11': 'RWRWRWRWRWRWRWRWRWRW', 'c12': 'HHHHHHHHHHHHHHHHHHHH', 'c13': 'HYHYHYHYHYHYHYHYHYHY', 'c14': 'HQHQHQHQHQHQHQHQHQHQ', 'c15': 'HLHLHLHLHLHLHLHLHLHL', 'c16': 'AIAIAIAIAIAIAIAIAIAI', 'c17': 'AGAGAGAGAGAGAGAGAGAG', 'c18': 'ININININININININININ', 'c19': 'GQGQGQGQGQGQGQGQGQGQ', 'c20': 'GSGSGSGSGSGSGSGSGSGS', 'c21': 'DKDKDKDKDKDKDKDKDKDK', 'c22': 'ERERERERERERERERERER', 'c23': 'DHDHDHDHDHDHDHDHDHDH', 'c24': 'QQQQQQQQQQQQQQQQQQQQ', 'c25': 'FGFGFGFGFGFGFGFGFGFG', 'c26': 'QYQYQYQYQYQYQYQYQYQY', 'c27': 'AFAFAFAFAFAFAFAFAFAF', 'c28': 'LWLWLWLWLWLWLWLWLWLW', 'c29': 'FYFYFYFYFYFYFYFYFYFY', 'c30': 'WWWWWWWWWWWWWWWWWWWW', 'c31': 'DWDWDWDWDWDWDWDWDWDW', 'c32': 'EYEYEYEYEYEYEYEYEYEY', 'c33': 'EGEGEGEGEGEGEGEGEGEG', 'c34': 'EPEPEPEPEPEPEPEPEPEP', 'c35': 'AEAEAEAEAEAEAEAEAEAE', 'c36': 'DEDEDEDEDEDEDEDEDEDE'}
-        elif model == 'calvados':
-            self.chemistries = {'c1': 'DEDEDEDEDEDEDEDEDEDE', 'c2': 'EGEGEGEGEGEGEGEGEGEG', 'c3': 'DSDSDSDSDSDSDSDSDSDS', 'c4': 'EVEVEVEVEVEVEVEVEVEV', 'c5': 'DMDMDMDMDMDMDMDMDMDM', 'c6': 'EWEWEWEWEWEWEWEWEWEW', 'c7': 'AVAVAVAVAVAVAVAVAVAV', 'c8': 'APAPAPAPAPAPAPAPAPAP', 'c9': 'AQAQAQAQAQAQAQAQAQAQ', 'c10': 'GQGQGQGQGQGQGQGQGQGQ', 'c11': 'HQHQHQHQHQHQHQHQHQHQ', 'c12': 'QQQQQQQQQQQQQQQQQQQQ', 'c13': 'DRDRDRDRDRDRDRDRDRDR', 'c14': 'DKDKDKDKDKDKDKDKDKDK', 'c15': 'LMLMLMLMLMLMLMLMLMLM', 'c16': 'IMIMIMIMIMIMIMIMIMIM', 'c17': 'LWLWLWLWLWLWLWLWLWLW', 'c18': 'FMFMFMFMFMFMFMFMFMFM', 'c19': 'AWAWAWAWAWAWAWAWAWAW', 'c20': 'IQIQIQIQIQIQIQIQIQIQ', 'c21': 'LQLQLQLQLQLQLQLQLQLQ', 'c22': 'HLHLHLHLHLHLHLHLHLHL', 'c23': 'AMAMAMAMAMAMAMAMAMAM', 'c24': 'FQFQFQFQFQFQFQFQFQFQ', 'c25': 'HWHWHWHWHWHWHWHWHWHW', 'c26': 'FWFWFWFWFWFWFWFWFWFW', 'c27': 'MRMRMRMRMRMRMRMRMRMR', 'c28': 'RWRWRWRWRWRWRWRWRWRW', 'c29': 'KYKYKYKYKYKYKYKYKYKY', 'c30': 'ARARARARARARARARARAR', 'c31': 'KLKLKLKLKLKLKLKLKLKL', 'c32': 'AKAKAKAKAKAKAKAKAKAK', 'c33': 'KSKSKSKSKSKSKSKSKSKS', 'c34': 'KKKKKKKKKKKKKKKKKKKK', 'c35': 'KRKRKRKRKRKRKRKRKRKR', 'c36': 'RRRRRRRRRRRRRRRRRRRR'}
-        else:
-            raise ValueError(f"Model {model} not supported.")
-        return self.chemistries
-        
-    
-    def load_model(self, model: str = None):
-        """
-        Load the model to be used for the calculation.
-
-        Parameters:
-        model (str): The model to be used for the calculation.
-        """
-        if model is None:
-            model = self.model.lower()
-        
-        if self.loaded_model==None:
-            if model == 'mpipi':
-                self.loaded_model = finches.frontend.mpipi_frontend.Mpipi_frontend()
-            elif model == 'calvados':
-                self.loaded_model = finches.frontend.calvados_frontend.CALVADOS_frontend()
-            else:
-                raise ValueError(f"Model {model} not supported.")
-        return self.loaded_model
-    
-    def calculate_fingerprint(self, sequence: str = None, chemistries: dict = None):
-        """
-        Calculate the chemical fingerprint of the target sequence.
-
-        Parameters:
-        sequence (str): The sequence.
-        chemistries (dict): The chemistries to use for the calculation.
-
-        Returns:
-        dict: The chemical fingerprint of the target sequence
-        """
-        if chemistries is None:    
-            chemistries = self.set_chemistries()
-        
-        # make sure the model is loaded
-        self.loaded_model = self.load_model()
-
-        # now for each chemistry, we calculate the epsilon vectors.
-        sequence_fingerprint = {}
-        for chemistry, chemistry_sequence in chemistries.items():
-            cur_vec = self.loaded_model.epsilon_vectors(sequence, chemistry_sequence)
-            sequence_fingerprint[chemistry] = {'attractive':cur_vec[0], 'repulsive':cur_vec[1]}
-        return sequence_fingerprint
-
-
-
-    def get_target_fingerprint(self, target_sequence: str = None, chemistries: dict = None):
-        """
-        Calculate the chemical fingerprint of the target sequence.
-
-        Parameters:
-        target_sequence (str): The target sequence.
-        chemistries (dict): The chemistries to use for the calculation.
-
-        Returns:
-        dict: The chemical fingerprint of the target sequence
-        """
-        if self.target_sequence_fingerprint is not None:
-            return self.target_sequence_fingerprint
-        if target_sequence is None:
-            target_sequence = self.target_sequence
-        if chemistries is None:
-            if self.chemistries is None:
-                self.chemistries = self.set_chemistries()
-            chemistries = self.chemistries
-        self.target_sequence_fingerprint = self.calculate_fingerprint(target_sequence, chemistries)
-        return self.target_sequence_fingerprint
-    
-    
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        current_fingerprint = self.calculate_fingerprint(protein.sequence)
-        target_fingerprint = self.get_target_fingerprint()
-        # calculate the difference between the original and current matrix
-        diff = 0
-        for key in target_fingerprint.keys():
-            diff += np.abs(target_fingerprint[key]['attractive'] - current_fingerprint[key]['attractive']).sum()
-            diff += np.abs(target_fingerprint[key]['repulsive'] - current_fingerprint[key]['repulsive']).sum()
-        return diff
-    
-
-
-
-class Comparison(ProteinProperty):
-    """
-    This is designed to perform generic comparisons of a protein property to a reference.
-    By packaging the property and comparison in a function, it allows users to 
-    easily design a whole host of comparisons without the need to write a new
-    class for it each time.
-    """
-    def __init__(self,
-                 property_function : Callable[[str],Any],
-                 comparison_function : Callable[[Any,Any], float],
-                 reference_value : Any,
-                 target_value: float, 
-                 weight: float = 1.0,
-                 check_function_compatibility : bool = True,
-                 check_reference_value_compatibility : bool = True):
-        
-        '''
-        
-        Parameters
-        ----------
-        property_function : Callable[[str],Any]
-            This is the function that computes some property of a sequence.
-            For this function you do not need to specify the return type
-            unless you are planning on chekcing the reference values type.
-            If this is the case, including the type will prevent unwanted Errors
-            from being thrown during the checking process. You MUST specify the 
-            input parameter type as a string if you are are going to check function
-            compatibility. Whether or not you specify the types, the input to this 
-            function MUST be a str in the first parameter and the output should be 
-            the same type as the reference value.
-        comparison_function : Callable[[Any,Any], float]
-            This is the function that compares the output property of interest
-            to a reference value. This allows you to shoot for some target value 
-            of interest. You do not need to specify the input type of this function
-            unless you are checking the reference value for compatibility. You MUST
-            specify the return type as float if you are checking the function compatibility.
-            Regardless of whether you decide to specify the types, this function
-            MUST return a float. It should also take two values of the type returned by
-            property_function. The first parameter is reserved for the sequence that will be
-            tested by the optimizer. The second parameter will be the reference value.
-            During computation time this function gets called like...
-            comparison_function(test_sequence_property_result, reference_value).
-            The output of this is directly fed into the optimizer.
-        reference_value : Any
-            This is the property value you will compare the generated sequences against.
-            This should be the same type as what is returned by property_function
-            and accepted by comparison_function.
-        target_value : float
-            This is the value returned by the comparison function that you wish to achieve.
-        weight : float
-            This is a relative weight to give this property with respect to other properties you are also trying
-            to optimize for in your design.
-        check_function_compatibility : bool
-            This determines if the object checks the function(s) compatibility
-            with one another in terms of inputs and outputs.
-        check_reference_value_compatibility : bool
-            This determines if the object will check the reference values
-            types against those that are output and accepted by the two user defined
-            functions
-
-        Returns
-        -------
-        Comparison(ProteinProperty)
-            This is the object that will be used by the optimizer to find a sequnce
-            that suits your needs.
-        '''
-        #intialize the parent class properties
-        super().__init__(target_value, weight)
-
-        #initialize object specific code to None if needed
-        self._property_function = None
-        self._comparison_function = None
-        self._check_function_compatibility = None
-        self._check_reference_value_compatibiliity = None
-
-        #set wether to check the functions or not for compatibility
-        self._check_function_compatibility = check_function_compatibility
-        self._check_reference_value_compatibiliity = check_reference_value_compatibility
-
-        #check that the passed values for the property function and comparison function PASSED are not none
-        #This avoid the awkward case where the user initializes with None to get around the compatibility
-        #later on in the calculation. AKA they could set the one of the functions later on to None and 
-        #this would not trigger a test.
-        if property_function is None:
-            raise ValueError(f"The property function cannot equal None. Please pass a valid function instead.")
-        if comparison_function is None:
-            raise ValueError(f"The comparison function cannot be None. Please pass a valid function.")
-
-        #Assign the property function (the check is performed inside the setter)
-        self.property_function = property_function
-        self.comparison_function = comparison_function
-
-        #set the reference value (THIS MUST HAPPEN AFTER THE FUNCTIONS are assigned - checks fail otherwise)
-        self.reference_value = reference_value
-
-
-    @property
-    def check_function_compatibility(self) -> bool:
-        '''Returns wether or not to check the functions passed for compatibility'''
-        return self._check_function_compatibility
-    
-    @check_function_compatibility.setter
-    def check_function_compatibility(self, val : bool) -> None:
-        '''Sets the check_function_compatilibity property and checks that it is a bool.'''
-        #ensure that the value being set is a boolean
-        if not isinstance(val, bool):
-            raise TypeError(f"The value assigned to check_function_compatibility is not a bool ({type(val)}).")
-        
-        #if it does not raise (is a bool) then set the new value
-        self._check_function_compatibility = val
-    
-    @property 
-    def check_reference_value_compatibility(self) -> bool:
-        '''Returns whether or not to check the reference value type against the functions'''
-        return self._check_reference_value_compatibiliity
-    
-    @check_reference_value_compatibility.setter
-    def check_reference_value_compatibility(self, val : bool) -> None:
-        '''Sets the boolean associated with checking the reference values typing. Check that the value is in fact a bool'''
-        #check that the value is a bool
-        if not isinstance(val, bool):
-            raise TypeError(f"The value assigned to check_reference_vale_compatibility is not a bool ({type(val)})")
-        
-        #set the value if it did not throw a type error
-        self._check_reference_value_compatibiliity = val
-    
-    @property
-    def property_function(self) -> Callable[[str], Any]:
-        '''Returns the property function'''
-        return self._property_function
-    
-    @property_function.setter
-    def property_function(self, func : Callable[[str],Any]) -> None:
-        '''Sets the value of the property function and checks for compatibility if requested.'''
-        #check if the passed value is callable
-        if not callable(func):
-            raise ValueError(f"The property function assignment could not be made because '{func.__name__}' was not callable")
-        
-        #See if the comparison function exists for if we need to check compatibility
-        compare_func_exists = self.comparison_function is not None
-        #check if we need to see if the functions are compatible
-        if self.check_function_compatibility and compare_func_exists:
-            self._validate_function_compatibility(func1=func, func2=self.comparison_function)
-        
-        #if no exceptions are raised assign the value
-        self._property_function = func
-
-    @property
-    def comparison_function(self) -> Callable[[Any, Any], float]:
-        '''Returns the value of the comparison function'''
-        return self._comparison_function
-    
-    @comparison_function.setter
-    def comparison_function(self, func : Callable[[Any,Any], float]) -> None:
-        '''Sets the value for the comparison function and check for compatibility if requested.'''
-        #check if the passed value is callable
-        if not callable(func):
-            raise ValueError(f"The comparison function assignment could not be made because '{func.__name__}' was not callable")
-        
-        #See if the property function exists for if we need to check for compatibility
-        property_func_exists = self.property_function is not None
-        #check if we need to look for function compatibility
-        if self.check_function_compatibility and property_func_exists:
-            self._validate_function_compatibility(func1=self._property_function,func2=func)
-
-        #if no exceptions are raised assign the value
-        self._comparison_function = func
-
-    @property
-    def reference_value(self) -> Any:
-        '''Returns the reference value that you are comparing against.'''
-        return self._reference_value
-    
-    @reference_value.setter
-    def reference_value(self, val : Any) -> None:
-        '''Sets the reference value and checks its type if needed'''
-        #check the type for the reference if that was specified
-        if self.check_reference_value_compatibility:
-            self._check_reference_value_type(val)
-        
-        #set the value if it did not throw an error
-        self._reference_value = val
-    
-    
-    def _check_reference_value_type(self, value : Any) -> None:
-        '''This function checks if the reference value is the same type as the output of the property function and input of the comparison function
-        
-        Parameters
-        ----------
-        value : Any
-            This is the value of the reference value to check
-
-        Returns
-        -------
-        None
-            This function only raises an exception if something goes wrong and does NOT
-            return a boolean value.
-        '''
-        #get the output value of the property function and the input type for the comparison function
-        out1_type = self._get_function_return_type(self.property_function)
-        in1_type = self._get_function_first_parameter_type(self.comparison_function)
-
-        #check if the reference value does not adhere to either type
-        if not isinstance(value, out1_type):
-            raise TypeError(f"The type of the reference value ({type(self.reference_value)}) does not match the output of the property function ({out1_type}).")
-        if not isinstance(value, in1_type):
-            raise TypeError(f"The type of the reference value ({type(self.reference_value)}) does not match the output of the property function ({in1_type}).")
-        
-
-
-    def _get_function_details(self, func : Callable) -> Tuple[Dict[str,object],object]:
-        '''Check what parameters are to be passed to a function and their classes.
-        
-        Parameters
-        ----------
-        func : Callable
-            This is the function you wish to learn mre information about
-
-        Returns
-        -------
-        Tuple[Dict[str,object],Dict[str,object]]
-            This tuple contains a dictionary and an object. The dictionary comes first
-            It contains all the inputs to the function. The keys for the dictionary 
-            are the names of the parameters while the value for the keys are the objects
-            that parameter takes as input.
-        '''
-        # Get the function signature
-        signature = inspect.signature(func)
-        
-        # Extract parameter details
-        inputs = {
-            name: param.annotation if param.annotation != inspect.Parameter.empty else "Any"
-            for name, param in signature.parameters.items()
-        }
-        
-        # Extract return type
-        output = signature.return_annotation if signature.return_annotation != inspect.Signature.empty else "Any"
-        
-        return inputs, output
-
-    def _validate_function_compatibility(self, func1: Callable, func2: Callable) -> None:
-        """Validate that the functions are composable and the composition takes a string
-        Validates that the output type of `func1` matches the input type of `func2`.
-        This function does not return a true or false. It simply raises Exceptions
-        if the functions cannot be applied as follows...
-        func2(func1(params), other_params) -> float
-        This function also validates that the input to func1 is a string and the
-        second functions output is a float
-
-        Parameters
-        ----------
-        func1 : Callable
-            This is the innermost function in the composition
-        func2: Callable
-            This is the outtermost function in the composition
-
-        Returns
-        -------
-        None
-            This function will raise an exception if there is an issue rather
-            that return a True/False value.
-        """
-        # Get the input type on the first function is a string or throw an error
-        input1_type = self._get_function_first_parameter_type(func=func1)
-        if input1_type is not str:
-            raise TypeError(f"The input type to '{func1.__name__}' in the composition must a be a string. It is currently {input1_type}.")
-        
-        # Check that the output of function 2 is a float
-        output2_type = self._get_function_return_type(func=func2)
-        if output2_type is not float:
-            raise TypeError(f"The output of the function composition must be a float. This means that '{func2.__name__}' must have a return type of float rather than {output2_type}")
-        
-        # Check that the first functions output matches the second functions input
-        output1_type = self._get_function_return_type(func=func1)
-        input2_type = self._get_function_first_parameter_type(func=func2)
-
-        # Validate compatibility of the functions outputs and inputs
-        if output1_type != input2_type:
-            raise TypeError(f"Type mismatch: '{func1.__name__}' returns {output1_type}, which cannot be passed as input to '{func2.__name__}' expecting {input2_type}.")
-
-    def _get_function_first_parameter_type(self, func : Callable) -> object:
-        '''Gets the first first parameter type of the function
-        
-        Parameters
-        ----------
-        func : Callable
-            The function to determine the first parameters type for
-
-        Returns
-        -------
-        object
-            This the type of the first parameter of the function passed
-        '''
-
-        # Ensure the function haa annotations for input
-        # if "return" not in func_hints:
-        #     raise ValueError(f"The function '{func.__name__}' is missing a return type annotation. Please add typing to your function.")
-
-        #obtain the types parameters and types for the output
-        func_input_params, a = self._get_function_details(func=func)
-
-        # Get the input parameter types of func2
-        if len(func_input_params) == 0:
-            raise ValueError(f"The function '{func.__name__}' has no input parameters.")
-
-        #get the first parameter
-        func_first_param = next(iter(func_input_params.values()))
-
-        return func_first_param
-    
-
-    def _get_function_return_type(self, func : Callable) -> object:
-        '''Gets the return type of the function
-        
-        Parameters
-        ----------
-        func : Callable
-            The function to determine the first parameters type for
-
-        Returns
-        -------
-        object
-            This the type of the return parameter
-        '''
-
-        # if not func_hints:
-        #     raise ValueError(f"The function '{func.__name__}' is missing parameter type annotations. Please add typing to your function.")
-        
-        #obtain the function return type
-        a, func_return_type = self._get_function_details(func=func)
-
-        return func_return_type
-
-
-    
-    
-    def calculate(self, protein: 'sparrow.Protein') -> float:
-        '''Calculates the compositional comparison value for a given protein
-        
-        Parameters
-        ----------
-        protein : sparrow.Protein
-            This is the protein object that the optimizer will pass in order to
-            determine if the current stocastic sequence is getting closer to the
-            target value for the comparison value
-        
-        Returns
-        -------
-        float
-            This is the comparison value of interest you are trying to find
-        '''
-        #since the function property we are interested in must be definable by the 
-        #sequence we must first obtain the protein sequence
-        protein_sequence = protein.sequence
-
-        #next we will compute the property of interest for the sequence
-        protein_property = self.property_function(protein_sequence)
-
-        #after we get the property we will compare against the reference value that was passed at initialization
-        comparison_val = self.comparison_function(protein_property, self.reference_value)
-
-        #return the comparison value back to the optimizer
-        return comparison_val
-    
