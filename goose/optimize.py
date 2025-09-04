@@ -974,7 +974,8 @@ class SequenceOptimizer:
                 
                 # Update progress
                 if iteration % self.gap_to_report == 0:
-                    pbar.update(self.gap_to_report)
+                    pbar.n = iteration  # Set absolute position
+                    pbar.refresh()      # Refresh display
                     pbar.set_description(f"Best Error = {best_error:.5f}")
                     
                     if self.verbose:
