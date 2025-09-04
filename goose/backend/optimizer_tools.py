@@ -231,3 +231,128 @@ class MatrixManipulation:
                 scaled_matrix[i, j] = np.mean(original_matrix[row_start:row_end, col_start:col_end])
         
         return scaled_matrix
+
+class VectorManipulation:
+    """
+    Class for various vector manipulation techniques.
+    """
+    @staticmethod
+    def resize_vector(original_vector: list[float], new_size: int) -> list[float]:
+        """
+        Resizes a 1D vector to a new size using linear interpolation.
+
+        Parameters
+        ---------
+        original_vector: The input list of floats to be resized.
+        new_size: The desired size (number of elements) of the new vector.
+                    Must be a positive integer.
+
+        Returns
+        -------
+        A new list of floats representing the resized vector.
+
+        Raises:
+            ValueError: If the original_vector is empty or if new_size is not a
+                        positive integer.
+
+        """
+        # --- Input Validation ---
+        if not isinstance(new_size, int) or new_size <= 0:
+            raise ValueError("new_size must be a positive integer.")
+        if not original_vector:
+            raise ValueError("original_vector cannot be empty.")
+
+        original_len = len(original_vector)
+
+        # --- Handle Edge Cases ---
+        if original_len == new_size:
+            return original_vector[:]  # Return a copy of the original vector
+
+        # If the target is a single value, the average is most representative.
+        if new_size == 1:
+            return [sum(original_vector) / original_len]
+
+        # If the original has only one value, we can only repeat it.
+        if original_len == 1:
+            return [original_vector[0]] * new_size
+
+        # --- Main Interpolation Logic ---
+        new_vector = [0.0] * new_size
+
+        # The scaling factor maps an index in the new vector to its corresponding
+        # floating-point position in the old vector. We subtract 1 from the lengths
+        # to ensure the first and last elements of the old and new vectors align.
+        scale_factor = (original_len - 1) / (new_size - 1)
+
+        for i in range(new_size):
+            # Calculate the floating-point position in the original vector.
+            original_pos = i * scale_factor
+
+            # Find the two surrounding indices in the original vector.
+            floor_pos = int(original_pos)
+
+            # Protect against floating-point inaccuracies that might push the
+            # final index slightly out of bounds.
+            if floor_pos >= original_len - 1:
+                new_vector[i] = original_vector[-1]
+                continue
+
+            # Get the fractional part, which represents how far we are between
+            # the 'floor_pos' and the next point.
+            fraction = original_pos - floor_pos
+
+            # Get the values of the two surrounding points.
+            val1 = original_vector[floor_pos]
+            val2 = original_vector[floor_pos + 1]
+
+            # Perform the linear interpolation.
+            # The new value is the first point's value plus a fraction of the
+            # difference between the two points.
+            interpolated_value = val1 + (val2 - val1) * fraction
+            new_vector[i] = interpolated_value
+
+        return new_vector
+
+    def multiply_attractive_force(vector: list[float], factor: float) -> list[float]:
+        """
+        Multiply the attractive force of a vector by a given factor.
+
+        Parameters
+        ----------
+        vector : list[float]
+            The input vector to be modified.
+        factor : float
+            The factor by which to increase the attractive force.
+
+        Returns
+        -------
+        list[float]
+            The modified vector with increased attractive force.
+        """
+        if not isinstance(factor, (int, float)):
+            raise TypeError("Factor must be a numerical value.")
+
+        # only change attractive values, which are negative.
+        return [x * factor if x < 0 else x for x in vector]
+    
+    def multiply_repulsive_force(vector: list[float], factor: float) -> list[float]:
+        """
+        Multiply the repulsive  force of a vector by a given factor.
+
+        Parameters
+        ----------
+        vector : list[float]
+            The input vector to be modified.
+        factor : float
+            The factor by which to increase the repulsive force.
+
+        Returns
+        -------
+        list[float]
+            The modified vector with increased repulsive force.
+        """
+        if not isinstance(factor, (int, float)):
+            raise TypeError("Factor must be a numerical value.")
+
+        # only change repulsive values, which are positive.
+        return [x * factor if x > 0 else x for x in vector]
