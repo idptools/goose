@@ -88,7 +88,7 @@ class ProteinProperty(ABC):
     IS_NATURALLY_NORMALIZED = False  # True if property naturally ranges 0-1
 
     TYPICAL_RANGE = 1.0  # Default fallback
-    MIN_SCALING_RANGE = 0.1  # Prevent extreme scaling
+    MIN_SCALING_RANGE = 0.05  # Prevent extreme scaling
     MAX_SCALING_RANGE = None  # Override in subclasses if needed
 
     def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
@@ -104,6 +104,9 @@ class ProteinProperty(ABC):
         # this should update at initialization to allow for relative error values 
         # for non 0 to 1 properties. 
         self.initial_value = None  # Will be set during optimization setup
+        # set the initial scaling value during first opt step. Storing here. 
+        self.initial_scaling_value = None
+
         
 
     ## note: the is_naturally_normalized, set_initial_value and get_scaling_range, 
@@ -372,6 +375,7 @@ class Hydrophobicity(ProteinProperty):
     IS_NATURALLY_NORMALIZED = False  # Hydrophobicity scale is typically 0-6.6
     TYPICAL_RANGE = 3
     MAX_SCALING_RANGE = 9
+    MIN_SCALING_RANGE = 0.9
         
     def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
@@ -422,7 +426,7 @@ class RadiusOfGyration(ProteinProperty):
     """
     IS_NATURALLY_NORMALIZED = False  # Rg values depend on sequence length
     TYPICAL_RANGE = 20
-    MIN_SCALING_RANGE = 5
+    MIN_SCALING_RANGE=1
     
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
@@ -442,8 +446,8 @@ class EndToEndDistance(ProteinProperty):
     """
     IS_NATURALLY_NORMALIZED = False  # End-to-end distance depends on sequence length
     TYPICAL_RANGE = 30
-    MIN_SCALING_RANGE = 5
-
+    MIN_SCALING_RANGE=1
+    
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
@@ -464,7 +468,7 @@ class AminoAcidFractions(ProteinProperty):
     IS_NATURALLY_NORMALIZED = False  # Fractions range 0-1 but error can be larger
     TYPICAL_RANGE = 1.0  # Total error across all amino acids
     MAX_SCALING_RANGE = 5.0  # Maximum possible error if all fractions are wrong
-
+    MIN_SCALING_RANGE=1
     
     def __init__(self, target_fractions: Dict[str, float], weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
@@ -660,8 +664,7 @@ class MatchingResidues(ProteinProperty):
     '''
     IS_NATURALLY_NORMALIZED = False  # Count of residues, depends on sequence length
     TYPICAL_RANGE = 50  # Typical number of mismatched residues
-    MIN_SCALING_RANGE = 10  # Minimum scaling to prevent over-sensitivity
-    
+    MIN_SCALING_RANGE=1
     def __init__(self, target_sequence: str, target_value: float, weight: float = 1.0,
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
@@ -698,7 +701,7 @@ class EpsilonProperty(ProteinProperty):
     IS_NATURALLY_NORMALIZED = False  # Epsilon values are arbitrary scale
     TYPICAL_RANGE = 2.0  # Typical range for epsilon values
     MAX_SCALING_RANGE = 10.0  # Maximum reasonable epsilon range
-    
+    MIN_SCALING_RANGE=2
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type = ConstraintType.EXACT, model: str = 'mpipi', 
                  preloaded_model = None):
@@ -850,7 +853,6 @@ class ChemicalFingerprint(EpsilonProperty):
     """
     IS_NATURALLY_NORMALIZED = False  # Fingerprint differences are arbitrary scale
     TYPICAL_RANGE = 200.0  # Chemical fingerprint differences are very large (36 chemistries)
-    MIN_SCALING_RANGE = 50.0  # Prevent extreme sensitivity
     
     def __init__(self, target_sequence: str, target_value: float = 0.0, 
                  weight: float = 1.0, model: str = 'mpipi', preloaded_model = None, 
@@ -958,7 +960,6 @@ class EpsilonMatrixProperty(EpsilonProperty):
     """
     IS_NATURALLY_NORMALIZED = False  # Matrix manipulations are arbitrary scale
     TYPICAL_RANGE = 100.0  # Matrix manipulation differences are typically large
-    MIN_SCALING_RANGE = 1.0  # Prevent extreme sensitivity
 
     def __init__(self, sequence: str, target_sequence: str, target_value: float = 0.0,
                  weight: float = 1.0, constraint_type = ConstraintType.EXACT,
@@ -1229,7 +1230,6 @@ class ModifyAttractiveValues(EpsilonMatrixProperty):
     """
     IS_NATURALLY_NORMALIZED = False  # Modified matrix values are arbitrary scale
     TYPICAL_RANGE = 150.0  # Modified attractive matrices can have large differences
-    MIN_SCALING_RANGE = 5.0  # Prevent extreme sensitivity
 
     def __init__(self, sequence:str, target_sequence: str, multiplier: float,
                  weight: float = 1.0, model: str = 'mpipi', 
@@ -1455,6 +1455,78 @@ class FDSurfaceEpsilonProperty(EpsilonProperty):
                                                                     sasa_mode=self.sasa_mode)
         return self.folded_domain
     
+    @abstractmethod
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        """
+        Calculate the raw property value for a given protein.
+        Must be implemented by subclasses.
+        
+        Parameters
+        ----------
+        protein : sparrow.Protein
+            The protein instance
+            
+        Returns
+        -------
+        float
+            The calculated raw property value
+        """
+        pass    
+
+class FDMeanSurfaceEpsilon(FDSurfaceEpsilonProperty):
+    """
+    Class for calculating mean surface epsilon values for folded domain proteins.
+    """
+    def __init__(self, sequence: str, target_value: float = 0, folded_domain: 'finches.folded_domain.FoldedDomain' = None,
+                 path_to_folded_domain: str = None, weight: float = 1.0,
+                 model: str = 'mpipi', preloaded_model=None, constraint_type=ConstraintType.EXACT,
+                 probe_radius: float = 1.4, surface_thresh: float = 0.10, sasa_mode: str = 'v1',
+                 fd_start: int = None, fd_end: int = None):
+        super().__init__(sequence, target_value, folded_domain, path_to_folded_domain, weight,
+                         model, preloaded_model, constraint_type, probe_radius, surface_thresh,
+                         sasa_mode, fd_start, fd_end)
+        # store surface epsilon of target to save compute
+        self._target_surface_epsilon = None
+
+    def get_init_args(self):
+        return {
+            "sequence": self.sequence,
+            "target_value": self.target_value,
+            "folded_domain": self.folded_domain,
+            "path_to_folded_domain": self.path_to_folded_domain,
+            "weight": self.weight,
+            "model": self.model,
+            "preloaded_model": self.preloaded_model,
+            "constraint_type": self.constraint_type,
+            "probe_radius": self.probe_radius,
+            "surface_thresh": self.surface_thresh,
+            "sasa_mode": self.sasa_mode,
+            "fd_start": self.fd_start,
+            "fd_end": self.fd_end
+        }
+
+    def calculate_surface_epsilon(self, sequence: str) -> list:
+        """
+        Calculate the surface epsilon value for the given sequence.
+
+        Parameters
+        ----------
+        sequence : str
+            The protein sequence to calculate the surface epsilon for.
+
+        Returns
+        -------
+        list
+            List of surface epsilon values.
+        """
+        imc_object = self.load_imc_object()
+        folded_domain = self._load_folded_domain()
+        surf_eps_dict = folded_domain.calculate_surface_epsilon(sequence, imc_object)
+        return [float(i[2]) for i in list(surf_eps_dict.values())]
+
+    def _initialize_target_epsilon(self):
+        if self._target_surface_epsilon is None:
+            self._target_surface_epsilon = self.calculate_surface
 
 class FDSurfaceEpsilon(FDSurfaceEpsilonProperty):
     """
@@ -1595,24 +1667,40 @@ class FDSurfacePatchInteractions(FDSurfaceEpsilonProperty):
         """
         imc_object = self.load_imc_object()
         folded_domain = self._load_folded_domain()
-        # return the matrix of values only. 
-        return folded_domain.calculate_idr_surface_patch_interactions(sequence, imc_object,
+        surf_eps=folded_domain.calculate_idr_surface_patch_interactions(sequence, imc_object,
                                                                                idr_tile_size=self.idr_tile_size,
                                                                               patch_radius=self.patch_radius)[1]
-    def _initialize_target_epsilon(self):
+        # return the matrix of values only after changing nan to 0 
+        return np.nan_to_num(surf_eps)
+
+
+    def _initialize_target_epsilon(self) -> np.ndarray:
+        """Initialize and cache the target surface epsilon matrix."""
         if self._target_surface_epsilon is None:
-            self._target_surface_epsilon = self.calculate_surface_epsilon(self.sequence)
-            self._target_surface_epsilon = MatrixManipulation.multiply_values_of_matrix(self._target_surface_epsilon, self.attractive_multiplier)
-            self._target_surface_epsilon = MatrixManipulation.multiply_values_of_matrix(self._target_surface_epsilon, self.repulsive_multiplier)
-            # make sure size works. 
+            # Calculate target matrix
+            target_matrix = self.calculate_surface_epsilon(self.sequence)
+            
+            # Apply multipliers using matrix manipulation
+            if self.attractive_multiplier != 1.0:
+                target_matrix = MatrixManipulation.multiply_values_of_matrix(
+                    target_matrix, self.attractive_multiplier, only_negative=True
+                )
+            
+            if self.repulsive_multiplier != 1.0:
+                target_matrix = MatrixManipulation.multiply_values_of_matrix(
+                    target_matrix, self.repulsive_multiplier, only_positive=True
+                )
+            
+            # Resize if needed based on sequence length hint
             generated_sequence_length = self._get_sequence_length_hint()
-            target_matrix_size = self._target_surface_epsilon.shape
-            if target_matrix_size[1] != generated_sequence_length - self.idr_tile_size + 1:
-                # resize target_matrix to match shape of generated_matrix_size
-                self._target_surface_epsilon = MatrixManipulation.scale_matrix_to_size(self._target_surface_epsilon, 
-                                                                                      (target_matrix_size[0], 
-                                                                                       generated_sequence_length - self.idr_tile_size + 1))
-                
+            expected_idr_tiles = generated_sequence_length - self.idr_tile_size + 1
+            
+            if target_matrix.shape[1] != expected_idr_tiles:
+                new_shape = (target_matrix.shape[0], expected_idr_tiles)
+                target_matrix = MatrixManipulation.scale_matrix_to_size(target_matrix, new_shape)
+            
+            self._target_surface_epsilon = target_matrix
+            
         return self._target_surface_epsilon
     
     def calculate_raw_value(self, protein):
@@ -1629,10 +1717,21 @@ class FDSurfacePatchInteractions(FDSurfaceEpsilonProperty):
         float
             The calculated raw surface epsilon value.
         """
-        self._initialize_target_epsilon()
-        # calculate value for protein.sequence
-        current_surface_epsilon = self.calculate_surface_epsilon(protein.sequence)
-        difference = np.sum(np.abs(self.target_matrix - current_surface_epsilon))
-        sequence_length = min(self.target_matrix.shape[1], current_surface_epsilon.shape[1])
-        difference = difference / sequence_length
-        return difference
+            # Initialize target matrix
+        target_matrix = self._initialize_target_epsilon()
+        
+        # Calculate current matrix
+        current_matrix = self.calculate_surface_epsilon(protein.sequence)
+        
+        # Ensure both matrices are numpy arrays
+        target_matrix = np.asarray(target_matrix)
+        current_matrix = np.asarray(current_matrix)
+        
+        # Calculate absolute difference
+        difference = np.sum(np.abs(target_matrix - current_matrix))
+        
+        # Normalize by sequence length following GOOSE patterns
+        sequence_length = min(target_matrix.shape[1], current_matrix.shape[1])
+        if sequence_length > 0:
+            difference = difference / sequence_length
+        return float(difference)

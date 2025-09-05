@@ -6,7 +6,7 @@ import pickle
 import random
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
-
+import numpy as np
 import sparrow
 from tqdm import tqdm
 
@@ -582,7 +582,7 @@ class PropertyCalculator:
         protein: sparrow.Protein,
         properties: List[ProteinProperty],
         optimizer: Optional['SequenceOptimizer'] = None
-    ) -> Tuple[float, Dict[str, Dict[str, Any]]]:
+    ) -> Tuple[float, Dict[str, Dict[str, Any]], float]:
         """
         Calculate errors for all properties.
         
@@ -597,11 +597,12 @@ class PropertyCalculator:
             
         Returns
         -------
-        Tuple[float, Dict[str, Dict[str, Any]]]
-            Combined error and detailed directions information
+        Tuple[float, Dict[str, Dict[str, Any]], float]
+            Combined error, detailed directions, and error with initial scaling
         """
         errors = []
         directions = {}
+        errors_with_initial_scaling = []
         
         for prop in properties:
             property_name = prop.__class__.__name__
@@ -617,7 +618,36 @@ class PropertyCalculator:
                 scaled_error = raw_error * prop.weight
             
             errors.append(scaled_error)
-            
+            if prop._best_value==None:
+                prop._best_value = current_value
+
+            # Calculate error with consistent initial scaling for display
+            if optimizer:
+                # Ensure we have an initial scaling range for this property
+                if property_name not in optimizer.initial_property_scaling_ranges:
+                    # This property wasn't encountered during initialization
+                    # Use the current scaling range as the initial one
+                    current_scale_range = optimizer.property_scaling_ranges.get(property_name, 1.0)
+                    optimizer.initial_property_scaling_ranges[property_name] = current_scale_range
+                    
+                    if optimizer.verbose:
+                        optimizer.logger.warning(
+                            f"Setting initial scaling range for {property_name}: {current_scale_range:.2f}"
+                        )
+                
+                # Always use the initial scaling range for display calculations
+                initial_scale_range = optimizer.initial_property_scaling_ranges[property_name]
+                
+                if prop.is_naturally_normalized():
+                    initial_scaled_error = raw_error * prop.weight
+                else:
+                    initial_scaled_error = (raw_error / initial_scale_range) * prop.weight
+            else:
+                # Fallback: use current scaling or weight only
+                initial_scaled_error = scaled_error
+                
+            errors_with_initial_scaling.append(initial_scaled_error)
+
             # Store comprehensive direction info
             directions[property_name] = {
                 'raw_error': raw_error,
@@ -633,7 +663,8 @@ class PropertyCalculator:
             }
         
         combined_error = sum(errors)
-        return combined_error, directions
+        combined_error_with_initial_scaling = sum(errors_with_initial_scaling)
+        return combined_error, directions, combined_error_with_initial_scaling
 
 
 # ==============================================================================
@@ -699,7 +730,10 @@ class SequenceOptimizer:
         self._property_counter: Dict[str, int] = {}
         self.initial_property_values: Dict[str, float] = {}
         self.property_scaling_ranges: Dict[str, float] = {}
-        
+        self.initial_property_scaling_ranges: Dict[str, float] = {}  # NEW: Track initial scaling
+        self.iterations_since_improvement = 0
+        self.best_error = np.inf
+
         # Initialize components
         self._configure_logger()
         self.kmer_dict = self._load_kmer_dict()
@@ -763,22 +797,112 @@ class SequenceOptimizer:
             prop.set_initial_value(initial_value)
             
             # Calculate scaling range
-            self.property_scaling_ranges[property_name] = prop.get_scaling_range()
-    
+            scaling_range = prop.get_scaling_range()
+            self.property_scaling_ranges[property_name] = scaling_range
+            self.initial_property_scaling_ranges[property_name] = scaling_range  # Store initial scaling    
+
     def _scale_property_error(
         self, 
         property_name: str, 
         raw_error: float,
         property_instance: ProteinProperty, 
         weight: float
-    ) -> float:
+                    ) -> float:
         """Scale property error for optimization."""
-        if property_instance.is_naturally_normalized():
-            normalized_error = raw_error
-        else:
-            scale_range = self.property_scaling_ranges.get(property_name, 1.0)
-            normalized_error = min(raw_error / scale_range, 1.0)
 
+        scale_range = self.property_scaling_ranges.get(property_name, 1.0)
+        
+        if property_name not in self.initial_property_scaling_ranges:
+            # Lock in the initial scaling range immediately when first encountered
+            if scale_range < raw_error:
+                self.initial_property_scaling_ranges[property_name] = raw_error + (0.01 * raw_error)
+            else:
+                self.initial_property_scaling_ranges[property_name] = scale_range
+
+        if not hasattr(self, '_scaling_adjusted_up'):
+            self._scaling_adjusted_up = set()
+
+        # Only allow ONE upward adjustment per property
+        if (scale_range < raw_error and 
+            property_name not in self._scaling_adjusted_up):
+
+            adjusted_range = raw_error + (0.01 * raw_error)
+            self.property_scaling_ranges[property_name] = adjusted_range
+            scale_range = adjusted_range
+
+            # Mark this property as having been adjusted upward
+            self._scaling_adjusted_up.add(property_name)
+            
+            # Mark that scaling ranges have changed
+            if not hasattr(self, '_scaling_changed'):
+                self._scaling_changed = set()
+            self._scaling_changed.add(property_name)
+
+        # Check if we should reduce scaling (property is performing well)
+        elif raw_error / scale_range < 0.5 and round(raw_error, 4) != 0:
+            if scale_range >= property_instance.MIN_SCALING_RANGE:
+                # Reduce scaling range but trigger recalculation of best_error
+                new_scale_range = scale_range * 0.99
+                self.property_scaling_ranges[property_name] = new_scale_range
+                
+                # Mark that scaling ranges have changed - this will trigger recalculation
+                if not hasattr(self, '_scaling_changed'):
+                    self._scaling_changed = set()
+                self._scaling_changed.add(property_name)
+                
+                scale_range = new_scale_range
+
+        # Handle stagnation by identifying and adjusting the worst-performing property
+        if self.iterations_since_improvement > 50:
+            # Only do this once per stagnation period to avoid repeated calculations
+            if not hasattr(self, '_stagnation_handled'):
+                self._stagnation_handled = True
+                
+                max_contributor = None
+                max_contribution = 0.0            
+                
+                # Only proceed if we have a valid best_error
+                if self.best_error != np.inf and self.best_error > 0:
+                    for prop_name, prop in self.properties_dict.items():
+                        best_value = prop._best_value
+                        if best_value is not None:
+                            # Calculate the actual contribution (what fraction of total error this property represents)
+                            prop_contribution = best_value / self.best_error
+                            if prop_contribution > max_contribution:
+                                max_contribution = prop_contribution
+                                max_contributor = prop_name
+                
+                if self.verbose:
+                    self.logger.info(f"Stagnation detected. Max contributor: {max_contributor}, contribution: {max_contribution:.4f}")
+                
+                # Adjust scaling for the max contributor
+                if max_contributor is not None:
+                    current_scale_range = self.property_scaling_ranges.get(max_contributor, 1.0)
+                    new_scale_range = current_scale_range * 0.95
+                    self.property_scaling_ranges[max_contributor] = new_scale_range
+                    
+                    if self.verbose:
+                        self.logger.info(f"Reducing scaling for {max_contributor} from {current_scale_range:.4f} to {new_scale_range:.4f}")
+                    
+                    # Mark that scaling ranges have changed - this will trigger recalculation
+                    if not hasattr(self, '_scaling_changed'):
+                        self._scaling_changed = set()
+                    self._scaling_changed.add(max_contributor)
+                    
+                    # If we're currently processing the max contributor, update its scale_range
+                    if max_contributor == property_name:
+                        scale_range = new_scale_range
+                    
+                    # Reset the stagnation counter
+                    self.iterations_since_improvement = 0
+        else:
+            # Reset the stagnation handler when we're making progress
+            if hasattr(self, '_stagnation_handled'):
+                delattr(self, '_stagnation_handled')
+        
+
+        normalized_error = raw_error / scale_range
+        
         return normalized_error * weight
     
     # Property management
@@ -900,13 +1024,13 @@ class SequenceOptimizer:
         self._calculate_initial_property_values(best_sequence)
         
         # Initial error calculation
-        best_error, directions = PropertyCalculator.calculate_property_errors(
+        self.best_error, directions, best_error_with_initial_scaling = PropertyCalculator.calculate_property_errors(
             sparrow.Protein(best_sequence), self.properties, self
         )
         
         # Optimization loop
         best_sequence, final_error = self._optimization_loop(
-            best_sequence, best_error, directions
+            best_sequence, self.best_error, directions
         )
         
         self.logger.info("Sequence optimization completed")
@@ -938,7 +1062,8 @@ class SequenceOptimizer:
             Best sequence and its error
         """
         best_sequence = initial_sequence
-        best_error = initial_error
+        self.best_error = initial_error
+        best_error_with_initial_scaling = initial_error
         directions = initial_directions
         
         with tqdm(total=self.max_iterations, desc="Optimizing") as pbar:
@@ -947,28 +1072,63 @@ class SequenceOptimizer:
                 candidates = self._generate_candidates(
                     best_sequence, directions, iteration
                 )
-                
+                # track if scaling changes.
+                scaling_changed = False
+
+                # increase iterations since improvement
+                self.iterations_since_improvement += 1
+
                 # Evaluate candidates
                 for candidate in candidates:
                     protein = sparrow.Protein(candidate)
-                    error, new_directions = PropertyCalculator.calculate_property_errors(
+
+                    # Clear scaling change tracking before calculation
+                    if hasattr(self, '_scaling_changed'):
+                        self._scaling_changed.clear()
+
+                    error, new_directions, candidate_error_with_initial_scaling = PropertyCalculator.calculate_property_errors(
                         protein, self.properties, self
                     )
                     
-                    if error < best_error:
+                    # Check if scaling changed during this evaluation
+                    if hasattr(self, '_scaling_changed') and self._scaling_changed:
+                        scaling_changed = True
+
+                    if error < self.best_error:
                         best_sequence = candidate
-                        best_error = error
+                        self.best_error = error
                         directions = new_directions
-                        
+                        best_error_with_initial_scaling = candidate_error_with_initial_scaling
+                        self.iterations_since_improvement = 0
+
                         # Update property states
                         for prop in self.properties:
                             prop_name = prop.__class__.__name__
                             if prop_name in directions:
                                 prop._best_value = directions[prop_name]['scaled_error']
                                 prop._current_raw_value = directions[prop_name]['current_value']
+
                 
+                # If scaling changed, recalculate best_error with new scaling
+                if scaling_changed:
+                    
+                    # Recalculate best_error with updated scaling
+                    protein = sparrow.Protein(best_sequence)
+                    self.best_error, directions, candidate_error_with_initial_scaling = PropertyCalculator.calculate_property_errors(
+                        protein, self.properties, self
+                    )
+                    
+                    # Update property states with new scaling
+                    for prop in self.properties:
+                        prop_name = prop.__class__.__name__
+                        if prop_name in directions:
+                            prop._best_value = directions[prop_name]['scaled_error']
+                            prop._current_raw_value = directions[prop_name]['current_value']
+
+
+
                 # Check convergence
-                if best_error < self.tolerance:
+                if self.best_error < self.tolerance:
                     self.logger.info(f"Converged at iteration {iteration}")
                     break
                 
@@ -976,12 +1136,21 @@ class SequenceOptimizer:
                 if iteration % self.gap_to_report == 0:
                     pbar.n = iteration  # Set absolute position
                     pbar.refresh()      # Refresh display
-                    pbar.set_description(f"Best Error = {best_error:.5f}")
+                    if iteration > 0:
+                        pbar.set_description(f"Best Error = {best_error_with_initial_scaling:.5f}")
+                    else:
+                        pbar.set_description(f"Best Error = N/A")
                     
                     if self.verbose:
-                        self._log_iteration_details(iteration, best_error, best_sequence)
+                        self._log_iteration_details(iteration, best_sequence)
+                
+                # if final iteration, make sure that the progress bar is complete
+                if iteration == self.max_iterations - 1:
+                    pbar.n = self.max_iterations
+                    pbar.refresh()
+                    pbar.set_description(f"Best Error = {best_error_with_initial_scaling:.5f}")
         
-        return best_sequence, best_error
+        return best_sequence, self.best_error
     
     def _generate_candidates(
         self, 
@@ -1040,11 +1209,10 @@ class SequenceOptimizer:
     def _log_iteration_details(
         self, 
         iteration: int, 
-        best_error: float, 
         best_sequence: str
     ) -> None:
         """Log detailed information about the current iteration."""
-        self.logger.info(f"Iteration {iteration}: Best Error = {best_error:.5f}")
+        self.logger.info(f"Iteration {iteration}:")
         self.logger.info(f"Best Sequence = {best_sequence}")
         
         for prop in self.properties:
