@@ -2,6 +2,7 @@
 Various functions for the optimizer properties.
 '''
 import numpy as np
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 class MatrixManipulation:
     '''

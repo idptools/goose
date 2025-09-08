@@ -80,16 +80,7 @@ class ProteinProperty(ABC):
     # for example, FCR should only be specified once. However, something like epsilon towards a target 
     # protein could be specified towards multiple targets and therefore we want this to be True for those classes. 
     # default is False
-    multi_target = True  # Class-level attribute - override to limit ability to have multiple targest. 
-
-    # currently testing this to get rid of the problem whereby properties that have larger
-    # values are overweighted due to their having larger absolute error... Hope it worsk. 
-    # Class-level normalization attributes - override in subclasses
-    IS_NATURALLY_NORMALIZED = False  # True if property naturally ranges 0-1
-
-    TYPICAL_RANGE = 1.0  # Default fallback
-    MIN_SCALING_RANGE = 0.05  # Prevent extreme scaling
-    MAX_SCALING_RANGE = None  # Override in subclasses if needed
+    multi_target = True  # Class-level attribute - override to limit ability to have multiple targets.
 
     def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         assert isinstance(target_value, (int,float)), f"target_value must be numerical. Received {type(target_value)}"
@@ -99,22 +90,19 @@ class ProteinProperty(ABC):
         self.constraint_type = _normalize_constraint_type(constraint_type)
         self._target_value = target_value
         self._weight = weight
-        self._current_raw_value=None
-        self._best_value=None
-        # this should update at initialization to allow for relative error values 
-        # for non 0 to 1 properties. 
-        self.initial_value = None  # Will be set during optimization setup
-        # set the initial scaling value during first opt step. Storing here. 
-        self.initial_scaling_value = None
-
         
+        # Property tracking attributes with clear names
+        self.current_raw_value = None          # Current property value being evaluated
+        self.best_raw_value = None             # Property value that gave the best error
+        self.best_raw_error = None             # Best raw error achieved
+        self.best_weighted_error = None        # Best weighted error achieved
+        self.iterations_since_improvement = 0   # Track stagnation
+        
+        # Initialization values for scaling (though scaling is removed, kept for compatibility)
+        self.initial_value = None  # Will be set during optimization setup
 
-    ## note: the is_naturally_normalized, set_initial_value and get_scaling_range, 
-    # are all things to be checked carefully if there are problems. I'm still not confident
-    # that relative error value normalization is actually the best way to do this. 
-    def is_naturally_normalized(self) -> bool:
-        """Check if this property is naturally 0-1 scaled."""
-        return self.IS_NATURALLY_NORMALIZED
+        # track scaling value. Start with set to 1. 
+        self._scaling_value = 1.0
     
     def set_initial_value(self, value: float) -> None:
         """
@@ -143,38 +131,6 @@ class ProteinProperty(ABC):
         
         self.initial_value = float(value)
     
-    def get_scaling_range(self) -> float:
-        """
-        Get scaling range with adaptive bounds for robust optimization.
-        Uses typical range but adapts to actual sequence properties and length.
-        """
-        if self.is_naturally_normalized():
-            return 1.0
-        
-        # Start with typical range
-        base_range = getattr(self, 'TYPICAL_RANGE', 1.0)
-        
-        # If we have initial value, consider adaptive scaling
-        if self.initial_value is not None and np.isfinite(self.initial_value):
-            # Calculate dynamic range from initial to target
-            dynamic_range = abs(self.target_value - self.initial_value)
-            
-            # Use the larger of typical range or dynamic range
-            adaptive_range = max(base_range, dynamic_range, 0.1)
-            
-            # Apply bounds - check if property has length-aware scaling
-            if hasattr(self, '_calculate_max_scaling_range'):
-                max_range = self._calculate_max_scaling_range()
-            else:
-                max_range = getattr(self, 'MAX_SCALING_RANGE', base_range * 5.0)
-            
-            min_range = getattr(self, 'MIN_SCALING_RANGE', 0.1)
-            
-            return max(min_range, min(adaptive_range, max_range))
-        
-        # Fallback to typical range
-        return base_range
-
     def _get_sequence_length_hint(self) -> int:
         """
         Get sequence length hint for length-dependent scaling calculations.
@@ -328,31 +284,10 @@ class ComputeIWD(ProteinProperty):
     """
     Compute the Inversed Weighted Distance (IWD) property for the target residues in the sequence.
     """
-    IS_NATURALLY_NORMALIZED = False  
-    TYPICAL_RANGE = 3
-    MAX_SCALING_RANGE = 18
-    
     def __init__(self, residues: Tuple[str, ...], target_value: float, 
                  weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
         self.residues = residues
-
-    def _calculate_max_scaling_range(self) -> float:
-        length = self._get_sequence_length_hint()
-        if length > 0 and length <= 10:
-            return 2.6
-        elif length > 10 and length <= 50:
-            return 5.65
-        elif length > 50 and length <= 100:
-            return 7
-        elif length > 100 and length <= 200:
-            return 8.4
-        elif length >200 and length <= 500:
-            return 10.2
-        elif length > 500 and length <= 1000:
-            return 11.6
-        else:
-            return 16
 
     # note: This only needs to be overridden in subclasses that have additional parameters
     def get_init_args(self) -> dict:
@@ -372,11 +307,6 @@ class Hydrophobicity(ProteinProperty):
     """
     Calculate the hydrophobicity property.
     """
-    IS_NATURALLY_NORMALIZED = False  # Hydrophobicity scale is typically 0-6.6
-    TYPICAL_RANGE = 3
-    MAX_SCALING_RANGE = 9
-    MIN_SCALING_RANGE = 0.9
-        
     def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
 
@@ -387,8 +317,6 @@ class FCR(ProteinProperty):
     """
     Calculate the FCR property.
     """
-    IS_NATURALLY_NORMALIZED = True  # FCR ranges 0-1
-    
     def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
 
@@ -399,8 +327,6 @@ class NCPR(ProteinProperty):
     """
     Calculate the NCPR property.
     """
-    IS_NATURALLY_NORMALIZED = True  # NCPR ranges -1 to 1, but effectively normalized
-    
     def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
 
@@ -412,8 +338,6 @@ class Kappa(ProteinProperty):
     """
     Calculate the kappa property.
     """
-    IS_NATURALLY_NORMALIZED = True  # Kappa ranges 0-1
-    
     def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
 
@@ -424,18 +348,9 @@ class RadiusOfGyration(ProteinProperty):
     """
     Calculate the Radius of gyration
     """
-    IS_NATURALLY_NORMALIZED = False  # Rg values depend on sequence length
-    TYPICAL_RANGE = 20
-    MIN_SCALING_RANGE=1
-    
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
-
-    def _calculate_max_scaling_range(self) -> float:
-        length = self._get_sequence_length_hint()
-        mx_rg_var = stat.sqrt(length+(length*24))-4
-        return max(self.TYPICAL_RANGE, mx_rg_var)
     
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.predictor.radius_of_gyration()
@@ -444,18 +359,10 @@ class EndToEndDistance(ProteinProperty):
     """
     Calculate the Radius of gyration
     """
-    IS_NATURALLY_NORMALIZED = False  # End-to-end distance depends on sequence length
-    TYPICAL_RANGE = 30
-    MIN_SCALING_RANGE=1
-    
+      # End-to-end distance depends on sequence length
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
-
-    def _calculate_max_scaling_range(self) -> float:
-        length = self._get_sequence_length_hint()
-        mx_re_var = stat.sqrt(length+(length*140))-10
-        return max(self.TYPICAL_RANGE, mx_re_var)
 
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.predictor.end_to_end_distance()
@@ -465,11 +372,7 @@ class AminoAcidFractions(ProteinProperty):
     """
     Compute the difference between the target amino acid fractions and the current amino acid fractions.
     """
-    IS_NATURALLY_NORMALIZED = False  # Fractions range 0-1 but error can be larger
-    TYPICAL_RANGE = 1.0  # Total error across all amino acids
-    MAX_SCALING_RANGE = 5.0  # Maximum possible error if all fractions are wrong
-    MIN_SCALING_RANGE=1
-    
+
     def __init__(self, target_fractions: Dict[str, float], weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         # For fractions, target value is not meaningful at class level since we have multiple amino acids
@@ -538,11 +441,7 @@ class SCD(ProteinProperty):
     Sawle, L., & Ghosh, K. (2015). A theoretical method to compute sequence
     dependent configurational properties in charged polymers and proteins.
     The Journal of Chemical Physics, 143(8), 085101.
-    """
-    IS_NATURALLY_NORMALIZED = False  # SCD values are arbitrary scale
-    TYPICAL_RANGE = 5.0  # SCD values typically range from ~-10 to +10
-    MAX_SCALING_RANGE = 20.0  # Maximum reasonable SCD range
-    
+    """    
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
@@ -562,10 +461,6 @@ class SHD(ProteinProperty):
     dependent configurational properties in charged polymers and proteins.
     The Journal of Chemical Physics, 143(8), 085101.
     """
-    IS_NATURALLY_NORMALIZED = False  # SHD values are arbitrary scale
-    TYPICAL_RANGE = 5.0  # SHD values typically range similar to SCD
-    MAX_SCALING_RANGE = 20.0  # Maximum reasonable SHD range
-    
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
@@ -578,8 +473,7 @@ class Complexity(ProteinProperty):
     Calculates the Wootton-Federhen complexity of a sequence (also called
     seg complexity, as this the theory used in the classic SEG algorithm.
     """
-    IS_NATURALLY_NORMALIZED = True  # Complexity values are arbitrary scale
-    
+
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
@@ -593,8 +487,7 @@ class FractionDisorder(ProteinProperty):
     Calculates the amount of disorder in
     the current sequence. 
     """
-    IS_NATURALLY_NORMALIZED = True  # Fraction ranges 0-1
-    
+
     def __init__(self, target_value: float, weight: float = 1.0, disorder_cutoff = 0.5,
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
@@ -623,8 +516,6 @@ class MatchSequenceDisorder(ProteinProperty):
     You can also try to get the exact disorder.
 
     """
-    IS_NATURALLY_NORMALIZED = True  # Normalized by sequence length, ranges 0-1
-    
     def __init__(self, target_sequence: str, exact_match: bool = False, target_value : float = 0,
                  weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
@@ -662,19 +553,10 @@ class MatchingResidues(ProteinProperty):
     '''
     Determines the number of residues that match a target sequence in the current sequence.
     '''
-    IS_NATURALLY_NORMALIZED = False  # Count of residues, depends on sequence length
-    TYPICAL_RANGE = 50  # Typical number of mismatched residues
-    MIN_SCALING_RANGE=1
     def __init__(self, target_sequence: str, target_value: float, weight: float = 1.0,
                  constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
         self.target_sequence = target_sequence
-
-    def _calculate_max_scaling_range(self) -> float:
-        """Calculate maximum scaling range based on sequence length"""
-        length = self._get_sequence_length_hint()
-        # Maximum possible mismatches is the full sequence length
-        return max(self.TYPICAL_RANGE, length)
 
     def get_init_args(self):
         """Override to include target_sequence parameter"""
@@ -698,10 +580,7 @@ class EpsilonProperty(ProteinProperty):
     Abstract base class for properties that use epsilon calculations.
     Provides common model loading functionality following GOOSE patterns.
     """
-    IS_NATURALLY_NORMALIZED = False  # Epsilon values are arbitrary scale
-    TYPICAL_RANGE = 2.0  # Typical range for epsilon values
-    MAX_SCALING_RANGE = 10.0  # Maximum reasonable epsilon range
-    MIN_SCALING_RANGE=2
+    
     def __init__(self, target_value: float, weight: float = 1.0, 
                  constraint_type = ConstraintType.EXACT, model: str = 'mpipi', 
                  preloaded_model = None):
@@ -803,10 +682,6 @@ class MeanSelfEpsilon(EpsilonProperty):
     Calculate the self interaction epsilon value of a sequence.
     Note: this simply uses the mean epsilon value. 
     """
-    IS_NATURALLY_NORMALIZED = False  # Epsilon values are arbitrary scale
-    TYPICAL_RANGE = 1.5  # Self-epsilon values are typically smaller than inter-molecular
-    MAX_SCALING_RANGE = 8.0  # Maximum reasonable self-epsilon range
-    
     def __init__(self, target_value: float, weight: float = 1.0,
                  model: str = 'mpipi', preloaded_model = None, 
                  constraint_type = ConstraintType.EXACT):
@@ -821,9 +696,6 @@ class MeanEpsilonWithTarget(EpsilonProperty):
     """
     Make a sequence that interacts with a specific sequence with a specific mean epsilon value. 
     """
-    IS_NATURALLY_NORMALIZED = False  # Epsilon values are arbitrary scale
-    TYPICAL_RANGE = 2.0  # Inter-molecular epsilon values
-    MAX_SCALING_RANGE = 12.0  # Maximum reasonable inter-molecular epsilon range
     
     def __init__(self, target_value: float, target_sequence: str, weight: float = 1.0,
                  model: str = 'mpipi', preloaded_model = None, 
@@ -851,8 +723,6 @@ class ChemicalFingerprint(EpsilonProperty):
     The chemical fingerprint is calculated by taking the difference between the target
     and the current sequence and summing the differences in the epsilon matrix.
     """
-    IS_NATURALLY_NORMALIZED = False  # Fingerprint differences are arbitrary scale
-    TYPICAL_RANGE = 200.0  # Chemical fingerprint differences are very large (36 chemistries)
     
     def __init__(self, target_sequence: str, target_value: float = 0.0, 
                  weight: float = 1.0, model: str = 'mpipi', preloaded_model = None, 
@@ -863,14 +733,6 @@ class ChemicalFingerprint(EpsilonProperty):
         self._chemistries = None
         self._matrix_shape=None
         self.window_size = window_size
-
-    def _calculate_max_scaling_range(self) -> float:
-        """Calculate scaling range based on sequence length and number of chemistries"""
-        length = self._get_sequence_length_hint()
-        # 36 different chemistry matrices, each contributing to the sum
-        num_chemistries = 36
-        fingerprint_scaling = length * num_chemistries * 0.5  # Conservative factor
-        return max(self.TYPICAL_RANGE, fingerprint_scaling)
 
     def get_init_args(self) -> dict:
         """Override to include target_sequence parameter"""
@@ -958,8 +820,8 @@ class EpsilonMatrixProperty(EpsilonProperty):
     the matrix to (for example) increase hte interaction strength. 
 
     """
-    IS_NATURALLY_NORMALIZED = False  # Matrix manipulations are arbitrary scale
-    TYPICAL_RANGE = 100.0  # Matrix manipulation differences are typically large
+      # Matrix manipulations are arbitrary scale
+      # Matrix manipulation differences are typically large
 
     def __init__(self, sequence: str, target_sequence: str, target_value: float = 0.0,
                  weight: float = 1.0, constraint_type = ConstraintType.EXACT,
@@ -1009,13 +871,6 @@ class EpsilonMatrixProperty(EpsilonProperty):
         if self.window_size % 2 == 0:
             raise ValueError("Window size must be an odd value")
 
-    def _calculate_max_scaling_range(self) -> float:
-        """Calculate scaling range based on sequence length for matrix manipulations"""
-        length = self._get_sequence_length_hint()
-        # Matrix manipulations can result in large scaling factors
-        matrix_scaling = length * 4.0  # Higher scaling factor for manipulated matrices
-        return max(self.TYPICAL_RANGE, matrix_scaling)
-        
     def get_init_args(self) -> dict:
         """Override to include matrix-specific parameters"""
         base_args = super().get_init_args()
@@ -1163,9 +1018,6 @@ class MatchSelfIntermap(EpsilonMatrixProperty):
     Calculates self interaction using matrix representation for closer target matching.
     Uses EpsilonMatrixProperty for consistent matrix handling patterns.
     """
-    IS_NATURALLY_NORMALIZED = False  # Matrix differences are arbitrary scale
-    TYPICAL_RANGE = 50.0  # Matrix difference values are typically larger
-    
     def __init__(self, sequence: str, weight: float = 1.0, 
                  model: str = 'mpipi', preloaded_model = None, 
                  inverse: bool = False, window_size: int = 15, 
@@ -1201,9 +1053,6 @@ class MatchIntermap(EpsilonMatrixProperty):
     between an original sequence and a target interacting sequence.
     Uses EpsilonMatrixProperty for consistent matrix handling patterns.
     """
-    IS_NATURALLY_NORMALIZED = False  # Matrix differences are arbitrary scale
-    TYPICAL_RANGE = 80.0  # Inter-molecular matrix differences are typically larger
-    
     def __init__(self, sequence: str, target_sequence: str, weight: float = 1.0,
                  model: str = 'mpipi', preloaded_model = None, 
                  window_size=15, constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True):
@@ -1228,9 +1077,6 @@ class ModifyAttractiveValues(EpsilonMatrixProperty):
         Values less than -1 will flip the repulsive values and increase their strength. 
 
     """
-    IS_NATURALLY_NORMALIZED = False  # Modified matrix values are arbitrary scale
-    TYPICAL_RANGE = 150.0  # Modified attractive matrices can have large differences
-
     def __init__(self, sequence:str, target_sequence: str, multiplier: float,
                  weight: float = 1.0, model: str = 'mpipi', 
                  preloaded_model = None, window_size: int = 15,
@@ -1269,9 +1115,6 @@ class ModifyRepulsiveValues(EpsilonMatrixProperty):
         Values less than 0 and greater than -1 will reduce the strength and invert to attractive. 
         Values less than -1 will flip the repulsive values and increase their strength. 
     """
-    IS_NATURALLY_NORMALIZED = False  # Modified matrix values are arbitrary scale
-    TYPICAL_RANGE = 120.0  # Modified repulsive matrices can have large differences
-    
     def __init__(self, interacting_sequence:str, target_interacting_sequence: str, 
                  multiplier: float, weight: float = 1.0, model: str = 'mpipi', 
                  preloaded_model = None, window_size: int = 15,
@@ -1303,9 +1146,6 @@ class ModifyMatrixValues(EpsilonMatrixProperty):
     property. Tends to work better than trying to manipulate them individually and is 
     more computationally efficient. 
     """
-    IS_NATURALLY_NORMALIZED = False  # Modified matrix values are arbitrary scale
-    TYPICAL_RANGE = 180.0  # Combined modifications can result in very large differences
-    
     def __init__(self, interacting_sequence:str, target_interacting_sequence: str, 
                  repulsive_multiplier: float, attractive_multiplier: float,
                  weight: float = 1.0, model: str = 'mpipi', 
@@ -1339,9 +1179,6 @@ class MatchArbitraryMatrix(EpsilonMatrixProperty):
     """
     Make a sequence matched to an arbitrary matrix.
     """
-    IS_NATURALLY_NORMALIZED = False  # Modified matrix values are arbitrary scale
-    TYPICAL_RANGE = 180.0  # Combined modifications can result in very large differences
-
     def __init__(self, arbitrary_matrix: np.ndarray, target_sequence: str = None,
                  weight: float = 1.0, model: str = 'mpipi',
                  preloaded_model=None, window_size: int = 15,
@@ -1381,10 +1218,6 @@ class FDSurfaceEpsilonProperty(EpsilonProperty):
     Base class for calculations involving FoldedDomain FINCHES objects where we
     are looking at the interactions between a folded domain and an IDR.
     """
-    IS_NATURALLY_NORMALIZED = False  # Epsilon values are arbitrary scale
-    TYPICAL_RANGE = 3.0  # Surface epsilon values are typically smaller than inter-molecular
-    MAX_SCALING_RANGE = 20.0  # Maximum reasonable surface epsilon range
-
     def __init__(self, sequence: str,
                  target_value: float = 0, folded_domain: 'finches.folded_domain.FoldedDomain' = None,
                  path_to_folded_domain: str = None, weight: float = 1.0, 

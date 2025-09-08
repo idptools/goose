@@ -200,22 +200,47 @@ class ShuffleStrategy:
         return sequence[:start_pos] + shuffled_window + sequence[end_pos:]
     
     @staticmethod
-    def shuffle_adaptive(sequence: str, global_prob: float = 0.2) -> str:
+    def shuffle_adaptive(sequence: str, global_prob: float = 0.1, conservative: bool = True, 
+                        iteration: int = 0, max_iterations: int = 1000) -> str:
         """
-        Adaptive shuffling: global shuffle with probability global_prob,
-        otherwise shuffle a random window of 10-50% of sequence length.
+        Adaptive shuffling: more aggressive early, more conservative later.
         """
         if not sequence:
             return sequence
+        
+        # Calculate progress ratio (0.0 = start, 1.0 = end)
+        progress = min(1.0, iteration / max_iterations) if max_iterations > 0 else 0.0
+        
+        # Adjust global shuffle probability based on progress
+        if conservative:
+            # Start more aggressive, get more conservative
+            early_prob = 0.2
+            late_prob = 0.05
+            adjusted_global_prob = early_prob * (1 - progress) + late_prob * progress
+        else:
+            adjusted_global_prob = global_prob
             
-        if random.random() < global_prob:
+        if random.random() < adjusted_global_prob:
             return ShuffleStrategy.shuffle_entire(sequence)
         
         length = len(sequence)
-        min_window = max(1, int(length * 0.1))
-        max_window = max(min_window, int(length * 0.5))
-        window_size = random.randint(min_window, max_window)
         
+        # Adjust window sizes based on progress
+        if conservative:
+            # Early: larger windows, Later: smaller windows
+            early_min, early_max = 0.15, 0.4  # 15-40% early
+            late_min, late_max = 0.03, 0.1    # 3-10% late
+            
+            min_frac = early_min * (1 - progress) + late_min * progress
+            max_frac = early_max * (1 - progress) + late_max * progress
+            
+            min_window = max(1, int(length * min_frac))
+            max_window = max(min_window, int(length * max_frac))
+        else:
+            min_window = max(1, int(length * 0.1))
+            max_window = max(min_window, int(length * 0.5))
+        
+        window_size = random.randint(min_window, max_window)
         return ShuffleStrategy.shuffle_window(sequence, window_size)
     
     @staticmethod
@@ -242,7 +267,9 @@ class ShuffleStrategy:
         sequence: str, 
         num_shuffles: int, 
         window_size: int = 10,
-        strategy: str = "mixed"
+        strategy: str = "mixed",
+        iteration: int = 0,
+        max_iterations: int = 1000
     ) -> List[str]:
         """
         Generate multiple shuffled variants using specified strategy.
@@ -257,6 +284,10 @@ class ShuffleStrategy:
             Window size for local shuffles
         strategy : str
             Shuffling strategy: 'adaptive', 'global_local', or 'mixed'
+        iteration : int
+            Current iteration number
+        max_iterations : int
+            Maximum iterations for progress calculation
         """
         if num_shuffles <= 0:
             return []
@@ -265,13 +296,13 @@ class ShuffleStrategy:
         
         for _ in range(num_shuffles):
             if strategy == "adaptive":
-                variants.append(cls.shuffle_adaptive(sequence))
+                variants.append(cls.shuffle_adaptive(sequence, iteration=iteration, max_iterations=max_iterations))
             elif strategy == "global_local":
                 variants.append(cls.shuffle_global_then_local(sequence, window_size))
             elif strategy == "mixed":
                 # Mix different strategies
                 if random.random() < 0.5:
-                    variants.append(cls.shuffle_adaptive(sequence))
+                    variants.append(cls.shuffle_adaptive(sequence, iteration=iteration, max_iterations=max_iterations))
                 else:
                     variants.append(cls.shuffle_global_then_local(sequence, window_size))
             else:
@@ -331,7 +362,8 @@ class MutationEngine:
     for sequence modifications during optimization.
     """
     
-    def __init__(self, kmer_dict: KmerDict, min_k: int = 1, max_k: int = 1):
+    def __init__(self, kmer_dict: KmerDict, min_k: int = 1, max_k: int = 3, 
+                 conservative_mode: bool = True):
         """
         Initialize mutation engine.
         
@@ -343,10 +375,13 @@ class MutationEngine:
             Minimum k-mer length to consider
         max_k : int  
             Maximum k-mer length to consider
+        conservative_mode : bool
+            If True, use more conservative mutation parameters
         """
         self.kmer_dict = kmer_dict
         self.min_k = min_k
         self.max_k = max_k
+        self.conservative_mode = conservative_mode
     
     def get_mutable_kmers(self, sequence: str, fixed_ranges: List[Tuple[int, int]]) -> List[str]:
         """
@@ -412,12 +447,11 @@ class MutationEngine:
                     current_value = info["current_value"]
                     target_value = info["target_value"]
                     weight = info["weight"]
-                    scale_range = info["scale_range"]
                     
-                    # Calculate improvement potential
-                    current_error = abs(current_value - target_value) / scale_range
+                    # Calculate improvement potential using raw errors
+                    current_error = abs(current_value - target_value)
                     kmer_value = prop_dict[method_name]
-                    projected_error = abs(kmer_value - target_value) / scale_range
+                    projected_error = abs(kmer_value - target_value)
                     
                     improvement = (current_error - projected_error) * weight
                     weighted_improvement += improvement
@@ -448,7 +482,8 @@ class MutationEngine:
         old_kmer: str, 
         new_kmer: str,
         fixed_ranges: List[Tuple[int, int]],
-        replacement_fraction: float = 0.25
+        replacement_fraction: Optional[float] = None,
+        iteration: int = 0
     ) -> str:
         """
         Replace occurrences of a k-mer in the sequence.
@@ -463,8 +498,10 @@ class MutationEngine:
             Replacement k-mer
         fixed_ranges : List[Tuple[int, int]]
             Ranges that cannot be modified
-        replacement_fraction : float
-            Fraction of occurrences to replace
+        replacement_fraction : float, optional
+            Fraction of occurrences to replace. If None, uses adaptive fraction.
+        iteration : int
+            Current iteration number for adaptive behavior
             
         Returns
         -------
@@ -500,8 +537,33 @@ class MutationEngine:
         if not occurrences:
             return sequence
         
-        # Select random subset of occurrences to replace
-        num_to_replace = max(1, math.ceil(len(occurrences) * replacement_fraction))
+        # Adaptive replacement fraction based on iteration progress
+        if replacement_fraction is None:
+            if self.conservative_mode:
+                # Early iterations: more aggressive exploration
+                if iteration < 300:
+                    base_fraction = 0.3 if len(old_kmer) == 1 else 0.2
+                elif iteration < 1000:
+                    base_fraction = 0.2 if len(old_kmer) == 1 else 0.15
+                else:
+                    # Later iterations: precise, conservative changes
+                    base_fraction = 0.1 if len(old_kmer) == 1 else 0.05
+                
+                # Reduce fraction if there are many occurrences (avoid too many changes)
+                if len(occurrences) > 15:
+                    base_fraction *= 0.3
+                elif len(occurrences) > 10:
+                    base_fraction *= 0.5
+                elif len(occurrences) > 5:
+                    base_fraction *= 0.7
+                
+                replacement_fraction = base_fraction
+            else:
+                # Original behavior
+                replacement_fraction = 0.25
+        
+        # Always replace at least 1, but be more conservative with many occurrences
+        num_to_replace = max(1, min(3, math.ceil(len(occurrences) * replacement_fraction)))
         selected_positions = sorted(
             random.sample(occurrences, min(num_to_replace, len(occurrences))),
             reverse=True
@@ -522,7 +584,8 @@ class MutationEngine:
         self, 
         sequence: str, 
         directions: Dict[str, Dict[str, Any]],
-        fixed_ranges: List[Tuple[int, int]]
+        fixed_ranges: List[Tuple[int, int]],
+        iteration: int = 0
     ) -> str:
         """
         Perform a single mutation on the sequence.
@@ -535,6 +598,8 @@ class MutationEngine:
             Property direction information
         fixed_ranges : List[Tuple[int, int]]
             Fixed ranges that cannot be mutated
+        iteration : int
+            Current iteration number (for adaptive behavior)
             
         Returns
         -------
@@ -550,18 +615,48 @@ class MutationEngine:
         if not mutable_kmers or not candidate_kmers:
             return sequence
         
-        # Select k-mer to replace
-        old_kmer = random.choice(mutable_kmers)
+        # Adaptive k-mer selection: start with larger mutations, get more precise later
+        if self.conservative_mode:
+            # Early iterations: allow larger changes to explore sequence space
+            if iteration < 300:
+                preferred_length = random.choice([1, 2, 3])  # Explore broadly
+            elif iteration < 1000:
+                preferred_length = random.choice([1, 2])     # Medium precision
+            else:
+                # Later iterations: prefer single amino acid changes for fine-tuning
+                preferred_length = 1
+                
+            # Filter mutable k-mers by preferred length
+            length_filtered_kmers = [k for k in mutable_kmers if len(k) == preferred_length]
+            if length_filtered_kmers:
+                old_kmer = random.choice(length_filtered_kmers)
+            else:
+                old_kmer = random.choice(mutable_kmers)
+        else:
+            # Original random selection
+            old_kmer = random.choice(mutable_kmers)
         
         # Find suitable replacement
         valid_replacements = candidate_kmers.get(len(old_kmer), [])
         if not valid_replacements:
-            return sequence
+            # Fallback: try different k-mer lengths
+            for k_len in sorted(candidate_kmers.keys()):
+                if candidate_kmers[k_len]:
+                    # Find k-mers of this length in sequence
+                    alt_kmers = [k for k in mutable_kmers if len(k) == k_len]
+                    if alt_kmers:
+                        old_kmer = random.choice(alt_kmers)
+                        valid_replacements = candidate_kmers[k_len]
+                        break
+            
+            if not valid_replacements:
+                return sequence
         
         new_kmer = random.choice(valid_replacements)
-        # Perform replacement
+        
+        # Perform replacement with adaptive fraction
         return self.replace_kmer_in_sequence(
-            sequence, old_kmer, new_kmer, fixed_ranges
+            sequence, old_kmer, new_kmer, fixed_ranges, iteration=iteration
         )
 
 
@@ -571,10 +666,10 @@ class MutationEngine:
 
 class PropertyCalculator:
     """
-    Calculates property errors and manages scaling.
+    Calculates property errors.
     
     This class provides a clean interface for property calculations
-    and error scaling during optimization.
+    during optimization.
     """
     
     @staticmethod
@@ -582,7 +677,7 @@ class PropertyCalculator:
         protein: sparrow.Protein,
         properties: List[ProteinProperty],
         optimizer: Optional['SequenceOptimizer'] = None
-    ) -> Tuple[float, Dict[str, Dict[str, Any]], float]:
+    ) -> Tuple[float, Dict[str, Dict[str, Any]]]:
         """
         Calculate errors for all properties.
         
@@ -593,78 +688,43 @@ class PropertyCalculator:
         properties : List[ProteinProperty]
             List of properties to evaluate
         optimizer : SequenceOptimizer, optional
-            Optimizer instance for error scaling
+            Optimizer instance (unused, kept for compatibility)
             
         Returns
         -------
-        Tuple[float, Dict[str, Dict[str, Any]], float]
-            Combined error, detailed directions, and error with initial scaling
+        Tuple[float, Dict[str, Dict[str, Any]]]
+            Combined error and detailed directions
         """
         errors = []
         directions = {}
-        errors_with_initial_scaling = []
         
         for prop in properties:
             property_name = prop.__class__.__name__
             current_value = prop.calculate_raw_value(protein)
             raw_error = prop.calculate_error(current_value)
             
-            # Apply scaling if optimizer provided
-            if optimizer:
-                scaled_error = optimizer._scale_property_error(
-                    property_name, raw_error, prop, prop.weight
-                )
-            else:
-                scaled_error = raw_error * prop.weight
+            # Use raw error with weight only
+            weighted_error = raw_error * prop.weight
+
+            # multiply weighted error by the property scaling
+            weighted_error = weighted_error * prop._scaling_value
             
-            errors.append(scaled_error)
-            if prop._best_value==None:
-                prop._best_value = current_value
+            errors.append(weighted_error)
+            
+            # Update current property value
+            prop.current_raw_value = current_value
 
-            # Calculate error with consistent initial scaling for display
-            if optimizer:
-                # Ensure we have an initial scaling range for this property
-                if property_name not in optimizer.initial_property_scaling_ranges:
-                    # This property wasn't encountered during initialization
-                    # Use the current scaling range as the initial one
-                    current_scale_range = optimizer.property_scaling_ranges.get(property_name, 1.0)
-                    optimizer.initial_property_scaling_ranges[property_name] = current_scale_range
-                    
-                    if optimizer.verbose:
-                        optimizer.logger.warning(
-                            f"Setting initial scaling range for {property_name}: {current_scale_range:.2f}"
-                        )
-                
-                # Always use the initial scaling range for display calculations
-                initial_scale_range = optimizer.initial_property_scaling_ranges[property_name]
-                
-                if prop.is_naturally_normalized():
-                    initial_scaled_error = raw_error * prop.weight
-                else:
-                    initial_scaled_error = (raw_error / initial_scale_range) * prop.weight
-            else:
-                # Fallback: use current scaling or weight only
-                initial_scaled_error = scaled_error
-                
-            errors_with_initial_scaling.append(initial_scaled_error)
-
-            # Store comprehensive direction info
+            # Store direction info
             directions[property_name] = {
                 'raw_error': raw_error,
-                'scaled_error': scaled_error,
+                'weighted_error': weighted_error,
                 'current_value': current_value,
                 'target_value': prop.target_value,
-                'weight': prop.weight,
-                'is_normalized': prop.is_naturally_normalized(),
-                'scale_range': (
-                    optimizer.property_scaling_ranges.get(property_name, 1.0) 
-                    if optimizer else 1.0
-                )
+                'weight': prop.weight
             }
         
         combined_error = sum(errors)
-        combined_error_with_initial_scaling = sum(errors_with_initial_scaling)
-        return combined_error, directions, combined_error_with_initial_scaling
+        return combined_error, directions
 
 
 # ==============================================================================
@@ -689,7 +749,9 @@ class SequenceOptimizer:
         verbose: bool = True,
         gap_to_report: int = 10,
         num_shuffles: int = 0,
-        just_shuffle: bool = False
+        just_shuffle: bool = False,
+        adaptive_scaling: bool = True,
+        adaptive_scaling_interval: int = 100
     ):
         """
         Initialize sequence optimizer.
@@ -708,6 +770,10 @@ class SequenceOptimizer:
             Default number of shuffles per iteration
         just_shuffle : bool
             Only perform shuffling (no mutations)
+        adaptive_scaling : bool
+            Enable adaptive scaling of property weights
+        adaptive_scaling_interval : int
+            Number of iterations between adaptive scaling updates
         """
         # Core parameters
         self.target_length = target_length
@@ -716,6 +782,10 @@ class SequenceOptimizer:
         self.gap_to_report = gap_to_report
         self.num_shuffles = num_shuffles
         self.just_shuffle = just_shuffle
+        
+        # Adaptive scaling parameters
+        self.adaptive_scaling = adaptive_scaling
+        self.adaptive_scaling_interval = adaptive_scaling_interval
         
         # Optimization parameters (with defaults)
         self.max_iterations = 1000
@@ -729,15 +799,20 @@ class SequenceOptimizer:
         self.properties_dict: Dict[str, ProteinProperty] = {}
         self._property_counter: Dict[str, int] = {}
         self.initial_property_values: Dict[str, float] = {}
-        self.property_scaling_ranges: Dict[str, float] = {}
-        self.initial_property_scaling_ranges: Dict[str, float] = {}  # NEW: Track initial scaling
         self.iterations_since_improvement = 0
         self.best_error = np.inf
+        # to hold generated sequences in case we get stuck during optimization and need to
+        # reduce constraints to get out of the stuck state
+        self.generated_sequences: List[str] = []
+        
+        # For adaptive scaling sensitivity analysis
+        self._recent_candidate_data: List[Tuple[str, Dict[str, float]]] = []
+        self._max_candidate_history = 50  # Keep last 50 candidates for sensitivity analysis
 
         # Initialize components
         self._configure_logger()
         self.kmer_dict = self._load_kmer_dict()
-        self.mutation_engine = MutationEngine(self.kmer_dict)
+        self.mutation_engine = MutationEngine(self.kmer_dict, conservative_mode=adaptive_scaling)
     
     def _configure_logger(self) -> None:
         """Configure logging for the optimizer."""
@@ -782,12 +857,14 @@ class SequenceOptimizer:
         return kmer_dict
     
     def _calculate_initial_property_values(self, initial_sequence: str) -> None:
-        """Calculate initial property values for scaling."""
+        """Calculate initial property values."""
         if self.initial_property_values:
             return  # Already calculated
         
         protein = sparrow.Protein(initial_sequence)
         
+        value_ranges=[]
+
         for prop in self.properties:
             property_name = prop.__class__.__name__
             initial_value = prop.calculate_raw_value(protein)
@@ -795,115 +872,515 @@ class SequenceOptimizer:
             # Store initial value and set it in the property
             self.initial_property_values[property_name] = initial_value
             prop.set_initial_value(initial_value)
-            
-            # Calculate scaling range
-            scaling_range = prop.get_scaling_range()
-            self.property_scaling_ranges[property_name] = scaling_range
-            self.initial_property_scaling_ranges[property_name] = scaling_range  # Store initial scaling    
+            value_ranges.append(abs(initial_value-prop.target_value))
 
-    def _scale_property_error(
-        self, 
-        property_name: str, 
-        raw_error: float,
-        property_instance: ProteinProperty, 
-        weight: float
-                    ) -> float:
-        """Scale property error for optimization."""
-
-        scale_range = self.property_scaling_ranges.get(property_name, 1.0)
-        
-        if property_name not in self.initial_property_scaling_ranges:
-            # Lock in the initial scaling range immediately when first encountered
-            if scale_range < raw_error:
-                self.initial_property_scaling_ranges[property_name] = raw_error + (0.01 * raw_error)
-            else:
-                self.initial_property_scaling_ranges[property_name] = scale_range
-
-        if not hasattr(self, '_scaling_adjusted_up'):
-            self._scaling_adjusted_up = set()
-
-        # Only allow ONE upward adjustment per property
-        if (scale_range < raw_error and 
-            property_name not in self._scaling_adjusted_up):
-
-            adjusted_range = raw_error + (0.01 * raw_error)
-            self.property_scaling_ranges[property_name] = adjusted_range
-            scale_range = adjusted_range
-
-            # Mark this property as having been adjusted upward
-            self._scaling_adjusted_up.add(property_name)
-            
-            # Mark that scaling ranges have changed
-            if not hasattr(self, '_scaling_changed'):
-                self._scaling_changed = set()
-            self._scaling_changed.add(property_name)
-
-        # Check if we should reduce scaling (property is performing well)
-        elif raw_error / scale_range < 0.5 and round(raw_error, 4) != 0:
-            if scale_range >= property_instance.MIN_SCALING_RANGE:
-                # Reduce scaling range but trigger recalculation of best_error
-                new_scale_range = scale_range * 0.99
-                self.property_scaling_ranges[property_name] = new_scale_range
-                
-                # Mark that scaling ranges have changed - this will trigger recalculation
-                if not hasattr(self, '_scaling_changed'):
-                    self._scaling_changed = set()
-                self._scaling_changed.add(property_name)
-                
-                scale_range = new_scale_range
-
-        # Handle stagnation by identifying and adjusting the worst-performing property
-        if self.iterations_since_improvement > 50:
-            # Only do this once per stagnation period to avoid repeated calculations
-            if not hasattr(self, '_stagnation_handled'):
-                self._stagnation_handled = True
-                
-                max_contributor = None
-                max_contribution = 0.0            
-                
-                # Only proceed if we have a valid best_error
-                if self.best_error != np.inf and self.best_error > 0:
-                    for prop_name, prop in self.properties_dict.items():
-                        best_value = prop._best_value
-                        if best_value is not None:
-                            # Calculate the actual contribution (what fraction of total error this property represents)
-                            prop_contribution = best_value / self.best_error
-                            if prop_contribution > max_contribution:
-                                max_contribution = prop_contribution
-                                max_contributor = prop_name
-                
+        # iterate through properteies and use the value_ranges to set scaling values
+        if value_ranges:
+            max_range = max(value_ranges)
+            for prop in self.properties:
+                property_name = prop.__class__.__name__
+                initial_value = self.initial_property_values[property_name]
+                range_ = abs(initial_value-prop.target_value)
+                if range_==0:
+                    prop._scaling_value=1.0
+                else:
+                    prop._scaling_value = max_range/range_
                 if self.verbose:
-                    self.logger.info(f"Stagnation detected. Max contributor: {max_contributor}, contribution: {max_contribution:.4f}")
-                
-                # Adjust scaling for the max contributor
-                if max_contributor is not None:
-                    current_scale_range = self.property_scaling_ranges.get(max_contributor, 1.0)
-                    new_scale_range = current_scale_range * 0.95
-                    self.property_scaling_ranges[max_contributor] = new_scale_range
-                    
-                    if self.verbose:
-                        self.logger.info(f"Reducing scaling for {max_contributor} from {current_scale_range:.4f} to {new_scale_range:.4f}")
-                    
-                    # Mark that scaling ranges have changed - this will trigger recalculation
-                    if not hasattr(self, '_scaling_changed'):
-                        self._scaling_changed = set()
-                    self._scaling_changed.add(max_contributor)
-                    
-                    # If we're currently processing the max contributor, update its scale_range
-                    if max_contributor == property_name:
-                        scale_range = new_scale_range
-                    
-                    # Reset the stagnation counter
-                    self.iterations_since_improvement = 0
-        else:
-            # Reset the stagnation handler when we're making progress
-            if hasattr(self, '_stagnation_handled'):
-                delattr(self, '_stagnation_handled')
-        
+                    print(prop.__class__.__name__, prop._scaling_value, prop.initial_value)
 
-        normalized_error = raw_error / scale_range
+    def _recalculate_adaptive_scaling(self, current_sequence: str, candidate_data: Optional[List] = None) -> None:
+        """
+        Recalculate scaling values based on sensitivity analysis and proximity to target.
         
-        return normalized_error * weight
+        This addresses the issue where highly sensitive properties (like MeanSelfEpsilon) 
+        dominate optimization even when they're already close to target, preventing 
+        less sensitive properties (like Hydrophobicity) from optimizing.
+        
+        Parameters
+        ----------
+        current_sequence : str
+            Current best sequence
+        candidate_data : List, optional
+            List of (candidate_sequence, property_values_dict) from recent evaluations
+            Used to estimate property sensitivity to mutations
+        """
+        if not self.adaptive_scaling or len(self.properties) <= 1:
+            return
+            
+        protein = sparrow.Protein(current_sequence)
+        
+        # Calculate current state for all properties
+        property_info = []
+        for prop in self.properties:
+            current_value = prop.calculate_raw_value(protein)
+            raw_error = prop.calculate_error(current_value)
+            
+            # Calculate relative distance from target (normalized by target or 1.0 if target is 0)
+            target = prop.target_value
+            if target != 0:
+                relative_distance = abs(current_value - target) / abs(target)
+            else:
+                relative_distance = abs(current_value - target)
+            
+            property_info.append((prop, current_value, raw_error, relative_distance))
+        
+        # Estimate sensitivity from candidate data if available
+        sensitivity_factors = self._estimate_property_sensitivities(candidate_data) if candidate_data else {}
+        
+        # Calculate adaptive scaling
+        for prop, current_value, raw_error, relative_distance in property_info:
+            prop_name = prop.__class__.__name__
+            
+            if raw_error == 0:
+                # Property is at target - give it very low priority
+                prop._scaling_value = 0.05
+                continue
+            
+            # Base scaling starts at 1.0
+            base_scaling = 1.0
+            
+            # 1. Distance-based scaling: properties farther from target get higher priority
+            max_relative_distance = max(info[3] for info in property_info)
+            if max_relative_distance > 0:
+                distance_factor = relative_distance / max_relative_distance
+                distance_scaling = 0.5 + (1.5 * distance_factor)  # Scale between 0.5 and 2.0
+            else:
+                distance_scaling = 1.0
+            
+            # 2. Proximity penalty: reduce scaling for properties very close to target
+            if relative_distance < 0.1:  # Within 10% of target
+                proximity_penalty = 0.3  # Reduce scaling significantly
+            elif relative_distance < 0.25:  # Within 25% of target  
+                proximity_penalty = 0.6
+            else:
+                proximity_penalty = 1.0  # No penalty
+            
+            # 3. Sensitivity adjustment: reduce scaling for highly sensitive properties
+            sensitivity_factor = sensitivity_factors.get(prop_name, 1.0)
+            if sensitivity_factor > 2.0:  # Highly sensitive
+                sensitivity_adjustment = 0.4
+            elif sensitivity_factor > 1.5:  # Moderately sensitive
+                sensitivity_adjustment = 0.7
+            else:
+                sensitivity_adjustment = 1.0
+            
+            # Combine all factors
+            final_scaling = base_scaling * distance_scaling * proximity_penalty * sensitivity_adjustment
+            
+            # CRITICAL FIX: Ensure minimum scaling for properties far from target
+            # Even sensitive properties need some attention if they're way off target
+            if relative_distance > 1.0:  # More than 100% away from target
+                min_scaling_for_distant = 0.2
+            elif relative_distance > 0.5:  # More than 50% away from target  
+                min_scaling_for_distant = 0.1
+            else:
+                min_scaling_for_distant = 0.05
+            
+            # Clamp to reasonable bounds, respecting minimum for distant properties
+            prop._scaling_value = max(min_scaling_for_distant, min(3.0, final_scaling))
+        
+        # Recalculate best_error with new scaling values
+        self.best_error, _ = PropertyCalculator.calculate_property_errors(
+            protein, self.properties, self
+        )
+        
+        if self.verbose:
+            self.logger.info("Sensitivity-aware adaptive scaling updated:")
+            for prop, current_value, raw_error, relative_distance in property_info:
+                prop_name = prop.__class__.__name__
+                sensitivity = sensitivity_factors.get(prop_name, "unknown")
+                
+                # Add status indicators
+                status_flags = []
+                if relative_distance < 0.1:
+                    status_flags.append("NEAR_TARGET")
+                if relative_distance > 1.0:
+                    status_flags.append("FAR_FROM_TARGET")
+                if isinstance(sensitivity, float) and sensitivity > 2.0:
+                    status_flags.append("HIGH_SENSITIVITY")
+                
+                status_str = f" [{', '.join(status_flags)}]" if status_flags else ""
+                
+                self.logger.info(
+                    f"  {prop_name}: scaling = {prop._scaling_value:.3f}, "
+                    f"error = {raw_error:.3f}, rel_dist = {relative_distance:.3f}, "
+                    f"sensitivity = {sensitivity}{status_str}"
+                )
+            self.logger.info(f"  New best_error: {self.best_error:.5f}")
+            
+            # Check for potentially incompatible properties
+            incompatible_props = []
+            for prop, current_value, raw_error, relative_distance in property_info:
+                prop_name = prop.__class__.__name__
+                # A property might be incompatible if it's both highly sensitive AND very far from target
+                if (isinstance(sensitivity_factors.get(prop_name), float) and 
+                    sensitivity_factors.get(prop_name) > 2.5 and 
+                    relative_distance > 1.0):
+                    incompatible_props.append((prop_name, current_value, prop.target_value))
+            
+            if incompatible_props:
+                self.logger.warning("POTENTIAL INCOMPATIBILITY DETECTED:")
+                for prop_name, current_val, target_val in incompatible_props:
+                    self.logger.warning(
+                        f"  {prop_name}: current={current_val:.2f}, target={target_val:.2f} "
+                        f"(highly sensitive + far from target)"
+                    )
+                self.logger.warning(
+                    "Consider: (1) Relaxing targets, (2) Using 'minimum'/'maximum' constraints, "
+                    "(3) Checking if target combination is physically possible"
+                )
+            
+    def _estimate_property_sensitivities(self, candidate_data: List) -> Dict[str, float]:
+        """
+        Estimate how sensitive each property is to sequence mutations.
+        
+        Parameters
+        ----------
+        candidate_data : List
+            List of (sequence, {property_name: value}) from recent evaluations
+            
+        Returns
+        -------
+        Dict[str, float]
+            Property name -> sensitivity factor (higher = more sensitive to changes)
+        """
+        if len(candidate_data) < 2:
+            return {}
+        
+        # Calculate variance in property values across candidates
+        property_variances = {}
+        property_names = list(candidate_data[0][1].keys()) if candidate_data else []
+        
+        for prop_name in property_names:
+            values = [data[1][prop_name] for data in candidate_data if prop_name in data[1]]
+            if len(values) > 1:
+                variance = np.var(values)
+                property_variances[prop_name] = variance
+        
+        if not property_variances:
+            return {}
+        
+        # Normalize variances to get relative sensitivity factors
+        max_variance = max(property_variances.values())
+        if max_variance == 0:
+            return {name: 1.0 for name in property_names}
+        
+        sensitivity_factors = {
+            name: variance / max_variance * 3.0 + 0.5  # Scale between 0.5 and 3.5
+            for name, variance in property_variances.items()
+        }
+        
+        return sensitivity_factors
+
+    def trigger_adaptive_scaling(self, sequence: str) -> None:
+        """
+        Manually trigger adaptive scaling recalculation.
+        
+        Parameters
+        ----------
+        sequence : str
+            Current sequence to evaluate for adaptive scaling
+        """
+        if not self.adaptive_scaling:
+            self.logger.warning("Adaptive scaling is disabled. Enable it first.")
+            return
+            
+        self._recalculate_adaptive_scaling(sequence, self._recent_candidate_data)
+    
+    def get_current_scaling_info(self) -> Dict[str, float]:
+        """
+        Get current scaling values for all properties.
+        
+        Returns
+        -------
+        Dict[str, float]
+            Dictionary mapping property names to their current scaling values
+        """
+        return {prop.__class__.__name__: prop._scaling_value for prop in self.properties}
+        
+    def get_property_sensitivity_info(self) -> Dict[str, Dict[str, float]]:
+        """
+        Get detailed sensitivity and scaling information for all properties.
+        
+        Returns
+        -------
+        Dict[str, Dict[str, float]]
+            Property name -> dict with scaling, error, distance info
+        """
+        if not self.properties:
+            return {}
+            
+        # Get current sequence (use initial if no optimization has run)
+        if hasattr(self, 'best_sequence'):
+            current_sequence = self.best_sequence
+        elif self.initial_sequence:
+            current_sequence = self.initial_sequence
+        else:
+            return {}
+        
+        protein = sparrow.Protein(current_sequence)
+        sensitivity_factors = self._estimate_property_sensitivities(self._recent_candidate_data)
+        
+        info = {}
+        for prop in self.properties:
+            prop_name = prop.__class__.__name__
+            current_value = prop.calculate_raw_value(protein)
+            raw_error = prop.calculate_error(current_value)
+            
+            target = prop.target_value
+            if target != 0:
+                relative_distance = abs(current_value - target) / abs(target)
+            else:
+                relative_distance = abs(current_value - target)
+            
+            info[prop_name] = {
+                'current_scaling': prop._scaling_value,
+                'raw_error': raw_error,
+                'relative_distance': relative_distance,
+                'sensitivity_factor': sensitivity_factors.get(prop_name, 'unknown'),
+                'current_value': current_value,
+                'target_value': target
+            }
+        
+        return info
+    
+    def boost_distant_properties(self, distance_threshold: float = 1.0) -> List[str]:
+        """
+        Boost scaling for properties that have drifted very far from their targets.
+        This can help recover properties that were over-suppressed by sensitivity scaling.
+        
+        Parameters
+        ----------
+        distance_threshold : float
+            Relative distance threshold for boosting (default: 1.0 = 100% away from target)
+            
+        Returns
+        -------
+        List[str]
+            Names of properties that were boosted
+        """
+        if not self.properties:
+            return []
+            
+        # Get current sequence
+        if hasattr(self, 'best_sequence'):
+            current_sequence = self.best_sequence
+        elif self.initial_sequence:
+            current_sequence = self.initial_sequence
+        else:
+            return []
+        
+        protein = sparrow.Protein(current_sequence)
+        boosted_properties = []
+        
+        for prop in self.properties:
+            prop_name = prop.__class__.__name__
+            current_value = prop.calculate_raw_value(protein)
+            
+            target = prop.target_value
+            if target != 0:
+                relative_distance = abs(current_value - target) / abs(target)
+            else:
+                relative_distance = abs(current_value - target)
+            
+            if relative_distance > distance_threshold:
+                # Boost scaling significantly for distant properties
+                prop._scaling_value = max(prop._scaling_value, 0.5)
+                boosted_properties.append(prop_name)
+                
+        if self.verbose and boosted_properties:
+            self.logger.info(f"Boosted scaling for distant properties: {boosted_properties}")
+            
+        return boosted_properties
+    
+    def analyze_optimization_state(self, current_sequence: str) -> Dict[str, Any]:
+        """
+        Analyze the current optimization state to identify potential issues.
+        
+        Parameters
+        ----------
+        current_sequence : str
+            Current best sequence
+            
+        Returns
+        -------
+        Dict[str, Any]
+            Analysis results with recommendations
+        """
+        protein = sparrow.Protein(current_sequence)
+        analysis = {
+            'properties': {},
+            'scaling_issues': [],
+            'recommendations': [],
+            'total_error': self.best_error
+        }
+        
+        total_unscaled_error = 0
+        dominant_properties = []
+        
+        for prop in self.properties:
+            prop_name = prop.__class__.__name__
+            current_value = prop.calculate_raw_value(protein)
+            raw_error = prop.calculate_error(current_value)
+            weighted_error = raw_error * prop.weight * prop._scaling_value
+            
+            target = prop.target_value
+            if target != 0:
+                relative_distance = abs(current_value - target) / abs(target)
+            else:
+                relative_distance = abs(current_value - target)
+            
+            total_unscaled_error += raw_error * prop.weight
+            
+            # Check if this property is dominating the error
+            error_contribution = weighted_error / self.best_error if self.best_error > 0 else 0
+            if error_contribution > 0.7:
+                dominant_properties.append(prop_name)
+            
+            analysis['properties'][prop_name] = {
+                'current_value': current_value,
+                'target_value': target,
+                'raw_error': raw_error,
+                'weighted_error': weighted_error,
+                'scaling': prop._scaling_value,
+                'weight': prop.weight,
+                'relative_distance': relative_distance,
+                'error_contribution': error_contribution,
+                'iterations_since_improvement': prop.iterations_since_improvement
+            }
+            
+            # Identify scaling issues
+            if prop._scaling_value < 0.1 and relative_distance > 0.5:
+                analysis['scaling_issues'].append(
+                    f"{prop_name}: Very low scaling ({prop._scaling_value:.3f}) but far from target"
+                )
+            elif prop._scaling_value > 2.0 and relative_distance < 0.1:
+                analysis['scaling_issues'].append(
+                    f"{prop_name}: High scaling ({prop._scaling_value:.3f}) but already near target"
+                )
+        
+        # Generate recommendations
+        if dominant_properties:
+            analysis['recommendations'].append(
+                f"Properties {dominant_properties} are dominating the error. "
+                "Consider reducing their scaling or relaxing their targets."
+            )
+        
+        if analysis['scaling_issues']:
+            analysis['recommendations'].append(
+                "Scaling issues detected. Consider manual adjustment or disabling adaptive scaling temporarily."
+            )
+        
+        if self.iterations_since_improvement > self.adaptive_scaling_interval * 3:
+            analysis['recommendations'].append(
+                f"No improvement for {self.iterations_since_improvement} iterations. "
+                "Consider increasing mutation rate, changing shuffle parameters, or resetting scaling."
+            )
+        
+        # Compare scaled vs unscaled error
+        analysis['total_unscaled_error'] = total_unscaled_error
+        analysis['scaling_effect_ratio'] = self.best_error / total_unscaled_error if total_unscaled_error > 0 else 1
+        
+        return analysis
+    
+    def reset_to_conservative_scaling(self) -> None:
+        """
+        Reset all properties to conservative, balanced scaling values.
+        Useful when adaptive scaling has gone wrong.
+        """
+        for prop in self.properties:
+            prop._scaling_value = 1.0
+            
+        if self.verbose:
+            self.logger.info("Reset all properties to conservative scaling (1.0)")
+    
+    def force_balanced_scaling(self, current_sequence: str) -> None:
+        """
+        Force balanced scaling based only on distance from target, ignoring sensitivity.
+        Useful when sensitivity-based scaling is preventing convergence.
+        """
+        protein = sparrow.Protein(current_sequence)
+        
+        # Calculate relative distances
+        distances = []
+        for prop in self.properties:
+            current_value = prop.calculate_raw_value(protein)
+            raw_error = prop.calculate_error(current_value)
+            distances.append(raw_error)
+        
+        max_error = max(distances) if distances else 1
+        
+        for i, prop in enumerate(self.properties):
+            if distances[i] == 0:
+                prop._scaling_value = 0.1  # At target
+            else:
+                # Scale proportionally to error, between 0.2 and 2.0
+                relative_error = distances[i] / max_error
+                prop._scaling_value = 0.2 + (1.8 * relative_error)
+        
+        # Recalculate error
+        self.best_error, _ = PropertyCalculator.calculate_property_errors(
+            protein, self.properties, self
+        )
+        
+        if self.verbose:
+            self.logger.info("Applied balanced scaling based on error magnitude:")
+            for prop in self.properties:
+                self.logger.info(f"  {prop.__class__.__name__}: scaling = {prop._scaling_value:.3f}")
+    
+    def print_quick_diagnostic(self, current_sequence: str) -> None:
+        """Print a quick diagnostic summary of the current optimization state."""
+        analysis = self.analyze_optimization_state(current_sequence)
+        
+        print("\n=== OPTIMIZATION DIAGNOSTIC ===")
+        print(f"Total Error: {analysis['total_error']:.3f}")
+        print(f"Iterations since improvement: {self.iterations_since_improvement}")
+        print(f"Adaptive scaling: {'ON' if self.adaptive_scaling else 'OFF'}")
+        
+        print("\nPROPERTY STATUS:")
+        for prop_name, info in analysis['properties'].items():
+            status = ""
+            if info['error_contribution'] > 0.5:
+                status += " [DOMINATING]"
+            if info['relative_distance'] < 0.1:
+                status += " [NEAR_TARGET]"
+            if info['relative_distance'] > 1.0:
+                status += " [FAR_FROM_TARGET]"
+            if info['iterations_since_improvement'] > self.adaptive_scaling_interval:
+                status += " [STAGNANT]"
+                
+            print(f"  {prop_name}: {info['current_value']:.3f} -> {info['target_value']:.3f} "
+                  f"(error: {info['raw_error']:.3f}, scaling: {info['scaling']:.3f}){status}")
+        
+        if analysis['recommendations']:
+            print("\nRECOMMENDATIONS:")
+            for rec in analysis['recommendations']:
+                print(f"  • {rec}")
+        
+        print("=== END DIAGNOSTIC ===\n")
+    
+    def adjust_mutation_aggressiveness(self, increase_aggressiveness: bool = False) -> None:
+        """
+        Adjust mutation engine aggressiveness during optimization.
+        
+        Parameters
+        ----------
+        increase_aggressiveness : bool
+            If True, make mutations more aggressive. If False, make them more conservative.
+        """
+        if increase_aggressiveness:
+            # Make mutations more aggressive
+            self.mutation_engine.conservative_mode = False
+            self.mutation_engine.max_k = min(5, self.mutation_engine.max_k + 1)
+            if self.verbose:
+                self.logger.info("Increased mutation aggressiveness")
+        else:
+            # Make mutations more conservative
+            self.mutation_engine.conservative_mode = True
+            self.mutation_engine.max_k = max(1, self.mutation_engine.max_k - 1)
+            if self.verbose:
+                self.logger.info("Decreased mutation aggressiveness")
+
     
     # Property management
     def add_property(self, property_class: type, *args: Any, **kwargs: Any) -> None:
@@ -972,7 +1449,9 @@ class SequenceOptimizer:
         window_size: Optional[int] = None,
         num_shuffles: Optional[int] = None,
         shuffle_interval: Optional[int] = None,
-        just_shuffle: Optional[bool] = None
+        just_shuffle: Optional[bool] = None,
+        adaptive_scaling: Optional[bool] = None,
+        adaptive_scaling_interval: Optional[int] = None
     ) -> None:
         """Set optimization parameters."""
         if max_iterations is not None:
@@ -987,6 +1466,10 @@ class SequenceOptimizer:
             self.shuffle_interval = shuffle_interval
         if just_shuffle is not None:
             self.just_shuffle = just_shuffle
+        if adaptive_scaling is not None:
+            self.adaptive_scaling = adaptive_scaling
+        if adaptive_scaling_interval is not None:
+            self.adaptive_scaling_interval = adaptive_scaling_interval
     
     def set_initial_sequence(self, sequence: str) -> None:
         """Set initial sequence for optimization."""
@@ -1020,13 +1503,22 @@ class SequenceOptimizer:
                 self.kmer_dict, self.target_length
             )
         
-        # Calculate initial property values for scaling
+        # Calculate initial property values
         self._calculate_initial_property_values(best_sequence)
         
         # Initial error calculation
-        self.best_error, directions, best_error_with_initial_scaling = PropertyCalculator.calculate_property_errors(
+        self.best_error, directions = PropertyCalculator.calculate_property_errors(
             sparrow.Protein(best_sequence), self.properties, self
         )
+        
+        # Initialize property tracking values with initial results
+        for prop in self.properties:
+            prop_name = prop.__class__.__name__
+            if prop_name in directions:
+                prop.best_raw_value = directions[prop_name]['current_value']
+                prop.best_raw_error = directions[prop_name]['raw_error'] 
+                prop.best_weighted_error = directions[prop_name]['weighted_error']
+                prop.iterations_since_improvement = 0
         
         # Optimization loop
         best_sequence, final_error = self._optimization_loop(
@@ -1063,7 +1555,6 @@ class SequenceOptimizer:
         """
         best_sequence = initial_sequence
         self.best_error = initial_error
-        best_error_with_initial_scaling = initial_error
         directions = initial_directions
         
         with tqdm(total=self.max_iterations, desc="Optimizing") as pbar:
@@ -1072,72 +1563,92 @@ class SequenceOptimizer:
                 candidates = self._generate_candidates(
                     best_sequence, directions, iteration
                 )
-                # track if scaling changes.
-                scaling_changed = False
 
-                # increase iterations since improvement
+                # Increment iterations since improvement for all properties
                 self.iterations_since_improvement += 1
+                for prop in self.properties:
+                    prop.iterations_since_improvement += 1
 
                 # Evaluate candidates
                 for candidate in candidates:
                     protein = sparrow.Protein(candidate)
 
-                    # Clear scaling change tracking before calculation
-                    if hasattr(self, '_scaling_changed'):
-                        self._scaling_changed.clear()
-
-                    error, new_directions, candidate_error_with_initial_scaling = PropertyCalculator.calculate_property_errors(
+                    error, new_directions = PropertyCalculator.calculate_property_errors(
                         protein, self.properties, self
                     )
                     
-                    # Check if scaling changed during this evaluation
-                    if hasattr(self, '_scaling_changed') and self._scaling_changed:
-                        scaling_changed = True
+                    # Collect candidate data for sensitivity analysis
+                    if self.adaptive_scaling:
+                        candidate_property_values = {
+                            prop_name: info['current_value'] 
+                            for prop_name, info in new_directions.items()
+                        }
+                        self._recent_candidate_data.append((candidate, candidate_property_values))
+                        
+                        # Keep only recent candidates
+                        if len(self._recent_candidate_data) > self._max_candidate_history:
+                            self._recent_candidate_data.pop(0)
 
                     if error < self.best_error:
                         best_sequence = candidate
                         self.best_error = error
                         directions = new_directions
-                        best_error_with_initial_scaling = candidate_error_with_initial_scaling
                         self.iterations_since_improvement = 0
 
-                        # Update property states
+                        # Update property states with best values
                         for prop in self.properties:
                             prop_name = prop.__class__.__name__
                             if prop_name in directions:
-                                prop._best_value = directions[prop_name]['scaled_error']
-                                prop._current_raw_value = directions[prop_name]['current_value']
-
-                
-                # If scaling changed, recalculate best_error with new scaling
-                if scaling_changed:
-                    
-                    # Recalculate best_error with updated scaling
-                    protein = sparrow.Protein(best_sequence)
-                    self.best_error, directions, candidate_error_with_initial_scaling = PropertyCalculator.calculate_property_errors(
-                        protein, self.properties, self
-                    )
-                    
-                    # Update property states with new scaling
-                    for prop in self.properties:
-                        prop_name = prop.__class__.__name__
-                        if prop_name in directions:
-                            prop._best_value = directions[prop_name]['scaled_error']
-                            prop._current_raw_value = directions[prop_name]['current_value']
-
-
+                                # Check if this property specifically improved
+                                current_error = directions[prop_name]['raw_error']
+                                if prop.best_raw_error is None or current_error < prop.best_raw_error:
+                                    prop.iterations_since_improvement = 0
+                                    
+                                # Update best achieved values for this property
+                                prop.best_raw_value = directions[prop_name]['current_value']
+                                prop.best_raw_error = directions[prop_name]['raw_error']
+                                prop.best_weighted_error = directions[prop_name]['weighted_error']
 
                 # Check convergence
                 if self.best_error < self.tolerance:
                     self.logger.info(f"Converged at iteration {iteration}")
                     break
                 
+                # Adaptive scaling check
+                if (self.adaptive_scaling and 
+                    iteration > 0 and 
+                    iteration % self.adaptive_scaling_interval == 0):
+                    # Check if we should temporarily disable adaptive scaling if stuck
+                    if (self.iterations_since_improvement > self.adaptive_scaling_interval * 4 and
+                        hasattr(self, '_adaptive_scaling_failures')):
+                        self._adaptive_scaling_failures += 1
+                        if self._adaptive_scaling_failures > 3:
+                            if self.verbose:
+                                self.logger.warning("Adaptive scaling seems to be hindering progress. Temporarily disabling.")
+                            self.adaptive_scaling = False
+                            self.force_balanced_scaling(best_sequence)
+                    else:
+                        self._recalculate_adaptive_scaling(best_sequence, self._recent_candidate_data)
+                        if not hasattr(self, '_adaptive_scaling_failures'):
+                            self._adaptive_scaling_failures = 0
+                
+                # Auto-adjust mutation aggressiveness if stuck (but be more careful about timing)
+                if (iteration > 0 and 
+                    iteration % (self.adaptive_scaling_interval * 2) == 0 and
+                    self.iterations_since_improvement > self.adaptive_scaling_interval):
+                    # Early in optimization: if stuck, try more aggressive exploration
+                    if iteration < self.max_iterations * 0.3 and self.iterations_since_improvement > self.adaptive_scaling_interval * 3:
+                        self.adjust_mutation_aggressiveness(increase_aggressiveness=True)
+                    # Later in optimization: if we became aggressive but still stuck, go back to conservative
+                    elif iteration > self.max_iterations * 0.3 and not self.mutation_engine.conservative_mode:
+                        self.adjust_mutation_aggressiveness(increase_aggressiveness=False)
+                
                 # Update progress
                 if iteration % self.gap_to_report == 0:
                     pbar.n = iteration  # Set absolute position
                     pbar.refresh()      # Refresh display
                     if iteration > 0:
-                        pbar.set_description(f"Best Error = {best_error_with_initial_scaling:.5f}")
+                        pbar.set_description(f"Best Error = {self.best_error:.5f}")
                     else:
                         pbar.set_description(f"Best Error = N/A")
                     
@@ -1148,7 +1659,7 @@ class SequenceOptimizer:
                 if iteration == self.max_iterations - 1:
                     pbar.n = self.max_iterations
                     pbar.refresh()
-                    pbar.set_description(f"Best Error = {best_error_with_initial_scaling:.5f}")
+                    pbar.set_description(f"Best Error = {self.best_error:.5f}")
         
         return best_sequence, self.best_error
     
@@ -1184,23 +1695,31 @@ class SequenceOptimizer:
         if self.just_shuffle:
             # Only generate shuffled variants
             num_shuffles = max(1, num_shuffles)  # Ensure at least one shuffle
+            # Use conservative shuffling when adaptive scaling is on
+            conservative_shuffling = self.adaptive_scaling
             candidates.extend(
                 ShuffleStrategy.generate_shuffled_variants(
-                    sequence, num_shuffles, self.window_size
+                    sequence, num_shuffles, self.window_size, 
+                    strategy="adaptive" if conservative_shuffling else "mixed",
+                    iteration=iteration, max_iterations=self.max_iterations
                 )
             )
         else:
             # Generate mutated sequence
             mutated = self.mutation_engine.mutate_sequence(
-                sequence, directions, self.fixed_ranges
+                sequence, directions, self.fixed_ranges, iteration
             )
             candidates.append(mutated)
             
             # Add shuffled variants if requested
             if num_shuffles > 0:
+                # Use conservative shuffling when adaptive scaling is on
+                conservative_shuffling = self.adaptive_scaling
                 candidates.extend(
                     ShuffleStrategy.generate_shuffled_variants(
-                        mutated, num_shuffles, self.window_size
+                        mutated, num_shuffles, self.window_size,
+                        strategy="adaptive" if conservative_shuffling else "mixed",
+                        iteration=iteration, max_iterations=self.max_iterations
                     )
                 )
         
@@ -1216,16 +1735,19 @@ class SequenceOptimizer:
         self.logger.info(f"Best Sequence = {best_sequence}")
         
         for prop in self.properties:
-            current_value = getattr(prop, '_current_raw_value', None)
-            best_value = getattr(prop, '_best_value', None)
+            current_raw_value = getattr(prop, 'current_raw_value', None)
+            best_raw_value = getattr(prop, 'best_raw_value', None)
+            best_weighted_error = getattr(prop, 'best_weighted_error', None)
             
-            current_str = f"{current_value:.3f}" if current_value is not None else "None"
-            best_str = f"{best_value:.3f}" if best_value is not None else "None"
+            current_str = f"{current_raw_value:.3f}" if current_raw_value is not None else "None"
+            best_value_str = f"{best_raw_value:.3f}" if best_raw_value is not None else "None"
+            best_error_str = f"{best_weighted_error:.3f}" if best_weighted_error is not None else "None"
             
             self.logger.info(
                 f"{prop.__class__.__name__} targeting "
                 f"{prop.constraint_type.value} value of {prop.target_value}: "
-                f"raw value is {current_str}, scaled error is {best_str}"
+                f"current value = {current_str}, best value = {best_value_str}, "
+                f"best weighted error = {best_error_str}"
             )
     
     def _log_results(self, sequence: str) -> None:
@@ -1276,7 +1798,9 @@ class SequenceOptimizer:
             "window_size": self.window_size,
             "num_shuffles": self.num_shuffles,
             "shuffle_interval": self.shuffle_interval,
-            "initial_sequence": self.initial_sequence
+            "initial_sequence": self.initial_sequence,
+            "adaptive_scaling": self.adaptive_scaling,
+            "adaptive_scaling_interval": self.adaptive_scaling_interval
         }
         
         with open(filename, 'w') as f:
@@ -1304,7 +1828,9 @@ class SequenceOptimizer:
             tolerance=config['tolerance'],
             window_size=config['window_size'],
             num_shuffles=config['num_shuffles'],
-            shuffle_interval=config['shuffle_interval']
+            shuffle_interval=config['shuffle_interval'],
+            adaptive_scaling=config.get('adaptive_scaling', True),
+            adaptive_scaling_interval=config.get('adaptive_scaling_interval', 100)
         )
         
         if config.get('initial_sequence'):
@@ -1355,7 +1881,9 @@ class SequenceOptimizer:
             'fixed_residue_ranges': self.fixed_ranges,
             'initial_sequence': self.initial_sequence,
             'gap_to_report': self.gap_to_report,
-            'just_shuffle': self.just_shuffle
+            'just_shuffle': self.just_shuffle,
+            'adaptive_scaling': self.adaptive_scaling,
+            'adaptive_scaling_interval': self.adaptive_scaling_interval
         }
     
     def log_defined_properties(self) -> None:
