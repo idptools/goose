@@ -238,7 +238,7 @@ class VectorManipulation:
     Class for various vector manipulation techniques.
     """
     @staticmethod
-    def resize_vector(original_vector: list[float], new_size: int) -> list[float]:
+    def resize_vector(original_vector: List[float], new_size: int) -> List[float]:
         """
         Resizes a 1D vector to a new size using linear interpolation.
 
@@ -314,7 +314,7 @@ class VectorManipulation:
 
         return new_vector
 
-    def multiply_attractive_force(vector: list[float], factor: float) -> list[float]:
+    def multiply_attractive_force(vector: List[float], factor: float) -> List[float]:
         """
         Multiply the attractive force of a vector by a given factor.
 
@@ -336,7 +336,7 @@ class VectorManipulation:
         # only change attractive values, which are negative.
         return [x * factor if x < 0 else x for x in vector]
     
-    def multiply_repulsive_force(vector: list[float], factor: float) -> list[float]:
+    def multiply_repulsive_force(vector: List[float], factor: float) -> List[float]:
         """
         Multiply the repulsive  force of a vector by a given factor.
 

@@ -103,6 +103,12 @@ class ProteinProperty(ABC):
 
         # track scaling value. Start with set to 1. 
         self._scaling_value = 1.0
+
+        # set min norm factor
+        self._min_normalization_factor = None  # No minimum by default
+
+        # tolerance that can be overridden by the user.
+        self._tolerance = 0.0
     
     def set_initial_value(self, value: float) -> None:
         """
@@ -319,7 +325,8 @@ class FCR(ProteinProperty):
     """
     def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         super().__init__(target_value, weight, constraint_type)
-
+        self._min_normalization_factor = 1
+    
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.FCR
 
