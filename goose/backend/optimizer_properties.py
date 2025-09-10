@@ -3,6 +3,7 @@ from typing import Any, Tuple, Dict, Callable
 from enum import Enum
 import numpy as np
 import statistics as stat
+import logging
 
 import sparrow
 import metapredict as meta
@@ -140,9 +141,13 @@ class ProteinProperty(ABC):
     def _get_sequence_length_hint(self) -> int:
         """
         Get sequence length hint for length-dependent scaling calculations.
-        Override in subclasses or set via optimizer if needed.
+        
+        Returns
+        -------
+        int
+            Sequence length hint for calculations
         """
-        # Try to get from optimizer context if available
+        # Use sequence length set by optimizer (when property is added)
         if hasattr(self, '_sequence_length_hint'):
             return self._sequence_length_hint
         
@@ -150,12 +155,8 @@ class ProteinProperty(ABC):
         return 100
 
     def _set_sequence_length_hint(self, length: int) -> None:
-        """Set sequence length hint for scaling calculations."""
+        """Set sequence length hint from optimizer."""
         self._sequence_length_hint = length
-
-    def set_sequence_length_hint(self, length: int) -> None:
-        """Public method to set sequence length hint for scaling calculations."""
-        self._set_sequence_length_hint(length)
 
     
     @property
@@ -926,6 +927,7 @@ class EpsilonMatrixProperty(EpsilonProperty):
         """
         target_matrix_size = self.target_matrix.shape
         generated_seq_length = self._get_sequence_length_hint()
+
         # Determine the size of the generated matrix based on interaction type
         if self.homotypic_interaction:
             generated_matrix_size = (generated_seq_length - self.window_size + 1, generated_seq_length - self.window_size + 1)

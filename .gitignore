@@ -13,6 +13,9 @@ __pycache__/
 goose/roadmap.txt
 ../roadmap.txt
 
+# claude
+./claude
+/claude
 # _version.py
 goose/_version.py
 

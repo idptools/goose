@@ -137,19 +137,19 @@ All property classes support three constraint types and individual tolerances:
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | Property Class                | Description                                   | Key Arguments                                  |
 +===============================+===============================================+================================================+
-| Hydrophobicity                | Average hydrophobicity (0-6.6 scale)         | target_value, weight, constraint_type          |
+| Hydrophobicity                | Average hydrophobicity (0-6.6 scale)          | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| FCR                           | Fraction of Charged Residues (0-1)           | target_value, weight, constraint_type          |
+| FCR                           | Fraction of Charged Residues (0-1)            | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| NCPR                          | Net Charge Per Residue (-1 to 1)             | target_value, weight, constraint_type          |
+| NCPR                          | Net Charge Per Residue (-1 to 1)              | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| Kappa                         | Charge patterning parameter (0-1)            | target_value, weight, constraint_type          |
+| Kappa                         | Charge patterning parameter (0-1)             | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| SCD                           | Sequence Charge Decoration                   | target_value, weight, constraint_type          |
+| SCD                           | Sequence Charge Decoration                    | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| SHD                           | Sequence Hydropathy Decoration               | target_value, weight, constraint_type          |
+| SHD                           | Sequence Hydropathy Decoration                | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| Complexity                    | Wootton-Federhen (SEG) complexity            | target_value, weight, constraint_type          |
+| Complexity                    | Wootton-Federhen (SEG) complexity             | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 
 **Structural Properties**
@@ -157,9 +157,9 @@ All property classes support three constraint types and individual tolerances:
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | Property Class                | Description                                   | Key Arguments                                  |
 +===============================+===============================================+================================================+
-| RadiusOfGyration              | Predicted radius of gyration (Å)             | target_value, weight, constraint_type          |
+| RadiusOfGyration              | Predicted radius of gyration (A)              | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| EndToEndDistance              | Predicted end-to-end distance (Å)            | target_value, weight, constraint_type          |
+| EndToEndDistance              | Predicted end-to-end distance (A)             | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | ComputeIWD                    | Inverse Weighted Distance                     | residues (tuple), target_value, weight,        |
 |                               |                                               | constraint_type                                |
@@ -170,16 +170,16 @@ All property classes support three constraint types and individual tolerances:
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | Property Class                | Description                                   | Key Arguments                                  |
 +===============================+===============================================+================================================+
-| FractionDisorder              | Fraction of disordered residues (0-1)        | target_value, weight, constraint_type,         |
+| FractionDisorder              | Fraction of disordered residues (0-1)         | target_value, weight, constraint_type,         |
 |                               |                                               | disorder_cutoff                                |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | AminoAcidFractions            | Target amino acid composition                 | target_fractions (dict), weight,               |
 |                               |                                               | constraint_type                                |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| MatchSequenceDisorder         | Match disorder profile of target sequence    | target_sequence, weight, constraint_type,      |
+| MatchSequenceDisorder         | Match disorder profile of target sequence     | target_sequence, weight, constraint_type,      |
 |                               |                                               | exact_match, target_value                      |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| MatchingResidues              | Number of matching residues to target        | target_sequence, target_value, weight,         |
+| MatchingResidues              | Number of matching residues to target         | target_sequence, target_value, weight,         |
 |                               |                                               | constraint_type                                |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 
@@ -188,14 +188,14 @@ All property classes support three constraint types and individual tolerances:
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | Property Class                | Description                                   | Key Arguments                                  |
 +===============================+===============================================+================================================+
-| MeanSelfEpsilon               | Self-interaction potential                    | target_value, weight, constraint_type, model, |
+| MeanSelfEpsilon               | Self-interaction potential                    | target_value, weight, constraint_type, model,  |
 |                               |                                               | preloaded_model                                |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| MeanEpsilonWithTarget         | Mean interaction with target sequence        | target_value, target_sequence, weight,         |
-|                               |                                               | constraint_type, model, preloaded_model       |
+| MeanEpsilonWithTarget         | Mean interaction with target sequence         | target_value, target_sequence, weight,         |
+|                               |                                               | constraint_type, model, preloaded_model        |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| ChemicalFingerprint           | Match chemical fingerprint to target         | target_sequence, target_value, weight,         |
-|                               |                                               | constraint_type, model, preloaded_model,      |
+| ChemicalFingerprint           | Match chemical fingerprint to target          | target_sequence, target_value, weight,         |
+|                               |                                               | constraint_type, model, preloaded_model,       |
 |                               |                                               | window_size                                    |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 
@@ -205,11 +205,11 @@ All property classes support three constraint types and individual tolerances:
 | Property Class                | Description                                   | Key Arguments                                  |
 +===============================+===============================================+================================================+
 | MatchSelfIntermap             | Match self-interaction matrix                 | sequence, weight, constraint_type, model,      |
-|                               |                                               | preloaded_model, inverse, window_size,        |
+|                               |                                               | preloaded_model, inverse, window_size,         |
 |                               |                                               | allow_matrix_resizing                          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| MatchIntermap                 | Match interaction matrix with target         | sequence, target_sequence, weight,             |
-|                               |                                               | constraint_type, model, preloaded_model,      |
+| MatchIntermap                 | Match interaction matrix with target          | sequence, target_sequence, weight,             |
+|                               |                                               | constraint_type, model, preloaded_model,       |
 |                               |                                               | window_size, allow_matrix_resizing             |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | ModifyAttractiveValues        | Modify attractive interactions                | sequence, target_sequence, multiplier,         |
@@ -217,13 +217,13 @@ All property classes support three constraint types and individual tolerances:
 |                               |                                               | preloaded_model, window_size                   |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | ModifyRepulsiveValues         | Modify repulsive interactions                 | interacting_sequence,                          |
-|                               |                                               | target_interacting_sequence, multiplier,      |
+|                               |                                               | target_interacting_sequence, multiplier,       |
 |                               |                                               | weight, constraint_type, model,                |
 |                               |                                               | preloaded_model, window_size                   |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | ModifyMatrixValues            | Modify both attractive and repulsive          | interacting_sequence,                          |
 |                               |                                               | target_interacting_sequence,                   |
-|                               |                                               | repulsive_multiplier, attractive_multiplier,  |
+|                               |                                               | repulsive_multiplier, attractive_multiplier,   |
 |                               |                                               | weight, constraint_type, model,                |
 |                               |                                               | preloaded_model, window_size                   |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
@@ -233,19 +233,19 @@ All property classes support three constraint types and individual tolerances:
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | Property Class                | Description                                   | Key Arguments                                  |
 +===============================+===============================================+================================================+
-| FDMeanSurfaceEpsilon          | Mean surface epsilon for folded domains      | target_value, weight, constraint_type, model, |
-|                               |                                               | preloaded_model, path_to_pdb, probe_radius,   |
-|                               |                                               | surface_thresh, sasa_mode, fd_start, fd_end,  |
+| FDMeanSurfaceEpsilon          | Mean surface epsilon for folded domains       | target_value, weight, constraint_type, model,  |
+|                               |                                               | preloaded_model, path_to_pdb, probe_radius,    |
+|                               |                                               | surface_thresh, sasa_mode, fd_start, fd_end,   |
 |                               |                                               | preloaded_fd                                   |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| FDSurfaceEpsilon              | Surface epsilon interactions                  | repulsive_target, attractive_target, weight,  |
-|                               |                                               | constraint_type, model, preloaded_model,      |
-|                               |                                               | path_to_pdb, probe_radius, surface_thresh,    |
-|                               |                                               | sasa_mode, fd_start, fd_end, preloaded_fd     |
+| FDSurfaceEpsilon              | Surface epsilon interactions                  | repulsive_target, attractive_target, weight,   |
+|                               |                                               | constraint_type, model, preloaded_model,       |
+|                               |                                               | path_to_pdb, probe_radius, surface_thresh,     |
+|                               |                                               | sasa_mode, fd_start, fd_end, preloaded_fd      |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| FDSurfacePatchInteractions    | Surface patch interaction analysis           | target_value, weight, constraint_type, model, |
-|                               |                                               | preloaded_model, path_to_pdb, probe_radius,   |
-|                               |                                               | surface_thresh, sasa_mode, fd_start, fd_end,  |
+| FDSurfacePatchInteractions    | Surface patch interaction analysis            | target_value, weight, constraint_type, model,  |
+|                               |                                               | preloaded_model, path_to_pdb, probe_radius,    |
+|                               |                                               | surface_thresh, sasa_mode, fd_start, fd_end,   |
 |                               |                                               | preloaded_fd, patch_residues                   |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 
@@ -495,7 +495,7 @@ The optimizer excels at balancing multiple competing properties simultaneously. 
    **Error Function**: Total error = sum(weight * max(0, effective_error - tolerance)) for each property, where effective_error depends on the constraint type.
 
 Advanced Features and Optimization Strategies
---------------------------------------------
+----------------------------------------------
 
 **Intelligent Initial Sequence Selection**
 
@@ -828,7 +828,7 @@ Creating custom properties is straightforward by subclassing ``ProteinProperty``
    - The base class automatically handles constraint types and tolerances
 
 Amino Acid Composition Control
------------------------------
+------------------------------
 
 The optimizer uses standard amino acid frequencies for sequence generation by default. Unlike the older k-mer dictionary system, the new optimizer focuses on direct property optimization rather than biased sequence generation.
 
@@ -969,7 +969,7 @@ The new ``SequenceOptimizer`` uses a sophisticated multi-stage optimization proc
 - **Multi-Criteria Stopping**: Robust convergence detection with multiple fallbacks
 
 Troubleshooting and Optimization Tips
-------------------------------------
+-------------------------------------
 
 **Optimization Not Converging**
 
@@ -1121,29 +1121,39 @@ Troubleshooting and Optimization Tips
 
 **Common Property Target Ranges**
 
-.. code-block:: text
-
-    Property                  Typical Range    Notes
-    ----------------------   --------------   -------------------------
-    Hydrophobicity           0.0 - 6.6        Higher = more hydrophobic
-    FCR                      0.0 - 1.0        Fraction charged residues
-    NCPR                     -1.0 - 1.0       Net charge per residue
-    Kappa                    0.0 - 1.0        Charge patterning
-    FractionDisorder         0.0 - 1.0        Use disorder_cutoff=0.5
-    RadiusOfGyration         Variable         Depends on sequence length
-    EndToEndDistance         Variable         Depends on sequence length
-    Complexity               0.0 - ~4.3       SEG complexity score
++----------------------+----------------+----------------------------------+
+| Property             | Typical Range  | Notes                            |
++======================+================+==================================+
+| Hydrophobicity       | 0.0 - 6.6      | Higher = more hydrophobic        |
++----------------------+----------------+----------------------------------+
+| FCR                  | 0.0 - 1.0      | Fraction charged residues        |
++----------------------+----------------+----------------------------------+
+| NCPR                 | -1.0 - 1.0     | Net charge per residue           |
++----------------------+----------------+----------------------------------+
+| Kappa                | 0.0 - 1.0      | Charge patterning                |
++----------------------+----------------+----------------------------------+
+| FractionDisorder     | 0.0 - 1.0      | Use disorder_cutoff=0.5          |
++----------------------+----------------+----------------------------------+
+| RadiusOfGyration     | Variable       | Depends on sequence length       |
++----------------------+----------------+----------------------------------+
+| EndToEndDistance     | Variable       | Depends on sequence length       |
++----------------------+----------------+----------------------------------+
+| Complexity           | 0.0 - ~4.3     | SEG complexity score             |
++----------------------+----------------+----------------------------------+
 
 **Performance Benchmarks**
 
-.. code-block:: text
-
-    Sequence Length    Simple Properties    Complex Properties    Epsilon Properties
-    ---------------    -----------------    ------------------    ------------------
-    50 residues        < 30 seconds         1-3 minutes          2-5 minutes
-    100 residues       1-2 minutes          5-10 minutes         10-20 minutes  
-    200 residues       5-10 minutes         20-30 minutes        30-60 minutes
-    500+ residues      20+ minutes          60+ minutes          120+ minutes
++-------------------+---------------------+----------------------+----------------------+
+| Sequence Length   | Simple Properties   | Complex Properties   | Epsilon Properties   |
++===================+=====================+======================+======================+
+| 50 residues       | < 30 seconds        | 1-3 minutes          | 2-5 minutes          |
++-------------------+---------------------+----------------------+----------------------+
+| 100 residues      | 1-2 minutes         | 5-10 minutes         | 10-20 minutes        |
++-------------------+---------------------+----------------------+----------------------+
+| 200 residues      | 5-10 minutes        | 20-30 minutes        | 30-60 minutes        |
++-------------------+---------------------+----------------------+----------------------+
+| 500+ residues     | 20+ minutes         | 60+ minutes          | 120+ minutes         |
++-------------------+---------------------+----------------------+----------------------+
 
 *Note: Times are approximate and depend on target complexity, number of properties, and hardware.*
 
@@ -1184,7 +1194,7 @@ Glossary
 - **stagnation threshold**: Number of iterations without improvement before stagnation response
 
 Examples and Demo Notebooks
---------------------------
+----------------------------
 
 GOOSE includes comprehensive demo notebooks showcasing advanced ``SequenceOptimizer`` usage:
 

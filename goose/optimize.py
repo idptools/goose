@@ -388,6 +388,9 @@ class SequenceOptimizer:
         # Set the per-property tolerance
         prop._tolerance = tolerance
         
+        # Set sequence length hint for length-dependent calculations
+        prop._set_sequence_length_hint(self.target_length)
+        
         self.properties.append(prop)
         
         prop_name = prop.__class__.__name__
@@ -845,7 +848,7 @@ class SequenceOptimizer:
         for prop_name, priority_score, trend_stagnant, normalization_stagnant, raw_error, norm_factor, contribution in property_priorities:
             # Only boost if contribution exceeds threshold
             if contribution < contribution_threshold:
-                if self.verbose:
+                if self.debugging:
                     self.logger.info(f"   ⏭️  Skipping {prop_name}: contribution {contribution*100:.1f}% < {contribution_threshold*100:.0f}% threshold")
                 continue
                 
@@ -1173,11 +1176,12 @@ class SequenceOptimizer:
             # Track error history
             self.best_error_history.append(self.best_error)
             
-            # Update progress
+            # Update progress bar once per iteration
             if self.verbose:
-                if self.iteration % self.update_interval == 0 and self.iteration > 0:
-                    progress_bar.update(self.update_interval)
-                    
+                progress_bar.update(1)
+                
+                # Update postfix display every update_interval iterations to avoid excessive overhead
+                if self.iteration % self.update_interval == 0:
                     # Count satisfied properties for progress display (use cached version)
                     current_property_info = self._get_best_sequence_property_info()
                     satisfied_count = sum(1 for info in current_property_info.values() if info.get('within_tolerance', False))
@@ -1198,8 +1202,7 @@ class SequenceOptimizer:
                         conv_info = self.get_convergence_info()
                         postfix['conv'] = f"{self.convergence_counter}/{self.convergence_patience}"
                         
-                    if self.debugging:
-                        progress_bar.set_postfix(postfix)
+                    progress_bar.set_postfix(postfix)
             
             # Check for convergence
             if self._check_convergence():
