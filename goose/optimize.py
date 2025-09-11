@@ -441,8 +441,7 @@ class SequenceOptimizer:
             
             for prop in self.properties:
                 prop_name = prop.__class__.__name__
-                raw_value = prop.calculate_raw_value(protein)
-                raw_error = prop.calculate_error(raw_value)
+                raw_value, raw_error = prop.calculate(protein)
                 cached_raw_values[prop_name] = {
                     'raw_value': raw_value,
                     'raw_error': raw_error,
@@ -557,8 +556,7 @@ class SequenceOptimizer:
         # Calculate initial errors for all properties
         for prop in self.properties:
             prop_name = prop.__class__.__name__
-            raw_value = prop.calculate_raw_value(protein)
-            raw_error = prop.calculate_error(raw_value)
+            raw_value, raw_error = prop.calculate(protein)
             
             # Store initial error (use small minimum to avoid division by zero)
             initial_error = max(raw_error, 1e-6)

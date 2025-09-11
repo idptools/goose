@@ -82,11 +82,35 @@ class ProteinProperty(ABC):
     # protein could be specified towards multiple targets and therefore we want this to be True for those classes. 
     # default is False
     multi_target = True  # Class-level attribute - override to limit ability to have multiple targets.
+    can_be_linear_profile = True  # Class-level attribute - override to disallow linear profiles
 
-    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
-        assert isinstance(target_value, (int,float)), f"target_value must be numerical. Received {type(target_value)}"
+    def __init__(self, target_value: float = None, weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT,
+                 window_size: int = 5, end_mode: str = 'extend',
+                 calculate_as_linear_profile: bool = False, target_sequence: str = None,
+                 target_profile: np.ndarray = None, **kwargs):
+        
+        # make sure that if not linear profile, target_value is set. 
+        if calculate_as_linear_profile is False:
+            if target_value is None and target_sequence is None:
+                    raise ValueError("When calculate_as_linear_profile is False, a target_sequence or target_value must be provided.")        
+        
+        if calculate_as_linear_profile is True:
+            if target_sequence is None and target_profile is None:
+                raise ValueError("When calculate_as_linear_profile is True, either target_sequence or target_profile must be provided.")
+        
+        # Validate end_mode
+        valid_end_modes = ['extend', 'clip', 'zeros']
+        if end_mode not in valid_end_modes:
+            raise ValueError(f"Invalid end_mode '{end_mode}'. Valid options are: {valid_end_modes}")
+    
+        # Validate inputs    
         assert isinstance(weight, (int,float)), f"Weight must be numerical. Received {type(weight)}"
-
+        if self.can_be_linear_profile is False and calculate_as_linear_profile is True:
+            raise ValueError(f"{self.__class__.__name__} cannot be calculated as a linear profile.")
+        if calculate_as_linear_profile is True and target_profile is None and target_sequence is None:
+            raise ValueError("When calculate_as_linear_profile is True, either target_profile or target_sequence must be provided.")
+        
         # handle constraint type if user inputs a string instead of Enum
         self.constraint_type = _normalize_constraint_type(constraint_type)
         self._target_value = target_value
@@ -105,11 +129,38 @@ class ProteinProperty(ABC):
         # track scaling value. Start with set to 1. 
         self._scaling_value = 1.0
 
-        # set min norm factor
-        self._min_normalization_factor = None  # No minimum by default
-
         # tolerance that can be overridden by the user.
         self._tolerance = 0.0
+
+        # window size for linear profiles
+        self.window_size = window_size
+        self.end_mode = end_mode  # How to handle ends in linear profiles
+        self.calculate_as_linear_profile = calculate_as_linear_profile
+        
+        # Placeholder for target profile if needed. Allows caching.
+        self.target_profile = target_profile  # also allows user to set a target profile if they want to.
+        self.target_resized = False # track that target has been resized.
+        self.target_sequence = target_sequence # sequence to calculate target profile from if needed.
+        
+        # set target value if needed.
+        self.set_target_value()
+
+    def set_target_value(self):
+        '''
+        override target value depending on what is set
+        '''
+        if self.target_value is None:
+            if self.calculate_as_linear_profile:
+                self.target_value=0.0
+            else:
+                if self.target_sequence is None:
+                    raise ValueError("When calculate_as_linear_profile is False, a target_sequence or target_value must be provided.")
+                else:
+                    self.target_value = self.calculate_raw_value(sparrow.Protein(self.target_sequence))
+                # else, target_value is already set. Do nothing.
+        else:
+            assert isinstance(self.target_value, (int,float)), f"target_value must be numerical. Received {type(self.target_value)}"
+
     
     def set_initial_value(self, value: float) -> None:
         """
@@ -151,8 +202,8 @@ class ProteinProperty(ABC):
         if hasattr(self, '_sequence_length_hint'):
             return self._sequence_length_hint
         
-        # Fallback to reasonable default
-        return 100
+        # raise error if not set
+        raise ValueError("Sequence length hint not set")
 
     def _set_sequence_length_hint(self, length: int) -> None:
         """Set sequence length hint from optimizer."""
@@ -178,11 +229,20 @@ class ProteinProperty(ABC):
         dict
             Dictionary containing the initialization arguments
         """
-        return {
+        vals = {
             "target_value": self.target_value,
             "weight": self.weight,
-            "constraint_type": self.constraint_type.value  # Store as string for JSON compatibility
+            "constraint_type": self.constraint_type.value,  # Store as string for JSON compatibility
+            "window_size": self.window_size,
+            "end_mode": self.end_mode,
+            "calculate_as_linear_profile": self.calculate_as_linear_profile,
+            "target_sequence": self.target_sequence,
+            "target_profile": self.target_profile
         }
+        # add kwargs vals if there are any.
+        if kwargs := getattr(self, '__dict__', {}).get('kwargs', None):
+            vals.update(kwargs)
+        return vals
 
     @classmethod
     def from_init_args(cls, args_dict: dict):
@@ -263,6 +323,82 @@ class ProteinProperty(ABC):
         """
         pass
 
+    def calculate_linear_profile_error(self, current_value: np.ndarray) -> float:
+        seq_length = self._get_sequence_length_hint()
+        if self.constraint_type == ConstraintType.EXACT:
+            return np.sum(np.abs(current_value - self.target_profile))/seq_length
+        elif self.constraint_type == ConstraintType.MINIMUM:
+            # only return the values below the minimum
+            return np.sum(np.maximum(0, self.target_profile - current_value))/seq_length
+        elif self.constraint_type == ConstraintType.MAXIMUM:
+            # only return the values above the maximum
+            return np.sum(np.maximum(0, current_value - self.target_profile))/seq_length
+        else:
+            raise ValueError(f"Unknown constraint type: {self.constraint_type}")
+        
+    def resize_linear_profile(self) -> np.ndarray:
+        if self.target_resized == True:
+            return self.target_profile
+        else:
+            # get seq length using the hint
+            seq_length = self._get_sequence_length_hint()
+            if self.end_mode == 'clip':
+                seq_profile_length = (seq_length - self.window_size) + 1
+            else:
+                seq_profile_length = seq_length
+            if len(self.target_profile) != seq_profile_length:
+                # use vector manipulation to resize
+                self.target_profile = VectorManipulation.resize_vector(self.target_profile, seq_profile_length)
+            # set to True so we don't do this again.
+            self.target_resized = True
+            return self.target_profile
+
+    def calculate_linear_profile(self, sequence: str) -> np.ndarray:
+        """
+        Calculate the linear profile for the property across the sequence.
+        This is a simple moving window average of the raw property values.
+
+        Parameters
+        ----------
+        sequence : str
+            The protein sequence
+
+        Returns
+        -------
+        np.ndarray
+            The calculated linear profile as a numpy array
+        """
+        seq_length = len(sequence)
+        end = (seq_length-self.window_size)+1
+        profile_values=[]
+        for i in range(end):
+            window_seq = sequence[i:i+self.window_size]
+            profile_values.append(self.calculate_raw_value(sparrow.Protein(window_seq)))
+        
+        # now take care of ends. 
+        if self.end_mode == 'extend':
+            pad_start = profile_values[0]
+            pad_end = profile_values[-1]
+        elif self.end_mode == 'zeros':
+            pad_start = 0
+            pad_end = 0
+        else:
+            pad_start=None
+            pad_end=None
+        if pad_start is not None and pad_end is not None:
+            start = int(self.window_size/2)
+            profile_values = [pad_start]*start + profile_values
+            end = seq_length - len(profile_values)  
+            profile_values = profile_values + [pad_end]*end
+        return np.array(profile_values)
+
+    def get_target_profile(self) -> np.ndarray:
+        if self.target_profile is None:
+            self.target_profile = self.calculate_linear_profile(self.target_sequence)
+            # take care of resizing
+            self.resize_linear_profile()
+        return self.target_profile
+
     def calculate(self, protein: 'sparrow.Protein') -> float:
         """
         Calculate the final error value for optimization.
@@ -278,12 +414,18 @@ class ProteinProperty(ABC):
         float
             The error value for optimization
         """
-        
-        raw_value = self.calculate_raw_value(protein)
-        self._current_raw_value = raw_value
-        if self._best_value is None:
-            self._best_value = raw_value
-        return self.calculate_error(raw_value)
+        if self.calculate_as_linear_profile:
+            self.target_profile = self.get_target_profile()
+            raw_profile = self.calculate_linear_profile(protein.sequence)
+            error = self.calculate_linear_profile_error(raw_profile)
+            average_raw_value = np.sum(raw_profile) / len(raw_profile)
+            self._current_raw_value = average_raw_value
+            return average_raw_value, error
+        else:
+            raw_value = self.calculate_raw_value(protein)
+            error = self.calculate_error(raw_value)
+            self._current_raw_value = raw_value
+            return raw_value, error
 
 
 
@@ -291,20 +433,18 @@ class ComputeIWD(ProteinProperty):
     """
     Compute the Inversed Weighted Distance (IWD) property for the target residues in the sequence.
     """
-    def __init__(self, residues: Tuple[str, ...], target_value: float, 
-                 weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
+    can_be_linear_profile = False  # IWD does not make sense as a linear profile
+    def __init__(self, residues: Tuple[str, ...], target_value: float, weight: float = 1.0, **kwargs):
+        # Store the residues parameter before calling super().__init__
         self.residues = residues
-
-    # note: This only needs to be overridden in subclasses that have additional parameters
+        # Pass all other parameters to the parent class
+        super().__init__(target_value, weight, **kwargs)
+    
     def get_init_args(self) -> dict:
         """Override to include residues parameter"""
-        return {
-            "residues": self.residues,
-            "target_value": self.target_value,
-            "weight": self.weight,
-            "constraint_type": self.constraint_type.value  # Store as string for JSON compatibility
-        }    
+        base_args = super().get_init_args()
+        base_args['residues'] = self.residues
+        return base_args
 
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.compute_iwd(list(self.residues))
@@ -314,9 +454,6 @@ class Hydrophobicity(ProteinProperty):
     """
     Calculate the hydrophobicity property.
     """
-    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.hydrophobicity
 
@@ -324,10 +461,6 @@ class FCR(ProteinProperty):
     """
     Calculate the FCR property.
     """
-    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-        self._min_normalization_factor = 1
-    
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.FCR
 
@@ -335,9 +468,6 @@ class NCPR(ProteinProperty):
     """
     Calculate the NCPR property.
     """
-    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.NCPR
 
@@ -346,9 +476,6 @@ class Kappa(ProteinProperty):
     """
     Calculate the kappa property.
     """
-    def __init__(self, target_value: float, weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.kappa
 
@@ -356,10 +483,6 @@ class RadiusOfGyration(ProteinProperty):
     """
     Calculate the Radius of gyration
     """
-    def __init__(self, target_value: float, weight: float = 1.0, 
-                 constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-    
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.predictor.radius_of_gyration()
 
@@ -367,11 +490,6 @@ class EndToEndDistance(ProteinProperty):
     """
     Calculate the Radius of gyration
     """
-      # End-to-end distance depends on sequence length
-    def __init__(self, target_value: float, weight: float = 1.0, 
-                 constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.predictor.end_to_end_distance()
 
@@ -381,19 +499,17 @@ class AminoAcidFractions(ProteinProperty):
     Compute the difference between the target amino acid fractions and the current amino acid fractions.
     """
 
-    def __init__(self, target_fractions: Dict[str, float], weight: float = 1.0, 
-                 constraint_type: ConstraintType = ConstraintType.EXACT):
-        # For fractions, target value is not meaningful at class level since we have multiple amino acids
-        super().__init__(0.0, weight, constraint_type)
+    def __init__(self, target_fractions: Dict[str, float], weight: float = 1.0, **kwargs):
+        # Store the target_fractions parameter
         self.target_fractions = target_fractions
+        # For fractions, target value is not meaningful at class level since we have multiple amino acids
+        super().__init__(target_value=0.0, weight=weight, **kwargs)
 
     def get_init_args(self) -> dict:
         """Override to include target_fractions parameter"""
-        return {
-            "target_fractions": self.target_fractions,
-            "weight": self.weight,
-            "constraint_type": self.constraint_type.value
-        }
+        base_args = super().get_init_args()
+        base_args['target_fractions'] = self.target_fractions
+        return base_args
 
     def calculate_error_for_fraction(self, current_frac: float, target_frac: float) -> float:
         """Calculate error for a single amino acid fraction based on constraint type."""
@@ -425,18 +541,20 @@ class AminoAcidFractions(ProteinProperty):
     def calculate(self, protein: 'sparrow.Protein') -> float:
         """
         Override calculate to handle multi-target amino acid optimization.
-        Following GOOSE patterns for complex properties.
+        Now supports both single-value and linear profile modes.
         """
-        # Calculate the final error value
-        final_error = self.calculate_raw_value(protein)
-        
-        # Update tracking attributes following base class patterns
-        self._current_raw_value = final_error
-        if self._best_value is None:
-            self._best_value = final_error
-        
-        # Return final error (no additional constraint processing needed)
-        return final_error
+        if self.calculate_as_linear_profile:
+            # Use the parent class linear profile functionality
+            return super().calculate(protein)
+        else:
+            # Use the original amino acid fraction calculation
+            final_error = self.calculate_raw_value(protein)
+            
+            # Update tracking attributes following base class patterns
+            self._current_raw_value = final_error
+            
+            # Return final error (no additional constraint processing needed)
+            return final_error, final_error
 
 
 class SCD(ProteinProperty):
@@ -450,10 +568,6 @@ class SCD(ProteinProperty):
     dependent configurational properties in charged polymers and proteins.
     The Journal of Chemical Physics, 143(8), 085101.
     """    
-    def __init__(self, target_value: float, weight: float = 1.0, 
-                 constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.SCD
 
@@ -469,10 +583,6 @@ class SHD(ProteinProperty):
     dependent configurational properties in charged polymers and proteins.
     The Journal of Chemical Physics, 143(8), 085101.
     """
-    def __init__(self, target_value: float, weight: float = 1.0, 
-                 constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.SHD
 
@@ -481,11 +591,6 @@ class Complexity(ProteinProperty):
     Calculates the Wootton-Federhen complexity of a sequence (also called
     seg complexity, as this the theory used in the classic SEG algorithm.
     """
-
-    def __init__(self, target_value: float, weight: float = 1.0, 
-                 constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.complexity
 
@@ -495,27 +600,23 @@ class FractionDisorder(ProteinProperty):
     Calculates the amount of disorder in
     the current sequence. 
     """
-
-    def __init__(self, target_value: float, weight: float = 1.0, disorder_cutoff = 0.5,
-                 constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
+    can_be_linear_profile = False  # Disorder fraction does not make sense as a linear profile
+    def __init__(self, target_value: float, weight: float = 1.0, disorder_cutoff: float = 0.5, **kwargs):
+        # Store the disorder_cutoff parameter
         self.disorder_cutoff = disorder_cutoff
+        # Pass all other parameters to the parent class
+        super().__init__(target_value, weight, **kwargs)
 
     def get_init_args(self) -> dict:
         """Override to include disorder_cutoff parameter"""
-        return {
-            "target_value": self.target_value,
-            "weight": self.weight,
-            "disorder_cutoff": self.disorder_cutoff,
-            "constraint_type": self.constraint_type.value
-        }
+        base_args = super().get_init_args()
+        base_args['disorder_cutoff'] = self.disorder_cutoff
+        return base_args
 
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
-        disorder=meta.predict_disorder(protein.sequence)
-        return (disorder>self.disorder_cutoff).sum()/len(disorder)
+        disorder = meta.predict_disorder(protein.sequence)
+        return (disorder > self.disorder_cutoff).sum() / len(disorder)
 
-        
-    
 
 class MatchSequenceDisorder(ProteinProperty):
     """
@@ -524,22 +625,26 @@ class MatchSequenceDisorder(ProteinProperty):
     You can also try to get the exact disorder.
 
     """
-    def __init__(self, target_sequence: str, exact_match: bool = False, target_value : float = 0,
-                 weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
+    # This property already works with profiles inherently, so disable linear profile mode
+    can_be_linear_profile = False
+    
+    def __init__(self, target_sequence: str, exact_match: bool = False, target_value: float = 0,
+                 weight: float = 1.0, **kwargs):
+        # Store the specific parameters for this class
         self.target_sequence = target_sequence
         self.exact_match = exact_match
         self.target_disorder = None
+        # Pass all other parameters to the parent class
+        super().__init__(target_value, weight, **kwargs)
 
     def get_init_args(self) -> dict:
         """Override to include target_sequence and exact_match parameters"""
-        return {
-            "target_sequence": self.target_sequence,
-            "exact_match": self.exact_match,
-            "target_value": self.target_value,
-            "weight": self.weight,
-            "constraint_type": self.constraint_type.value
-        }
+        base_args = super().get_init_args()
+        base_args.update({
+            'target_sequence': self.target_sequence,
+            'exact_match': self.exact_match
+        })
+        return base_args
 
     def set_initial_disorder(self):
         if self.target_disorder is None:
@@ -547,33 +652,31 @@ class MatchSequenceDisorder(ProteinProperty):
         return self.target_disorder
 
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
-        target_disorder=self.set_initial_disorder()
-        disorder=meta.predict_disorder(protein.sequence)
-        if self.exact_match==True:
-            err = np.sum(np.abs(disorder-target_disorder))
+        target_disorder = self.set_initial_disorder()
+        disorder = meta.predict_disorder(protein.sequence)
+        if self.exact_match == True:
+            err = np.sum(np.abs(disorder - target_disorder))
         else:
-            err = np.sum(disorder<target_disorder)
+            err = np.sum(disorder < target_disorder)
         # normalize to length. 
-        return err/len(target_disorder)
+        return err / len(target_disorder)
 
 
 class MatchingResidues(ProteinProperty):
     '''
     Determines the number of residues that match a target sequence in the current sequence.
     '''
-    def __init__(self, target_sequence: str, target_value: float, weight: float = 1.0,
-                 constraint_type: ConstraintType = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type)
-        self.target_sequence = target_sequence
+    can_be_linear_profile = False  # Matching residues does not make sense as a linear profile
 
-    def get_init_args(self):
-        """Override to include target_sequence parameter"""
-        return {
-            "target_sequence": self.target_sequence,
-            "target_value": self.target_value,
-            "weight": self.weight,
-            "constraint_type": self.constraint_type.value
-        }
+    def __init__(self, target_sequence: str, target_value: float, **kwargs):
+        # Validate required parameters before calling super().__init__
+        if target_sequence is None:
+            raise ValueError("A target_sequence must be provided for MatchingResidues property.")
+        if target_value is None:
+            raise ValueError("A target_value must be provided for MatchingResidues property.")
+        
+        # Pass target_value and all other parameters directly to parent
+        super().__init__(target_value=target_value, target_sequence=target_sequence, **kwargs)
 
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return sum([1 for i in range(len(protein.sequence)) 
@@ -589,10 +692,10 @@ class EpsilonProperty(ProteinProperty):
     Provides common model loading functionality following GOOSE patterns.
     """
     
-    def __init__(self, target_value: float, weight: float = 1.0, 
-                 constraint_type = ConstraintType.EXACT, model: str = 'mpipi', 
-                 preloaded_model = None):
-        super().__init__(target_value, weight, constraint_type)
+    def __init__(self, target_value: float, target_seq: str = None, weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT, 
+                 model: str = 'mpipi', preloaded_model=None, **kwargs):
+        # Store epsilon-specific parameters
         self.model = model.lower()
         self._loaded_model = preloaded_model
         self._loaded_imc_object = None
@@ -600,6 +703,20 @@ class EpsilonProperty(ProteinProperty):
         # Handle preloaded model type detection following GOOSE's validation patterns
         if preloaded_model is not None:
             self._detect_preloaded_model_type(preloaded_model)
+        
+        # Pass all other parameters to the parent class
+        super().__init__(target_seq=target_seq,
+                         target_value=target_value, weight=weight, 
+                         constraint_type=constraint_type, **kwargs)
+
+    def get_init_args(self) -> dict:
+        """Override to include epsilon-specific parameters"""
+        base_args = super().get_init_args()
+        base_args.update({
+            'model': self.model,
+            'preloaded_model': self._loaded_model
+        })
+        return base_args
 
     def _detect_preloaded_model_type(self, preloaded_model):
         """
@@ -675,26 +792,12 @@ class EpsilonProperty(ProteinProperty):
         self._loaded_imc_object = loaded_model.IMC_object
         return self._loaded_imc_object
 
-    def get_init_args(self) -> dict:
-        """
-        Get initialization arguments including model parameter.
-        Override in subclasses with additional parameters.
-        """
-        base_args = super().get_init_args()
-        base_args['model'] = self.model
-        return base_args
-
 
 class MeanSelfEpsilon(EpsilonProperty):
     """
     Calculate the self interaction epsilon value of a sequence.
     Note: this simply uses the mean epsilon value. 
     """
-    def __init__(self, target_value: float, weight: float = 1.0,
-                 model: str = 'mpipi', preloaded_model = None, 
-                 constraint_type = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         loaded_model = self.load_model()
         return loaded_model.epsilon(protein.sequence, protein.sequence)
@@ -704,19 +807,6 @@ class MeanEpsilonWithTarget(EpsilonProperty):
     """
     Make a sequence that interacts with a specific sequence with a specific mean epsilon value. 
     """
-    
-    def __init__(self, target_value: float, target_sequence: str, weight: float = 1.0,
-                 model: str = 'mpipi', preloaded_model = None, 
-                 constraint_type = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
-        self.target_sequence = target_sequence
-
-    def get_init_args(self) -> dict:
-        """Override to include target_sequence parameter"""
-        base_args = super().get_init_args()
-        base_args['target_sequence'] = self.target_sequence
-        return base_args
-
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         loaded_model = self.load_model()
         return loaded_model.epsilon(protein.sequence, self.target_sequence)

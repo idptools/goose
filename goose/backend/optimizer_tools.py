@@ -260,8 +260,6 @@ class VectorManipulation:
         # --- Input Validation ---
         if not isinstance(new_size, int) or new_size <= 0:
             raise ValueError("new_size must be a positive integer.")
-        if not original_vector:
-            raise ValueError("original_vector cannot be empty.")
 
         original_len = len(original_vector)
 
