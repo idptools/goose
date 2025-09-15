@@ -37,42 +37,35 @@ def build_diverse_initial_sequences(target_length: int, num_sequences: int = 5) 
     
     # Pure random
     sequences.append(build_random_sequence(target_length))
+
+    # set base aas. Disorder promoting, not charged, not aromatic.
+    base_aas = ['G', 'P', 'S', 'T', 'Q', 'N']
     
+    # other lists with varying properties
+    biased_lists = [
+        ['A', 'V', 'I', 'L', 'M'],
+        ['F', 'W', 'Y'],
+        ['D', 'E'],
+        ['K', 'R'],
+        ['D', 'E', 'K', 'R'],
+        ['C'],
+        ['H'],
+        ['T', 'S', 'N', 'Q', 'P', 'G'],
+        ['G', 'P'],
+        ['A', 'V', 'I', 'L', 'M', 'E', 'D'],
+        ['A', 'V', 'I', 'L', 'M', 'K', 'R'],
+        ['F', 'W', 'Y', 'E', 'D'],
+        ['F', 'W', 'Y', 'K', 'R'],
+    ]
     # High disorder bias (GP-rich)
     if num_sequences > 1:
-        disorder_aas = ['G', 'P', 'S', 'A', 'Q', 'N', 'E', 'K', 'R', 'D']
-        seq = ''.join(random.choices(disorder_aas, k=target_length))
-        sequences.append(seq)
-    
-    # Balanced charge
-    if num_sequences > 2:
-        charged_aas = ['K', 'R', 'D', 'E']  # Equal positive and negative
-        neutral_aas = ['A', 'G', 'S', 'T', 'N', 'Q']
-        
-        # Mix charged and neutral
-        seq_list = []
-        for i in range(target_length):
-            if i % 4 < 2:  # 50% charged
-                seq_list.append(random.choice(charged_aas))
-            else:  # 50% neutral
-                seq_list.append(random.choice(neutral_aas))
-        random.shuffle(seq_list)
-        sequences.append(''.join(seq_list))
-    
-    # Hydrophobic bias
-    if num_sequences > 3:
-        hydrophobic_aas = ['A', 'V', 'I', 'L', 'F', 'W', 'Y', 'M']
-        hydrophilic_aas = ['S', 'T', 'N', 'Q', 'K', 'R', 'D', 'E']
-        
-        # Mix hydrophobic and hydrophilic
-        seq = ''.join(random.choices(hydrophobic_aas + hydrophilic_aas, k=target_length))
-        sequences.append(seq)
-    
-    # Fill remaining with random variants
-    while len(sequences) < num_sequences:
-        sequences.append(build_random_sequence(target_length))
-    
-    return sequences[:num_sequences]
+        for i in range(num_sequences - 1):
+            disorder_aas = base_aas + random.choice(biased_lists)
+            seq = ''.join(random.choices(disorder_aas, k=target_length))
+            sequences.append(seq)
+    # Ensure uniqueness
+    sequences = list(set(sequences))
+    return sequences
 
 
 def shuffle_sequence(sequence: str, window_size: int = 10, global_shuffle_probability: float = 0.3) -> str:
@@ -121,7 +114,7 @@ class SequenceOptimizer:
         self,
         target_length: int,
         max_iterations: int = 1000,
-        verbose: bool = True,
+        verbose: bool = True, # progress bar and logging
         enable_adaptive_scaling: bool = True,
         enable_shuffling: bool = True,
         shuffle_frequency: int = 50,  # More frequent shuffling for diversity
@@ -135,6 +128,7 @@ class SequenceOptimizer:
         enable_error_tolerance: bool = True,  # Enable error tolerance early stopping
         # Mutation parameters
         num_candidates: int = 5,  # Significantly more candidates for better exploration
+        num_starting_candidates: int = 100,  # allow setting different number of starting candidates to explore more seq space.
         min_mutations: int = 1,
         max_mutations: int = 15,  # Allow more aggressive mutations
         mutation_ratio: int = 10,  # More mutations per sequence (length/10 vs length/20)
@@ -199,7 +193,9 @@ class SequenceOptimizer:
         enable_error_tolerance : bool
             Enable error tolerance early stopping - DEFAULT: True
         num_candidates : int
-            Number of candidate sequences to generate per iteration - DEFAULT: 50 for better exploration
+            Number of candidate sequences to generate per iteration - DEFAULT: 5 to keep things fast. 
+        num_starting_candidates : int
+            Number of diverse starting sequences to evaluate - DEFAULT: 100 for better starting point
         min_mutations : int
             Minimum number of mutations for multi-mutation candidates
         max_mutations : int
@@ -271,6 +267,7 @@ class SequenceOptimizer:
         
         # Mutation parameters
         self.num_candidates = num_candidates
+        self.num_starting_candidates = num_starting_candidates
         self.min_mutations = min_mutations
         self.max_mutations = max_mutations
         self.mutation_ratio = mutation_ratio
@@ -468,6 +465,7 @@ class SequenceOptimizer:
         
         for prop in self.properties:
             prop_name = prop.__class__.__name__
+            constraint_type = getattr(prop, 'constraint_type', None)
             
             # Get cached raw values with safety check
             if prop_name not in cached_raw_values:
@@ -508,7 +506,8 @@ class SequenceOptimizer:
                 'scale': scale,
                 'tolerance': tolerance,
                 'within_tolerance': within_tolerance,
-                'satisfied': within_tolerance
+                'satisfied': within_tolerance,
+                'constraint_type': constraint_type
             }
             
             weighted_errors.append(effective_weighted_error)
@@ -1092,13 +1091,17 @@ class SequenceOptimizer:
         
         # Initialize with best of multiple diverse sequences
         if self.starting_sequence is None:
-            initial_candidates = build_diverse_initial_sequences(self.target_length, num_sequences=5)
+            initial_candidates = build_diverse_initial_sequences(self.target_length, num_sequences=self.num_starting_candidates)
         else:
             initial_candidates = [self.starting_sequence]
         
         best_initial_error = float('inf')
         best_initial_seq = ""
-        
+        if self.verbose:
+            if self.starting_sequence is None:
+                self.logger.info(f"Generating and testing {len(initial_candidates)} diverse initial candidate sequences...")
+            else:
+                self.logger.info(f"Using provided starting sequence for optimization...")
         for candidate in initial_candidates:
             error, _ = self._evaluate_sequence(candidate)
             if error < best_initial_error:
@@ -1282,6 +1285,7 @@ class SequenceOptimizer:
                 
                 status_indicator = "✅" if within_tolerance else "❌"
                 tolerance_info = f", tolerance: {tolerance:.4f}" if tolerance > 0 else ""
+                constraint_type = info.get('constraint_type', 'N/A')
                 
                 if self.debugging:
                     self.logger.info(
@@ -1292,7 +1296,7 @@ class SequenceOptimizer:
                 else:
                     self.logger.info(
                         f"   {status_indicator} {prop_name}: {actual:.3f} "
-                        f"(target: {target:.3f}, raw_error: {raw_error:.4f}), "
+                        f"(target: {constraint_type.__str__()} value of {target:.3f}, raw_error: {raw_error:.4f}), tolerance: {tolerance:.4f}"
                     )
             self.logger.info(f"\nOptimized sequence:\n{self.best_sequence}")
         return self.best_sequence
@@ -1315,4 +1319,5 @@ class SequenceOptimizer:
             'cache_size': len(getattr(self, '_raw_property_cache', {})),
             'total_evaluations_saved': self._cache_hits
         }
+    
     

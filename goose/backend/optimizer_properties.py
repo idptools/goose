@@ -17,6 +17,10 @@ class ConstraintType(Enum):
     MINIMUM = "minimum"  # Penalize only when below target
     MAXIMUM = "maximum"  # Penalize only when above target
 
+    # add a string representation for easy printing
+    def __str__(self):
+        return self.value
+
 def _normalize_constraint_type(constraint_type) -> ConstraintType:
     """
     Normalize constraint_type input to ConstraintType enum.
@@ -83,12 +87,13 @@ class ProteinProperty(ABC):
     # default is False
     multi_target = True  # Class-level attribute - override to limit ability to have multiple targets.
     can_be_linear_profile = True  # Class-level attribute - override to disallow linear profiles
-
+    allow_setting_target_by_sequence = True  # Class-level attribute - override to disallow setting target by sequence.
+    can_set_target_sequence_and_target_value = False # whether you can set the target sequence and target value at the same time.
     def __init__(self, target_value: float = None, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT,
                  window_size: int = 5, end_mode: str = 'extend',
                  calculate_as_linear_profile: bool = False, target_sequence: str = None,
-                 target_profile: np.ndarray = None, **kwargs):
+                 target_profile: np.ndarray = None):
         
         # make sure that if not linear profile, target_value is set. 
         if calculate_as_linear_profile is False:
@@ -141,7 +146,7 @@ class ProteinProperty(ABC):
         self.target_profile = target_profile  # also allows user to set a target profile if they want to.
         self.target_resized = False # track that target has been resized.
         self.target_sequence = target_sequence # sequence to calculate target profile from if needed.
-        
+
         # set target value if needed.
         self.set_target_value()
 
@@ -149,12 +154,17 @@ class ProteinProperty(ABC):
         '''
         override target value depending on what is set
         '''
+        if self.target_value is not None and self.target_sequence is not None:
+            if self.can_set_target_sequence_and_target_value is False:
+                raise ValueError("You cannot set both target_value and target_sequence at the same time.")
         if self.target_value is None:
+            if self.allow_setting_target_by_sequence is False:    
+                raise ValueError("You must provide a target_value.")
             if self.calculate_as_linear_profile:
                 self.target_value=0.0
             else:
                 if self.target_sequence is None:
-                    raise ValueError("When calculate_as_linear_profile is False, a target_sequence or target_value must be provided.")
+                    raise ValueError("You must provide a target_sequence or target_value.")
                 else:
                     self.target_value = self.calculate_raw_value(sparrow.Protein(self.target_sequence))
                 # else, target_value is already set. Do nothing.
@@ -237,11 +247,8 @@ class ProteinProperty(ABC):
             "end_mode": self.end_mode,
             "calculate_as_linear_profile": self.calculate_as_linear_profile,
             "target_sequence": self.target_sequence,
-            "target_profile": self.target_profile
+            "target_profile": self.target_profile.tolist() if self.target_profile is not None else None
         }
-        # add kwargs vals if there are any.
-        if kwargs := getattr(self, '__dict__', {}).get('kwargs', None):
-            vals.update(kwargs)
         return vals
 
     @classmethod
@@ -428,17 +435,18 @@ class ProteinProperty(ABC):
             return raw_value, error
 
 
-
 class ComputeIWD(ProteinProperty):
     """
     Compute the Inversed Weighted Distance (IWD) property for the target residues in the sequence.
     """
     can_be_linear_profile = False  # IWD does not make sense as a linear profile
-    def __init__(self, residues: Tuple[str, ...], target_value: float, weight: float = 1.0, **kwargs):
+    def __init__(self, residues: Tuple[str, ...], target_value: float=None, 
+                 target_sequence: str = None, weight: float = 1.0,
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
         # Store the residues parameter before calling super().__init__
         self.residues = residues
         # Pass all other parameters to the parent class
-        super().__init__(target_value, weight, **kwargs)
+        super().__init__(target_value, weight, constraint_type, target_sequence=target_sequence)
     
     def get_init_args(self) -> dict:
         """Override to include residues parameter"""
@@ -498,12 +506,14 @@ class AminoAcidFractions(ProteinProperty):
     """
     Compute the difference between the target amino acid fractions and the current amino acid fractions.
     """
-
-    def __init__(self, target_fractions: Dict[str, float], weight: float = 1.0, **kwargs):
+    can_be_linear_profile = False  # Amino acid fractions do not make sense as a linear profile
+    allow_setting_target_by_sequence = False  # Must provide target_fractions explicitly
+    def __init__(self, target_fractions: Dict[str, float], weight: float = 1.0,
+                 constraint_type: ConstraintType = ConstraintType.EXACT):
         # Store the target_fractions parameter
         self.target_fractions = target_fractions
         # For fractions, target value is not meaningful at class level since we have multiple amino acids
-        super().__init__(target_value=0.0, weight=weight, **kwargs)
+        super().__init__(target_value=0.0, weight=weight, constraint_type=constraint_type)
 
     def get_init_args(self) -> dict:
         """Override to include target_fractions parameter"""
@@ -543,18 +553,14 @@ class AminoAcidFractions(ProteinProperty):
         Override calculate to handle multi-target amino acid optimization.
         Now supports both single-value and linear profile modes.
         """
-        if self.calculate_as_linear_profile:
-            # Use the parent class linear profile functionality
-            return super().calculate(protein)
-        else:
-            # Use the original amino acid fraction calculation
-            final_error = self.calculate_raw_value(protein)
-            
-            # Update tracking attributes following base class patterns
-            self._current_raw_value = final_error
-            
-            # Return final error (no additional constraint processing needed)
-            return final_error, final_error
+        # Use the original amino acid fraction calculation
+        final_error = self.calculate_raw_value(protein)
+        
+        # Update tracking attributes following base class patterns
+        self._current_raw_value = final_error
+        
+        # Return final error (no additional constraint processing needed)
+        return final_error, final_error
 
 
 class SCD(ProteinProperty):
@@ -601,11 +607,14 @@ class FractionDisorder(ProteinProperty):
     the current sequence. 
     """
     can_be_linear_profile = False  # Disorder fraction does not make sense as a linear profile
-    def __init__(self, target_value: float, weight: float = 1.0, disorder_cutoff: float = 0.5, **kwargs):
+    def __init__(self, target_value: float=None, weight: float = 1.0, disorder_cutoff: float = 0.5,
+                 constraint_type: ConstraintType = ConstraintType.EXACT,
+                 target_sequence: str = None):
         # Store the disorder_cutoff parameter
         self.disorder_cutoff = disorder_cutoff
         # Pass all other parameters to the parent class
-        super().__init__(target_value, weight, **kwargs)
+        super().__init__(target_value=target_value, weight=weight, constraint_type=constraint_type,
+                         target_sequence=target_sequence)
 
     def get_init_args(self) -> dict:
         """Override to include disorder_cutoff parameter"""
@@ -627,22 +636,21 @@ class MatchSequenceDisorder(ProteinProperty):
     """
     # This property already works with profiles inherently, so disable linear profile mode
     can_be_linear_profile = False
-    
-    def __init__(self, target_sequence: str, exact_match: bool = False, target_value: float = 0,
-                 weight: float = 1.0, **kwargs):
+    can_set_target_sequence_and_target_value = True
+    def __init__(self, target_sequence: str,
+                 weight: float = 1.0, constraint_type: ConstraintType = ConstraintType.EXACT):
         # Store the specific parameters for this class
         self.target_sequence = target_sequence
-        self.exact_match = exact_match
         self.target_disorder = None
         # Pass all other parameters to the parent class
-        super().__init__(target_value, weight, **kwargs)
+        super().__init__(target_value=0.0, weight=weight, constraint_type=constraint_type,
+                         target_sequence=target_sequence)
 
     def get_init_args(self) -> dict:
         """Override to include target_sequence and exact_match parameters"""
         base_args = super().get_init_args()
         base_args.update({
             'target_sequence': self.target_sequence,
-            'exact_match': self.exact_match
         })
         return base_args
 
@@ -654,10 +662,14 @@ class MatchSequenceDisorder(ProteinProperty):
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         target_disorder = self.set_initial_disorder()
         disorder = meta.predict_disorder(protein.sequence)
-        if self.exact_match == True:
+        if self.constraint_type == ConstraintType.EXACT:
             err = np.sum(np.abs(disorder - target_disorder))
+        elif self.constraint_type == ConstraintType.MINIMUM:
+            err = np.sum(np.maximum(0, target_disorder - disorder))
+        elif self.constraint_type == ConstraintType.MAXIMUM:
+            err = np.sum(np.maximum(0, disorder - target_disorder))
         else:
-            err = np.sum(disorder < target_disorder)
+            raise ValueError(f"Unknown constraint type: {self.constraint_type}. Should not have made it this far, contact dev please. ")
         # normalize to length. 
         return err / len(target_disorder)
 
@@ -667,8 +679,11 @@ class MatchingResidues(ProteinProperty):
     Determines the number of residues that match a target sequence in the current sequence.
     '''
     can_be_linear_profile = False  # Matching residues does not make sense as a linear profile
-
-    def __init__(self, target_sequence: str, target_value: float, **kwargs):
+    allow_setting_target_by_sequence = False  # Must provide target_sequence explicitly
+    can_set_target_sequence_and_target_value = True # you can set both target sequence and target
+    def __init__(self, target_sequence: str, target_value: float, weight: float = 1.0,
+                 constraint_type: ConstraintType = ConstraintType.EXACT,
+                 input_fraction=False):
         # Validate required parameters before calling super().__init__
         if target_sequence is None:
             raise ValueError("A target_sequence must be provided for MatchingResidues property.")
@@ -676,9 +691,20 @@ class MatchingResidues(ProteinProperty):
             raise ValueError("A target_value must be provided for MatchingResidues property.")
         
         # Pass target_value and all other parameters directly to parent
-        super().__init__(target_value=target_value, target_sequence=target_sequence, **kwargs)
+        super().__init__(target_value=target_value, weight=weight, constraint_type=constraint_type,
+                         target_sequence=target_sequence)
+        # see if we've verified length
+        self.verified_length = False
+        if input_fraction:
+            if self.target_value > 1.0 or self.target_value < 0.0:
+                raise ValueError("If input_fraction is True, target_value must be between 0 and 1.")
+            self.target_value = int(round(self.target_value * len(self.target_sequence)))
 
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        if self.verified_length is False:
+            if self.target_value > len(protein.sequence):
+                raise ValueError(f"The target_value is greater than the length of the protein sequence. Please use a value less than or equal to {len(protein.sequence)}.")
+            self.verified_length = True
         return sum([1 for i in range(len(protein.sequence)) 
                     if protein.sequence[i] == self.target_sequence[i]])
 
@@ -691,10 +717,12 @@ class EpsilonProperty(ProteinProperty):
     Abstract base class for properties that use epsilon calculations.
     Provides common model loading functionality following GOOSE patterns.
     """
-    
-    def __init__(self, target_value: float, target_seq: str = None, weight: float = 1.0, 
+    can_be_linear_profile = False
+    def __init__(self, target_value: float=None, target_sequence: str = None, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT, 
-                 model: str = 'mpipi', preloaded_model=None, **kwargs):
+                 model: str = 'mpipi', preloaded_model=None,
+                 window_size: int = 5, end_mode: str = 'extend',
+                 calculate_as_linear_profile: bool = False, target_profile: np.ndarray = None):
         # Store epsilon-specific parameters
         self.model = model.lower()
         self._loaded_model = preloaded_model
@@ -705,16 +733,16 @@ class EpsilonProperty(ProteinProperty):
             self._detect_preloaded_model_type(preloaded_model)
         
         # Pass all other parameters to the parent class
-        super().__init__(target_seq=target_seq,
-                         target_value=target_value, weight=weight, 
-                         constraint_type=constraint_type, **kwargs)
+        super().__init__(target_value=target_value, weight=weight, constraint_type=constraint_type,
+                         window_size=window_size, end_mode=end_mode,
+                         calculate_as_linear_profile=calculate_as_linear_profile,
+                         target_sequence=target_sequence, target_profile=target_profile)
 
     def get_init_args(self) -> dict:
         """Override to include epsilon-specific parameters"""
         base_args = super().get_init_args()
         base_args.update({
-            'model': self.model,
-            'preloaded_model': self._loaded_model
+            'model': self.model
         })
         return base_args
 
@@ -807,6 +835,11 @@ class MeanEpsilonWithTarget(EpsilonProperty):
     """
     Make a sequence that interacts with a specific sequence with a specific mean epsilon value. 
     """
+    can_set_target_sequence_and_target_value = True
+    def __init__(self, target_sequence: str, target_value: float=None, weight: float = 1.0, 
+                 constraint_type: ConstraintType = ConstraintType.EXACT, model: str = 'mpipi', preloaded_model = None):
+        super().__init__(target_value, target_sequence, weight, constraint_type, model, preloaded_model)
+
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         loaded_model = self.load_model()
         return loaded_model.epsilon(protein.sequence, self.target_sequence)
@@ -821,11 +854,12 @@ class ChemicalFingerprint(EpsilonProperty):
     The chemical fingerprint is calculated by taking the difference between the target
     and the current sequence and summing the differences in the epsilon matrix.
     """
-    
+    can_be_linear_profile = False
+    can_set_target_sequence_and_target_value = True
     def __init__(self, target_sequence: str, target_value: float = 0.0, 
                  weight: float = 1.0, model: str = 'mpipi', preloaded_model = None, 
                  window_size:int = 15, constraint_type = ConstraintType.EXACT):
-        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
+        super().__init__(target_value, target_sequence, weight, constraint_type, model, preloaded_model)
         self.target_sequence = target_sequence
         self._target_sequence_fingerprint = None
         self._chemistries = None
@@ -915,27 +949,24 @@ class EpsilonMatrixProperty(EpsilonProperty):
     subclass if you want to do this with self interaction. 
 
     The only thing you need to set is _manipulate_matrix. This will let you manipulate
-    the matrix to (for example) increase hte interaction strength. 
+    the matrix to (for example) increase the interaction strength.
 
     """
-      # Matrix manipulations are arbitrary scale
-      # Matrix manipulation differences are typically large
-
+    can_be_linear_profile = False  # Class-level attribute - override to disallow linear profiles
+    can_set_target_sequence_and_target_value = True  # You can set both target sequence and target value
     def __init__(self, sequence: str, target_sequence: str, target_value: float = 0.0,
                  weight: float = 1.0, constraint_type = ConstraintType.EXACT,
                  model: str = 'mpipi', preloaded_model = None,
                  window_size: int = 15, allow_matrix_resizing=True,
                  homotypic_interaction: bool = False):
-        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
+        super().__init__(target_value, target_sequence, weight, constraint_type, model, preloaded_model)
         self.sequence = sequence
         self.target_sequence = target_sequence
         self.window_size = window_size
         self.target_matrix = None  # Cache for expensive matrix calculations
         self.allow_matrix_resizing = allow_matrix_resizing  # whether to allow matrix resizing. If not allowed,
-        # sequence length mismatches will raise an error. 
         self.homotypic_interaction = homotypic_interaction  # whether to do homotypic interaction (same sequence)
-        # verify window size
-        self._verify_window_size()
+        self.window_size_validated=False
 
     def _verify_window_size(self):
         """Verify and adjust window size if necessary following GOOSE validation patterns."""
@@ -1096,7 +1127,10 @@ class EpsilonMatrixProperty(EpsilonProperty):
         float
             Raw difference value for optimization
         """
-
+        if self.window_size_validated == False:
+            # verify window size
+            self._verify_window_size()
+            self.window_size_validated = True
         # Get target matrix. this will apply matrix manipulation only on the
         # first calculation. After that, it just returns the target. 
         target_matrix = self._initialize_target_matrix()
@@ -1117,14 +1151,15 @@ class MatchSelfIntermap(EpsilonMatrixProperty):
     Calculates self interaction using matrix representation for closer target matching.
     Uses EpsilonMatrixProperty for consistent matrix handling patterns.
     """
-    def __init__(self, sequence: str, weight: float = 1.0, 
+    can_set_target_sequence_and_target_value = True  # You cannot set target sequence for self interaction
+    def __init__(self, target_sequence: str, weight: float = 1.0, 
                  model: str = 'mpipi', preloaded_model = None, 
                  inverse: bool = False, window_size: int = 15, 
                  constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True,
                  homotypic_interaction: bool = True):
         # For self-interaction, both sequences are the same initially.
         # set them both to be the same
-        super().__init__(sequence, sequence, 0.0, weight, constraint_type,
+        super().__init__(target_sequence, target_sequence, 0.0, weight, constraint_type,
                          model, preloaded_model, window_size, allow_matrix_resizing,
                          homotypic_interaction)
         self.inverse = inverse
@@ -1214,11 +1249,11 @@ class ModifyRepulsiveValues(EpsilonMatrixProperty):
         Values less than 0 and greater than -1 will reduce the strength and invert to attractive. 
         Values less than -1 will flip the repulsive values and increase their strength. 
     """
-    def __init__(self, interacting_sequence:str, target_interacting_sequence: str, 
+    def __init__(self, sequence:str, target_sequence: str, 
                  multiplier: float, weight: float = 1.0, model: str = 'mpipi', 
                  preloaded_model = None, window_size: int = 15,
                  constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True):
-        super().__init__(interacting_sequence,target_interacting_sequence, 
+        super().__init__(sequence, target_sequence, 
                          0.0, weight, constraint_type, model, preloaded_model, 
                          window_size, allow_matrix_resizing)
         self.multiplier = multiplier
@@ -1245,12 +1280,12 @@ class ModifyMatrixValues(EpsilonMatrixProperty):
     property. Tends to work better than trying to manipulate them individually and is 
     more computationally efficient. 
     """
-    def __init__(self, interacting_sequence:str, target_interacting_sequence: str, 
+    def __init__(self, sequence:str, target_sequence: str, 
                  repulsive_multiplier: float, attractive_multiplier: float,
                  weight: float = 1.0, model: str = 'mpipi', 
                  preloaded_model = None, window_size: int = 15,
                  constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True):
-        super().__init__(interacting_sequence,target_interacting_sequence, 
+        super().__init__(sequence, target_sequence, 
                          0.0, weight, constraint_type,
                         model, preloaded_model, window_size, allow_matrix_resizing)
         self.repulsive_multiplier = repulsive_multiplier
@@ -1293,6 +1328,7 @@ class MatchArbitraryMatrix(EpsilonMatrixProperty):
         """Override to include enhancement parameters"""
         base_args = super().get_init_args()
         base_args.update({
+            'target_sequence': self.target_sequence,
             'arbitrary_matrix': self.arbitrary_matrix,
         })
         return base_args
@@ -1317,13 +1353,14 @@ class FDSurfaceEpsilonProperty(EpsilonProperty):
     Base class for calculations involving FoldedDomain FINCHES objects where we
     are looking at the interactions between a folded domain and an IDR.
     """
+    can_set_target_sequence_and_target_value = True  # You can set both target sequence and target value
     def __init__(self, sequence: str,
                  target_value: float = 0, folded_domain: 'finches.folded_domain.FoldedDomain' = None,
                  path_to_folded_domain: str = None, weight: float = 1.0, 
                  model: str = 'mpipi', preloaded_model=None, constraint_type=ConstraintType.EXACT,
                  probe_radius: float = 1.4, surface_thresh: float = 0.10, sasa_mode: str = 'v1', 
                  fd_start: int = None, fd_end: int = None):
-        super().__init__(target_value, weight, constraint_type, model, preloaded_model)
+        super().__init__(target_value, sequence, weight, constraint_type, model, preloaded_model)
         self.sequence = sequence
         self.folded_domain = folded_domain
         self.path_to_folded_domain = path_to_folded_domain
@@ -1337,6 +1374,7 @@ class FDSurfaceEpsilonProperty(EpsilonProperty):
     def get_init_args(self) -> dict:
         """Override to include folded_domain parameter"""
         base_args = super().get_init_args()
+        base_args['sequence'] = self.sequence
         base_args['folded_domain'] = self.folded_domain
         base_args['path_to_folded_domain'] = self.path_to_folded_domain
         base_args['probe_radius'] = self.probe_radius
@@ -1409,7 +1447,7 @@ class FDMeanSurfaceEpsilon(FDSurfaceEpsilonProperty):
     """
     Class for calculating mean surface epsilon values for folded domain proteins.
     """
-    def __init__(self, sequence: str, target_value: float = 0, folded_domain: 'finches.folded_domain.FoldedDomain' = None,
+    def __init__(self, sequence: str=None, target_value: float = None, folded_domain: 'finches.folded_domain.FoldedDomain' = None,
                  path_to_folded_domain: str = None, weight: float = 1.0,
                  model: str = 'mpipi', preloaded_model=None, constraint_type=ConstraintType.EXACT,
                  probe_radius: float = 1.4, surface_thresh: float = 0.10, sasa_mode: str = 'v1',
@@ -1417,8 +1455,6 @@ class FDMeanSurfaceEpsilon(FDSurfaceEpsilonProperty):
         super().__init__(sequence, target_value, folded_domain, path_to_folded_domain, weight,
                          model, preloaded_model, constraint_type, probe_radius, surface_thresh,
                          sasa_mode, fd_start, fd_end)
-        # store surface epsilon of target to save compute
-        self._target_surface_epsilon = None
 
     def get_init_args(self):
         return {
@@ -1437,28 +1473,21 @@ class FDMeanSurfaceEpsilon(FDSurfaceEpsilonProperty):
             "fd_end": self.fd_end
         }
 
-    def calculate_surface_epsilon(self, sequence: str) -> list:
-        """
-        Calculate the surface epsilon value for the given sequence.
-
-        Parameters
-        ----------
-        sequence : str
-            The protein sequence to calculate the surface epsilon for.
-
-        Returns
-        -------
-        list
-            List of surface epsilon values.
-        """
-        imc_object = self.load_imc_object()
-        folded_domain = self._load_folded_domain()
-        surf_eps_dict = folded_domain.calculate_surface_epsilon(sequence, imc_object)
-        return [float(i[2]) for i in list(surf_eps_dict.values())]
-
     def _initialize_target_epsilon(self):
-        if self._target_surface_epsilon is None:
-            self._target_surface_epsilon = self.calculate_surface
+        if self.sequence is None and self.target_value is None:
+            raise ValueError("Either sequence or target_value must be provided.")
+        else:
+            if self.sequence is not None:
+                # load
+                fd = self._load_folded_domain()
+                # calculate
+                self.target_value = fd.calculate_mean_surface_epsilon(self.sequence, self.load_imc_object())
+        return self.target_value
+
+    def calculate_raw_value(self, protein):
+        fd = self._load_folded_domain()
+        return fd.calculate_mean_surface_epsilon(protein.sequence, self.load_imc_object())
+
 
 class FDSurfaceEpsilon(FDSurfaceEpsilonProperty):
     """
