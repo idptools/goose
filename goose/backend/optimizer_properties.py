@@ -1212,10 +1212,12 @@ class MatchIntermap(EpsilonMatrixProperty):
     """
     def __init__(self, sequence: str, target_sequence: str, weight: float = 1.0,
                  model: str = 'mpipi', preloaded_model = None, 
-                 window_size=15, constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True):
+                 window_size=15, constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True,
+                 homotypic_interaction: bool = False):
         # Initialize with target_sequence as interacting_sequence and interacting_sequence as target
         super().__init__(sequence, target_sequence, 0.0, weight, constraint_type,
-                         model, preloaded_model, window_size, allow_matrix_resizing)
+                         model, preloaded_model, window_size, allow_matrix_resizing,
+                         homotypic_interaction)
 
 
 class ModifyAttractiveValues(EpsilonMatrixProperty):
@@ -1237,9 +1239,11 @@ class ModifyAttractiveValues(EpsilonMatrixProperty):
     def __init__(self, sequence:str, target_sequence: str, multiplier: float,
                  weight: float = 1.0, model: str = 'mpipi', 
                  preloaded_model = None, window_size: int = 15,
-                 constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True):
+                 constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True,
+                 homotypic_interaction: bool = False):
         super().__init__(sequence, target_sequence, 0.0, weight, constraint_type,
-                         model, preloaded_model, window_size, allow_matrix_resizing)
+                         model, preloaded_model, window_size, allow_matrix_resizing,
+                         homotypic_interaction)
         self.multiplier = multiplier
 
     def get_init_args(self) -> dict:
@@ -1275,10 +1279,11 @@ class ModifyRepulsiveValues(EpsilonMatrixProperty):
     def __init__(self, sequence:str, target_sequence: str, 
                  multiplier: float, weight: float = 1.0, model: str = 'mpipi', 
                  preloaded_model = None, window_size: int = 15,
-                 constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True):
-        super().__init__(sequence, target_sequence, 
-                         0.0, weight, constraint_type, model, preloaded_model, 
-                         window_size, allow_matrix_resizing)
+                 constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True,
+                 homotypic_interaction: bool = False):
+        super().__init__(sequence, target_sequence,
+                         0.0, weight, constraint_type, model, preloaded_model,
+                         window_size, allow_matrix_resizing, homotypic_interaction)
         self.multiplier = multiplier
 
     def get_init_args(self) -> dict:
@@ -1307,10 +1312,12 @@ class ModifyMatrixValues(EpsilonMatrixProperty):
                  repulsive_multiplier: float, attractive_multiplier: float,
                  weight: float = 1.0, model: str = 'mpipi', 
                  preloaded_model = None, window_size: int = 15,
-                 constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True):
+                 constraint_type = ConstraintType.EXACT, allow_matrix_resizing=True,
+                 homotypic_interaction: bool = False):
         super().__init__(sequence, target_sequence, 
                          0.0, weight, constraint_type,
-                        model, preloaded_model, window_size, allow_matrix_resizing)
+                        model, preloaded_model, window_size, allow_matrix_resizing,
+                        homotypic_interaction)
         self.repulsive_multiplier = repulsive_multiplier
         self.attractive_multiplier = attractive_multiplier
 
@@ -1339,9 +1346,11 @@ class MatchArbitraryMatrix(EpsilonMatrixProperty):
     def __init__(self, arbitrary_matrix: np.ndarray, target_sequence: str = None,
                  weight: float = 1.0, model: str = 'mpipi',
                  preloaded_model=None, window_size: int = 15,
-                 constraint_type=ConstraintType.EXACT, allow_matrix_resizing=True):
+                 constraint_type=ConstraintType.EXACT, allow_matrix_resizing=True,
+                 homotypic_interaction: bool = False):
         super().__init__(None, target_sequence, 0.0, weight, constraint_type,
-                        model, preloaded_model, window_size, allow_matrix_resizing)
+                        model, preloaded_model, window_size, allow_matrix_resizing,
+                        homotypic_interaction)
         self.arbitrary_matrix = arbitrary_matrix
         # because this is matching something to a premade matrix, we will handle
         # whether this is homotypic dynamically by checking whether target_sequence is None.
