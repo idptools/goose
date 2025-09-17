@@ -1,17 +1,16 @@
 ![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
 # GOOSE : Generate disOrdered prOtiens Specifying propErties
 
-## Last updated July 2025, latest version V0.2.1
+## Last updated September 2025, latest version V0.2.2
 
 ### What's new (the highlights)?
-* OVERHAUL OF VARIANT GENERATION! The variant generation functionality is now completely overhauled. The previous approach was... pretty confusing. This version is hopefully better. 
-* Dramatically improved sequence space that GOOSE can explore when generating a protein seuqence thanks to an overhaul of the backend code. 
-* A completely new approach for sequence / sequence variant generation has been launched! Check out the new SequenceOptimizer documentation on ReadTheDocs. 
-* SPEED! GOOSE is faster thanks to a rewrite of ... everything (as of v 0_2_1). 
-* Additional functionality for sequence creation (ex. custom probabilities for amino acids when specifying sequences by properties).
-* Addition of amino acid frequencies in the IDRs of 11 model organism proteomes that can be used for the custom probabilities for sequence generation.
-* Updated minimal_variant functionality (again). Now it's not dreadfully fast and it does a better job!
-* Addition of demo Jupyter Notebooks. See /goose/demos for examples on using SequenceOptimizer, generating sequences based on interactions, and making custom optimizer properties
+* Complete overhaul of the SequenceOptimizer architecture to add support for optimization of properties that have highly variably seensitivies and scales of values.
+* Complete overhaul to the SequenceOptimizer properties. Added functionality to set targets to be minimum, maximum, or exact values. 
+* Introduction of numerous new SequenceOptimizer properties. 
+* Added linear profiles of properties in SequenceOptimizer so you can optimize across sliding windows of values across a sequence.
+* Added the ability to optimize towards arbitrary vectors for linear profiles. 
+* Added the ability to optimize towards arbitrary matrices for properties involving matrix calculations. 
+* Update of demo notebooks in /demos to reflect changes in code. 
 
 ### What is GOOSE?
 GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. 
@@ -25,7 +24,7 @@ The main functionalities of GOOSE are:
  • Fractions of amino acids (multiple fractions simultaneously)  
  • End-to-end distance (Re) or radius of gyration (Rg)  
 
- **2.** Generate sequences by *sequence optimization*. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can **define your own functions to design sequences**! This is the mechanism by which you can design IDRs that interact with themselves or other IDRs. 
+ **2.** Generate sequences by *sequence optimization*. There are many predefined properties you can optimzie towards. In addition, you can **define your own functions to design sequences**!
 
 **3.** Generate IDR variants. There are now 16 different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 
@@ -77,6 +76,15 @@ For the time being, you can cite our [preprint](https://www.biorxiv.org/content/
 ## Changes
 
 The section below logs changes to GOOSE.  
+
+#### V0.2.2 - SequenceOptimizer update! (September 2025)
+* Complete overhaul of the SequenceOptimizer architecture to add support for optimization of properties that have highly variably seensitivies and scales of values.
+* Complete overhaul to the SequenceOptimizer properties. Added functionality to set targets to be minimum, maximum, or exact values. 
+* Introduction of numerous new SequenceOptimizer properties. 
+* Added linear profiles of properties in SequenceOptimizer so you can optimize across sliding windows of values across a sequence.
+* Added the ability to optimize towards arbitrary vectors for linear profiles. 
+* Added the ability to optimize towards arbitrary matrices for properties involving matrix calculations. 
+* Update of demo notebooks in /demos to reflect changes in code. 
 
 #### V0.2.1 - MAJOR UPDATE... again! (July 2025)
 * Complete rewrite of variant generation functionality for both the backend code and the front end code. 

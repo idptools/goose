@@ -644,10 +644,9 @@ GOOSE includes comprehensive demo notebooks showcasing advanced ``SequenceOptimi
 
 **Available Demos:**
 - **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
-- **Custom properties**: Creating and implementing user-defined properties  
-- **Interaction optimization**: Epsilon-based properties and matrix manipulations
-- **Performance optimization**: Efficient settings for different use cases
-- **Advanced features**: Adaptive scaling, convergence detection, and troubleshooting
+- **Custom properties**: see /demos/custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
+- **Design by interaction**: see /demos/generate_sequences_by_interaction.ipynb for designing sequences to interact with a target sequence using epsilon-based properties.
+
 
 **Demo Location:**
 Check the ``demos`` directory for Jupyter notebooks with detailed examples and explanations.
