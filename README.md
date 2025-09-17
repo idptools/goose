@@ -12,6 +12,13 @@
 * Added the ability to optimize towards arbitrary matrices for properties involving matrix calculations. 
 * Update of demo notebooks in /demos to reflect changes in code. 
 
+#### Available Demos
+* **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
+* **Custom properties**: see /demos/custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
+* **Design by interaction**: see /demos/generate_sequences_by_interaction.ipynb for designing sequences to interact with a target sequence using epsilon-based properties.
+* **Design by linear profiles**: see /demos/linear_profiles.ipynb for designing sequences to match linear profiles of properties like NCPR.
+* **Design by interaction matrices**: see /demos/epsilon_matrix_variants.ipynb for designing sequences to match or modify interaction matrices.
+
 ### What is GOOSE?
 GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. 
 
