@@ -364,15 +364,15 @@ The optimizer excels at balancing multiple competing properties simultaneously. 
 Custom Properties
 -----------------
 
-Creating custom properties is straightforward by subclassing ``ProteinProperty``. The new system supports all constraint types and tolerances automatically:
+Creating custom properties is straightforward by subclassing ``CustomProperty``. The new system supports all constraint types and tolerances automatically:
 
 .. code-block:: python
 
     import goose
-    from goose.backend.optimizer_properties import ProteinProperty, ConstraintType
+    from goose.backend.optimizer_properties import CustomProperty, ConstraintType
     import sparrow
 
-    class AlanineCount(ProteinProperty):
+    class AlanineCount(CustomProperty):
         """Count the number of alanine residues in the sequence."""
         
         def __init__(self, target_value: float, weight: float = 1.0, 
@@ -383,7 +383,7 @@ Creating custom properties is straightforward by subclassing ``ProteinProperty``
             """Calculate the raw property value (before constraint application)."""
             return float(protein.sequence.count('A'))
 
-    class MotifCount(ProteinProperty):
+    class MotifCount(CustomProperty):
         """Count occurrences of a specific motif in the sequence."""
         
         def __init__(self, motif: str, target_value: float, weight: float = 1.0,
@@ -643,7 +643,7 @@ Examples and Demo Notebooks
 GOOSE includes comprehensive demo notebooks showcasing advanced ``SequenceOptimizer`` usage:
 
 **Available Demos:**
-- **Basic optimization**: Single and multi-property examples
+- **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
 - **Custom properties**: Creating and implementing user-defined properties  
 - **Interaction optimization**: Epsilon-based properties and matrix manipulations
 - **Performance optimization**: Efficient settings for different use cases
@@ -658,6 +658,7 @@ API Reference
 **Core Classes:**
 - ``goose.SequenceOptimizer``: Main optimization engine
 - ``goose.backend.optimizer_properties.ProteinProperty``: Base class for properties
+- ``goose.backend.optimizer_properties.CustomProperty``: Base class for custom properties users can define
 
 **Key Methods:**
 - ``SequenceOptimizer.add_property()``: Add properties to optimize

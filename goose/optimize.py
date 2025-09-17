@@ -872,7 +872,7 @@ class SequenceOptimizer:
         # Fallback: if no properties meet threshold, boost the top contributor to avoid total stagnation
         if boosted_count == 0 and property_priorities:
             prop_name, priority_score, trend_stagnant, normalization_stagnant, raw_error, norm_factor, contribution = property_priorities[0]
-            if self.verbose:
+            if self.debugging:
                 self.logger.info(f"   🚨 Fallback: No properties >{contribution_threshold*100:.0f}% contribution, boosting top contributor {prop_name} ({contribution*100:.1f}%)")
             
             if trend_stagnant:
@@ -882,7 +882,7 @@ class SequenceOptimizer:
             needs_norm_fix = normalization_stagnant or (trend_stagnant and norm_factor < 0.5)
             if needs_norm_fix:
                 normalization_fixes.append(prop_name)
-                if self.verbose:
+                if self.debugging:
                     reason = "normalization issue" if normalization_stagnant else "low norm_factor + trend stagnant"
                     self.logger.info(f"   🔧 Fallback normalization fix for {prop_name}: {reason} "
                                    f"(raw_error: {raw_error:.3f}, norm_factor: {norm_factor:.3f})")

@@ -435,6 +435,29 @@ class ProteinProperty(ABC):
             return raw_value, error
 
 
+class CustomProperty(ProteinProperty):
+    """
+    User-facing custom property class that inherits all functionality from ProteinProperty.
+    Users should subclass this and implement calculate_raw_value().
+    """
+    multi_target = True  # Class-level attribute - override to limit ability to have multiple targets.
+    can_be_linear_profile = True  # Class-level attribute - override to disallow linear profiles
+    allow_setting_target_by_sequence = True  # Class-level attribute - override to disallow setting target by sequence.
+    can_set_target_sequence_and_target_value = True  # whether you can set the target sequence and target value at the same time.
+    def __init__(self, target_value: float=None, target_sequence: str = None, weight: float = 1.0,
+                 constraint_type: ConstraintType = ConstraintType.EXACT,
+                 window_size: int = 5, end_mode: str = 'extend',
+                 calculate_as_linear_profile: bool = False, target_profile: np.ndarray = None):
+
+        super().__init__(target_value=target_value, weight=weight, constraint_type=constraint_type,
+                         window_size=window_size, end_mode=end_mode,
+                         calculate_as_linear_profile=calculate_as_linear_profile,
+                         target_sequence=target_sequence, target_profile=target_profile)
+        
+    def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+        raise NotImplementedError("CustomProperty requires a user-defined calculation function.")
+    
+
 class ComputeIWD(ProteinProperty):
     """
     Compute the Inversed Weighted Distance (IWD) property for the target residues in the sequence.
