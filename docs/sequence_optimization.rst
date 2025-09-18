@@ -1,9 +1,9 @@
 Using the SequenceOptimizer
 ==============================
 
-GOOSE's ``SequenceOptimizer`` is a flexible tool for designing protein sequences that match user-defined biophysical or biochemical property targets. It uses stochastic optimization with adaptive scaling to  explore sequence space and minimize the difference between calculated and target property values. You can simultaneously optimize towards arbitrary numbers of properties with individual weights, tolerances, and constraint types.
+GOOSE's ``SequenceOptimizer`` is a flexible tool for designing protein sequences that match user-defined target value. It uses stochastic optimization with adaptive scaling to  explore sequence space and minimize the difference between calculated and target property values. You can simultaneously optimize towards arbitrary numbers of properties with individual weights, tolerances, and constraint types.
 
-**SUPER DUPER IMPORTANT NOTE**: GOOSE is an IDR design tool. **HOWEVER**, when using SequenceOptimizer, you can design anything you want. Thus, sequences are not guaranteed to be disordered unless you specify the ``FractionDisorder`` property. You can also use the ``MatchSequenceDisorder`` property if you'd like to make a variant that maintains the disorder profile of your original sequence (either exactly or as a minimum threshold).
+**IMPORTANT NOTE PLEASE READ**: GOOSE is an IDR design tool. **HOWEVER**, when using SequenceOptimizer, you can design anything you want. Thus, sequences are not guaranteed to be predicted to be disordered unless you specify the ``FractionDisorder`` property. 
 
 Key Features of the New SequenceOptimizer
 -----------------------------------------
@@ -567,6 +567,7 @@ Troubleshooting and Optimization Tips
 *Symptoms*: Error plateaus at high values, properties far from targets
 
 *Solutions*:
+
 - **Increase iterations**: ``max_iterations=5000`` or higher for complex problems
 - **Enable adaptive scaling**: ``enable_adaptive_scaling=True`` (default)
 - **Increase diversity**: ``shuffle_frequency=25``, ``num_candidates=10``
@@ -579,6 +580,7 @@ Troubleshooting and Optimization Tips
 *Symptoms*: Optimization takes too long, high memory usage
 
 *Solutions*:
+
 - **Reduce candidates**: ``num_candidates=3`` for faster iterations (default is 5)
 - **Disable expensive features**: ``enable_adaptive_scaling=False``, ``enable_shuffling=False``
 - **Use stricter early stopping**: ``error_tolerance=1e-4``, ``enable_early_convergence=True``
@@ -590,11 +592,13 @@ Troubleshooting and Optimization Tips
 *Symptoms*: Some properties optimize while others get worse
 
 *Solutions*:
+
 - **Adjust weights**: Higher weight = higher priority
 - **Use appropriate constraint types**: MINIMUM/MAXIMUM instead of EXACT when possible
 - **Set generous tolerances**: Allow some flexibility in less critical properties
 - **Check physical compatibility**: Some combinations may be impossible
 - **Monitor individual properties**: Enable ``verbose=True`` to track individual progress
+
 
 .. code-block:: python
 
@@ -611,6 +615,7 @@ Troubleshooting and Optimization Tips
 *Symptoms*: Out of memory errors, excessive RAM usage
 
 *Solutions*:
+
 - **Reduce history sizes**: ``improvement_history_size=5``, ``error_history_size=10``
 - **Clear cache periodically**: Call ``optimizer._clear_evaluation_cache()`` if needed
 - **Disable caching**: Set caching parameters conservatively
@@ -632,6 +637,7 @@ Troubleshooting and Optimization Tips
 *Symptoms*: Error doesn't improve for many iterations
 
 *Solutions*:
+
 - **Enable shuffling**: ``enable_shuffling=True`` with frequent shuffling
 - **Adjust stagnation detection**: Lower ``stagnation_threshold=15``
 - **Increase mutation diversity**: Higher ``max_mutations=20``
@@ -640,14 +646,13 @@ Troubleshooting and Optimization Tips
 Examples and Demo Notebooks
 ----------------------------
 
-GOOSE includes comprehensive demo notebooks showcasing advanced ``SequenceOptimizer`` usage:
+GOOSE includes comprehensive demo notebooks showcasing advanced ``SequenceOptimizer`` usage in the /demos directory. These include:
 
-**Available Demos:**
-- **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
-- **Custom properties**: see /demos/custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
-- **Design by interaction**: see /demos/generate_sequences_by_interaction.ipynb for designing sequences to interact with a target sequence using epsilon-based properties.
-- **Design by linear profiles**: see /demos/linear_profiles.ipynb for designing sequences to match linear profiles of properties like NCPR.
-- **Design by interaction matrices**: see /demos/epsilon_matrix_variants.ipynb for designing sequences to match or modify interaction matrices.
+- Basic optimization: see sequence_optimization.ipynb for basic usage. 
+- Custom properties: see custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
+- Design by interaction: see generate_sequences_by_interaction.ipynb for designing sequences to interact with a target sequence using epsilon-based properties.
+- Design by linear profiles: see linear_profiles.ipynb for designing sequences to match linear profiles of properties like NCPR.
+- Design by interaction matrices: see epsilon_matrix_variants.ipynb for designing sequences to match or modify interaction matrices.
 
 
 **Demo Location:**

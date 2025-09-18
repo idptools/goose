@@ -1,6 +1,6 @@
 What is GOOSE?
 ===============
-**GOOSE : Generate disOrdered prOtiens Specifying propErties** is a python package developed to generate intrinsically disordered proteins or protein regions (collectively IDRs) and IDR variants. My goal is to make this *as useful as possible to the protein disorder community*. If you have any feature requests, please email me at remenecker@wustl.edu with the subject line **GOOSE feature request** and I'll be happy to see if I can make it happen. 
+**GOOSE : Generate disOrdered prOtiens Specifying propErties** is a python package developed to generate intrinsically disordered proteins or protein regions (collectively IDRs) and IDR variants.
 
 What can GOOSE do?
 --------------------
@@ -13,36 +13,47 @@ The main functionalities of GOOSE are:
   #. Classes of amino acids (multiple classes simultaneously)  
   #. End-to-end distance (Re) or radius of gyration (Rg)  
 
-- Generate sequences by sequence optimization. This is a new approach for sequence  or variant generation in GOOSE. In addition, you can define your own functions to design sequences!
 - Generate IDR variants. There are over a dozen different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
+- Generate sequences by sequence optimization.  In addition, you can define your own functions to design sequences!
 
-What is new in V0.2.1?
+  #. This approach offers greater flexibility and control over the design process.
+  #. The optimizer comes with many built-in functions for optimization.  
+  #. You can define your own functions to design sequences.
+
+Importantly, GOOSE incorporates stochasticity into sequence generation, which allows you to create many sequences or sequence variants with the exact same overall properties but different primary sequences. 
+
+What is new in V0.2.2?
 -----------------------
-The higlights of the new features in GOOSE V0.2.1 are:
+The highlights of the new features in GOOSE V0.2.2 are:
 
-* Complete overhaul of the variant generation functionality to make it easier to use and less confusing.
-* Major improvements to sequence generation to increase speed. 
-* Introduction of custom probabilities for sequence generation. This allows you to specify the probability of each amino acid in your sequence, which can be useful for generating sequences with specific properties or characteristics.
-* Addition of probabilities of amino acids in IDRs by organism based on their frequency across their proteomes. 
-* Better exploration of sequence space by reducing constraints during sequence generation.
-* Much faster kappa optimization and improvements to generate sequences with extreme kappa values.
-* Improved error handling and more informative error messages.
-* Improved documentation and examples to help users get started with GOOSE more easily.
-* Many many bug fixes. 
+- Complete overhaul of the SequenceOptimizer architecture:
+
+  #. Better support for optimization of properties that have highly variably sensitivities and/or scales of values.
+  #. Better logging and debugging information.
+  #. Adaptive optimization that can help avoid getting 'stuck' in local minima.
+
+- Rewrite of the SequenceOptimizer properties.
+
+  #. Added functionality to set targets values to be minimum, maximum, or exact values. 
+  #. Added linear profiles of properties in SequenceOptimizer so you can optimize across sliding windows of values across a sequence.
+  #. Added the ability to optimize towards arbitrary vectors for linear profiles. 
+  #. Added the ability to optimize towards arbitrary matrices for properties involving matrix calculations. 
+  #. Introduction of numerous new SequenceOptimizer properties. 
+
+- Update of demo notebooks in /demos to reflect changes in code and provide new demos. 
+- Numerous bug fixes and performance improvements.
 
 
 For full details, see the change log `on GitHub <https://github.com/idptools/goose>`_ 
 
 How can I use GOOSE?
 --------------------
-You can use GOOSE from Python or from Google Colab.
-
-The Colab notebook can be found `in this link <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
+You can use GOOSE from Python or from Google Colab. The Colab notebook can be found `in this link <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
 
 
 Installation - GOOSE takes flight!
 ===================================
-Right now you can only install GOOSE through Github. It will be on PyPi to allow for pip installation... soon!  
+Right now you can only install GOOSE through Github. 
 
 A few notes on how to best use GOOSE.
 * We strongly recommend using GOOSE in a virtual environment. This is not required, but it will help you avoid any issues with package dependencies. See conda or venv for more information on how to set up a virtual environment.
@@ -79,23 +90,49 @@ This will install SPARROW. **Important note**: if your attempted install of SPAR
 
 Important Limitations
 ======================
-GOOSE has some important limitations that users should be aware of. First, GOOSE makes sequences **predicted** to be disordered based on the disorder predictor metapredict. Although modern disorder predictors have proven to be *quite good*, one should aways keep in mind that predicted disorder is **not** gaurenteed disorder. 
+GOOSE has some important limitations that users should be aware of. 
+
+GOOSE makes sequences predicted to be disordered
+-------------------------------------------------
+GOOSE makes sequences **predicted** to be disordered based on the disorder predictor metapredict. Although modern disorder predictors have proven to be *quite good*, one should aways keep in mind that predicted disorder is **not** gaurenteed disorder. 
 
 Allowed error in sequence properties
 -------------------------------------
-GOOSE by default allows a *small* amount of error between some user input properties and the properties of returned sequences. For hydropathy, the allowed error is 0.07, which is honestly negligible. For kappa, allowed error is 0.03. This is a balance between accuracy and speed. You can change these values by specifying kappa_tolerance or hydropathy_tolerance in the relevant functions. In addition, if you install GOOSE locally, you can go into goose/backend/parameters and modify these values globally. Finally, if you choose an NCPR / FCR combination that is mathematically impossible, GOOSE will get as close as it can.
+By default when using the ``create`` functionality, GOOSE allows a *small* amount of error in properties. This is a balance between accuracy and speed. The allowed error is:
 
-Speed, specified properties, and stochasticity
------------------------------------------------
-The protein disorder field moves fast, and we are not here to slow your research down. It was important for us to make GOOSE as fast as possible. However, because GOOSE incorporates stochasticity into sequence generation, GOOSE still has to do some work when designing your disordered sequence. The stochasticity in sequence generation makes it harder for GOOSE to generate sequences but helps minimize the chance that GOOSE makes the same sequence more than once. This is important because it allows you to create many sequences or sequence variants with the exact same overall properties but different primary sequences. As far as speed goes, *the more properties you specify, or the more constraints you put on sequence design, the more time it will take GOOSE to generate your sequence*. 
+* For hydropathy, the allowed error is 0.07. Override by specifying hydropathy_tolerance.
+* For kappa, allowed error is 0.03. Override by specifying kappa_tolerance.
+* If you choose an NCPR / FCR combination that is mathematically impossible, GOOSE will get as close as it can.
+
+In addition, if you install GOOSE locally, you can go into goose/backend/parameters and modify these values globally.
+
+Specified properties and speed
+-------------------------------------
+The more properties you specify, or the more constraints you put on sequence design, the more time it will take GOOSE to generate your sequence. 
 
 Failed sequence generation
 ---------------------------
-Sometimes GOOSE can't make your sequence. However, you can usually just run the code a few more times and GOOSE will eventually land on a solution that matches your specified properties (thanks to the inherent stochasticity in sequence generation). The reason we designed GOOSE this way is to avoid situations where you try to make a sequence that is difficult for GOOSE to generate and GOOSE spends 10+ minutes working it out. If you still can't get a sequence you want, try *slightly* adjusting your properties or reducing the disorder cutoff value. 
+Sometimes GOOSE can't make your sequence. Here are some tips on getting around this:
+
+- Run the code a few more times. GOOSE often will eventually make your sequence thanks to the inherent stochasticity in sequence generation. 
+- If using the ``create`` functionality:
+
+  #. Increase ``attempts``. Default is 100.
+  #. Reduce the disorder cutoff value by specifying ``disorder_cutoff``. Default is 0.5.
+  #. Increase the allowed error in properties by specifying ``hydropathy_tolerance`` and ``kappa_tolerance``. Default is 0.07 and 0.03, respectively.
+  #. *Slightly* adjust your specified properties. 
+  #. Try using the ``SequenceOptimizer`` instead as it offers more flexibility.
+
+- If using the ``SequenceOptimizer`` functionality:
+
+  #. Increase ``max_iterations``. Default is 1,000.
+  #. Increase the tolerance allowed for each property by specifying the ``tolerance`` argument when defining each property. Default is 0.00.
+  #. Try changing the weights of your specified properties. 
+
 
 Limits on specifying sequence properties
 -----------------------------------------
-GOOSE will only return sequences with disorder values above the cutoff disorder threshold. Some sequence compositions (for example, very high mean hydrophobicity) are simply not predicted to be disordered. GOOSE will not by default return these sequences to you. Apart from sequences not predicted to be disordered, it is also important to note that some combinations of sequence properties are not mathematically possible. GOOSE uses a rescaled Kyte Doolittle hydropathy scale for calculating mean hydrophobicity. This scale goes from 0 to 9 where higher values are more hydrophobic. The charged residues have low hydrophobicity values (R = 0, K = 0.6, D = 1, E = 1). Therefore, if you have a sequence with too many charged residues, you limit how high the mean hydrophobicity can go. If you specify a high FCR and a high hydrophobicity, that sequence may be mathematically impossible to make. GOOSE will return an error if you do this. 
+When using the ``create`` functionality, GOOSE will only return sequences with disorder values above the disorder threshold. Some sequence compositions are simply not predicted to be disordered. It is also important to note that some combinations of sequence properties are not mathematically possible. GOOSE uses a rescaled Kyte Doolittle hydropathy scale for calculating mean hydrophobicity. This scale goes from 0 to 9 where higher values are more hydrophobic. The charged residues have low hydrophobicity values (R = 0, K = 0.6, D = 1, E = 1). Therefore, if you have a sequence with too many charged residues, you limit how high the mean hydrophobicity can go. If you specify a high FCR and a high hydrophobicity, that sequence may be mathematically impossible to make. GOOSE will return an error if you do this. 
 
 Best practices when using GOOSE
 --------------------------------

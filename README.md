@@ -73,7 +73,7 @@ This will install SPARROW. **Important note**: if your attempted install of SPAR
 
 ## Documentation
 
-Documentation for GOOSE can be found [here](https://goose.readthedocs.io/en/latest/index.html)  
+Documentation for GOOSE can be found [here](https://goose.readthedocs.io/en/latest/index.html).
 
 
 ## How to cite GOOSE
@@ -139,9 +139,11 @@ Initial release. Begin tracking changes.
 ## Acknowledgements
 
 **Funding**
+
 This project was supported by grants from agencies including the National Science Foundation (NSF), the National Institute of Health (NIH).
 
 **Development**
+
 Development of GOOSE was led primarily by Ryan Emenecker. Numerous ideas were contributed from others along the way including from Shahar Sukenik, Alex Holehouse, and more. Development of the SequenceOptimizer functionality released in V0.2.0 was led by Jeffrey Lotthammer. GOOSE is not possible without the amazing tools developed by the Holehouse Lab. Shoutout to Garrett Ginell, Dan Griffith, Borna Novak, and Nick Razo for their various contributions.
 
 **Cookiecutter**
