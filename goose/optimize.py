@@ -159,7 +159,7 @@ class SequenceOptimizer:
         improvement_threshold: float = -0.001,
         stability_threshold: float = 0.01,
         debugging: bool = False,  # Enable extra logging for debugging
-        update_interval: int = 10  # Update progress bar every N iterations
+        update_interval: int = 1  # Update progress bar every N iterations
     ):
         """
         Initialize the improved optimizer.
