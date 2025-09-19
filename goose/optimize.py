@@ -1115,6 +1115,7 @@ class SequenceOptimizer:
         # Calculate dynamic normalization factors based on initial sequence
         if self.verbose:
             self.logger.info(f"Starting optimization (target length: {self.target_length})")
+            self.logger.info(f"Starting optimization with initial sequence: {self.best_sequence}")
 
         # debugging info
         if self.debugging:
