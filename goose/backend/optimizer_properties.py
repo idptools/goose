@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Tuple, Dict, Callable
+from typing import Any, Tuple, Dict, Callable, Union, List
 from enum import Enum
 import numpy as np
 import statistics as stat
@@ -89,6 +89,7 @@ class ProteinProperty(ABC):
     can_be_linear_profile = True  # Class-level attribute - override to disallow linear profiles
     allow_setting_target_by_sequence = True  # Class-level attribute - override to disallow setting target by sequence.
     can_set_target_sequence_and_target_value = False # whether you can set the target sequence and target value at the same time.
+    calculate_in_batch = False  # Whether this property can be calculated in batch mode (default False)
     def __init__(self, target_value: float = None, weight: float = 1.0, 
                  constraint_type: ConstraintType = ConstraintType.EXACT,
                  window_size: int = 5, end_mode: str = 'extend',
@@ -287,30 +288,80 @@ class ProteinProperty(ABC):
         assert isinstance(value, (int,float)), f"weight must be numerical. Received {type(value)}"
         self._weight = value
 
+    def calculate_error_batch(self, current_values: Union[List[float], np.ndarray]) -> np.ndarray:
+        """
+        Calculate errors for a batch of values using vectorized operations.
+        Follows GOOSE's vectorized operation patterns for maximum performance.
+
+        Parameters
+        ----------
+        current_values : Union[List[float], np.ndarray]
+            Array or list of current property values to calculate errors for
+
+        Returns
+        -------
+        np.ndarray
+            Array of calculated errors (always positive) corresponding to each input value
+            
+        Raises
+        ------
+        ValueError
+            If current_values is empty or contains invalid values
+        TypeError
+            If current_values contains non-numeric values
+        """
+        # Convert to numpy array for vectorized operations
+        current_values = np.asarray(current_values, dtype=float)
+        
+        # Input validation following GOOSE patterns
+        if current_values.size == 0:
+            raise ValueError("current_values cannot be empty")
+        
+        # Check for invalid values (NaN, inf)
+        if not np.all(np.isfinite(current_values)):
+            invalid_indices = np.where(~np.isfinite(current_values))[0]
+            raise ValueError(f"current_values contains invalid values (NaN/inf) at indices: {invalid_indices.tolist()}")
+        
+        # Vectorized error calculation based on constraint type
+        if self.constraint_type == ConstraintType.EXACT:
+            # Absolute difference from target (vectorized)
+            errors = np.abs(current_values - self.target_value)
+            
+        elif self.constraint_type == ConstraintType.MINIMUM:
+            # Penalty only when below minimum (vectorized)
+            # Use np.maximum to handle element-wise max with 0
+            errors = np.maximum(0.0, self.target_value - current_values)
+            
+        elif self.constraint_type == ConstraintType.MAXIMUM:
+            # Penalty only when above maximum (vectorized)
+            # Use np.maximum to handle element-wise max with 0
+            errors = np.maximum(0.0, current_values - self.target_value)
+            
+        else:
+            raise ValueError(f"Unknown constraint type: {self.constraint_type}")
+        
+        return errors
+
     def calculate_error(self, current_value: float) -> float:
         """
         Calculate the error between the current value and the target value based on the constraint type.
+        Updated to use batch calculation for consistency.
 
-        Parameters:
-        current_value (float): The current value of the property.
+        Parameters
+        ----------
+        current_value : float
+            The current value of the property
 
-        Returns:
-        float: The calculated error (always positive).
+        Returns
+        -------
+        float
+            The calculated error (always positive)
         """
-        if self.constraint_type == ConstraintType.EXACT:
-            return abs(current_value - self.target_value)
-        elif self.constraint_type == ConstraintType.MINIMUM:
-            if current_value >= self.target_value:
-                return 0.0  # No penalty if above minimum
-            else:
-                return self.target_value - current_value  # Penalty for being below minimum
-        elif self.constraint_type == ConstraintType.MAXIMUM:
-            if current_value <= self.target_value:
-                return 0.0  # No penalty if below maximum
-            else:
-                return current_value - self.target_value  # Penalty for being above maximum
-        else:
-            raise ValueError(f"Unknown constraint type: {self.constraint_type}")
+        # Use batch calculation for single value to ensure consistency
+        # This also provides automatic validation
+        batch_result = self.calculate_error_batch([current_value])
+        return float(batch_result[0])
+
 
     @abstractmethod
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
@@ -406,6 +457,28 @@ class ProteinProperty(ABC):
             self.resize_linear_profile()
         return self.target_profile
 
+    def calculate_batch(self, proteins: list) -> list:
+        """
+        Calculate the property for a batch of proteins.
+        This is an optional method that can be implemented by subclasses for efficiency.
+
+        Parameters
+        ----------
+        proteins : list of sparrow.Protein
+            List of protein instances
+
+        Returns
+        -------
+        list of tuples
+            Each tuple contains (raw_value, error) for each protein
+        """
+        results = []
+        batch_calculations = self.calculate_raw_value_batch(proteins)
+        errors = self.calculate_error_batch(batch_calculations)
+        for raw_value, error in zip(batch_calculations, errors):
+            results.append((raw_value, error))
+        return results
+
     def calculate(self, protein: 'sparrow.Protein') -> float:
         """
         Calculate the final error value for optimization.
@@ -444,6 +517,7 @@ class CustomProperty(ProteinProperty):
     can_be_linear_profile = True  # Class-level attribute - override to disallow linear profiles
     allow_setting_target_by_sequence = True  # Class-level attribute - override to disallow setting target by sequence.
     can_set_target_sequence_and_target_value = True  # whether you can set the target sequence and target value at the same time.
+    calculate_in_batch = False  # Whether this property can be calculated in batch mode (default False)
     def __init__(self, target_value: float=None, target_sequence: str = None, weight: float = 1.0,
                  constraint_type: ConstraintType = ConstraintType.EXACT,
                  window_size: int = 5, end_mode: str = 'extend',
@@ -630,6 +704,7 @@ class FractionDisorder(ProteinProperty):
     the current sequence. 
     """
     can_be_linear_profile = False  # Disorder fraction does not make sense as a linear profile
+    calculate_in_batch = True  # Disorder can be calculated in batch mode
     def __init__(self, target_value: float=None, weight: float = 1.0, disorder_cutoff: float = 0.5,
                  constraint_type: ConstraintType = ConstraintType.EXACT,
                  target_sequence: str = None):
@@ -648,6 +723,14 @@ class FractionDisorder(ProteinProperty):
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         disorder = meta.predict_disorder(protein.sequence)
         return (disorder > self.disorder_cutoff).sum() / len(disorder)
+    
+    def calculate_raw_value_batch(self, proteins: list) -> list:
+        sequences = [p.sequence for p in proteins]
+        disorder_with_seqs = meta.predict_disorder(sequences)
+        disorder = np.array([d[1] for d in disorder_with_seqs])
+        frac_disorder = (disorder > self.disorder_cutoff).sum(axis=1) / disorder.shape[1]
+        results = frac_disorder.tolist()
+        return results
 
 
 class MatchSequenceDisorder(ProteinProperty):
