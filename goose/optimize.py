@@ -321,7 +321,10 @@ class SequenceOptimizer:
         self.starting_sequence: str = None
         
         # Evaluation cache for performance optimization
-        self._raw_property_cache: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        # Replace hash-based cache with ID-based cache
+        self._raw_property_cache: Dict[int, Dict[str, Dict[str, Any]]] = {}
+        self._sequence_id_map: Dict[str, int] = {}  # sequence -> unique ID
+        self._next_sequence_id: int = 0
         self._cache_hits: int = 0
         self._cache_misses: int = 0
         
@@ -331,10 +334,50 @@ class SequenceOptimizer:
         # debugging flag
         self.debugging = debugging
 
-        self.update_interval = update_interval
+        self.update_interval = update_interval\
         
+        # store aa list for faster mutation functions
+        self.aa_list = ['L', 'M', 'A', 'V', 'I', 'Q', 'N', 'S', 'T', 'D', 'E', 'K', 'R', 'F', 'W', 'Y', 'P', 'H', 'G', 'C']
+        self.aa_list_without: Dict[str, List[str]] = {}  # Cache filtered AA lists
+        for aa in self.aa_list:
+            self.aa_list_without[aa] = [x for x in self.aa_list if x != aa]
+
+        # track property names
+        self._property_names: List[str] = []
+
         # Configure logging
         self._configure_logging()
+
+    def _get_sequence_id(self, sequence: str) -> int:
+        """
+        Get or create a unique integer ID for a sequence.
+        
+        Uses a simple counter to assign IDs. Much faster than hashing
+        because we only need to hash once per unique sequence seen.
+        """
+        # Check if we've seen this sequence before
+        if sequence in self._sequence_id_map:
+            return self._sequence_id_map[sequence]
+        
+        # Assign new ID
+        seq_id = self._next_sequence_id
+        self._next_sequence_id += 1
+        self._sequence_id_map[sequence] = seq_id
+        
+        # Limit map size to prevent unbounded growth
+        if len(self._sequence_id_map) > 1000:
+            # Remove 20% oldest entries (in practice, old sequences unlikely to reappear)
+            # Since dict preserves insertion order in Python 3.7+, remove first 20%
+            items_to_remove = list(self._sequence_id_map.keys())[:200]
+            for seq in items_to_remove:
+                old_id = self._sequence_id_map[seq]
+                del self._sequence_id_map[seq]
+                # Also remove from cache
+                if old_id in self._raw_property_cache:
+                    del self._raw_property_cache[old_id]
+        
+        return seq_id
+
 
     def set_initial_sequence(self, sequence: str) -> None:
         """Set the initial sequence and calculate normalization factors"""
@@ -391,6 +434,7 @@ class SequenceOptimizer:
         self.properties.append(prop)
         
         prop_name = prop.__class__.__name__
+        self._property_names.append(prop_name)
         self.property_scales[prop_name] = 1.0
         self.property_improvements[prop_name] = deque(maxlen=self.improvement_history_size)
         
@@ -401,197 +445,67 @@ class SequenceOptimizer:
             tolerance_info = f", tolerance: ±{tolerance}" if tolerance > 0 else ""
             self.logger.info(f"Added property: {prop_name} (target: {prop.target_value}, weight: {prop.weight}{tolerance_info})")
     
-    def _evaluate_sequences_batch(self, sequences: List[str], use_cache: bool = True) -> List[Tuple[float, Dict[str, Dict[str, float]]]]:
+    def _assemble_property_info(self, cached_raw_values: Dict[str, Dict[str, Any]]) -> Tuple[float, Dict[str, Dict[str, float]]]:
         """
-        Evaluate multiple sequences in batch for improved performance.
-        
-        Parameters
-        ----------
-        sequences : List[str]
-            List of sequences to evaluate
-        use_cache : bool, optional
-            Whether to use evaluation cache. Default: True
-        
-        Returns
-        -------
-        List[Tuple[float, Dict[str, Dict[str, float]]]]
-            List of (total_error, property_info) tuples for each sequence
+        Assemble property info from cached raw values with current scaling/normalization.
+        Extracted to avoid code duplication between single and batch evaluation.
         """
-        if not sequences:
-            return []
+        property_info = {}
+        weighted_errors = []
         
-        # Initialize cache if needed
-        if not hasattr(self, '_raw_property_cache'):
-            self._raw_property_cache = {}
+        # Pre-fetch normalization factors and scales once
+        norm_factors = {name: self.normalization_factors.get(name, 1.0) for name in self._property_names}
+        scales = {name: self.property_scales.get(name, 1.0) for name in self._property_names}
         
-        # Separate cached and uncached sequences
-        cached_results = {}
-        uncached_sequences = []
-        uncached_indices = []
-        
-        for i, seq in enumerate(sequences):
-            if use_cache and seq in self._raw_property_cache:
-                cached_results[i] = self._raw_property_cache[seq]
-                self._cache_hits += 1
-            else:
-                uncached_sequences.append(seq)
-                uncached_indices.append(i)
-                self._cache_misses += 1
-        
-        # Batch calculate raw property values for uncached sequences
-        uncached_raw_values = {}
-        if uncached_sequences:
-            # Create SPARROW protein objects in batch
-            proteins = [sparrow.Protein(seq) for seq in uncached_sequences]
+        for prop, prop_name in zip(self.properties, self._property_names):
             
-            # Calculate properties for all proteins in batch
-            for prop in self.properties:
-                prop_name = prop.__class__.__name__
-                
-                # Check if property supports batch calculation
-                if prop.calculate_in_batch:
-                    # Use batch calculation if available
-                    batch_results = prop.calculate_batch(proteins)
-                    for i, (raw_value, raw_error) in enumerate(batch_results):
-                        seq_idx = uncached_indices[i]
-                        if seq_idx not in uncached_raw_values:
-                            uncached_raw_values[seq_idx] = {}
-                        uncached_raw_values[seq_idx][prop_name] = {
-                            'raw_value': raw_value,
-                            'raw_error': raw_error,
-                            'target_value': prop.target_value,
-                            'tolerance': getattr(prop, '_tolerance', 0.0)
-                        }
-                else:
-                    # Fall back to individual calculation
-                    for i, protein in enumerate(proteins):
-                        seq_idx = uncached_indices[i]
-                        raw_value, raw_error = prop.calculate(protein)
-                        if seq_idx not in uncached_raw_values:
-                            uncached_raw_values[seq_idx] = {}
-                        uncached_raw_values[seq_idx][prop_name] = {
-                            'raw_value': raw_value,
-                            'raw_error': raw_error,
-                            'target_value': prop.target_value,
-                            'tolerance': getattr(prop, '_tolerance', 0.0)
-                        }
+            raw_data = cached_raw_values[prop_name]
+            raw_value = raw_data['raw_value']
+            raw_error = raw_data['raw_error']
+            tolerance = raw_data['tolerance']
             
-            # Cache the raw values for uncached sequences
-            if use_cache:
-                # Limit cache size
-                if len(self._raw_property_cache) > 500:
-                    # Remove oldest 20% of entries
-                    items_to_remove = list(self._raw_property_cache.keys())[:100]
-                    for key in items_to_remove:
-                        del self._raw_property_cache[key]
-                
-                for i, seq in enumerate(uncached_sequences):
-                    seq_idx = uncached_indices[i]
-                    self._raw_property_cache[seq] = uncached_raw_values[seq_idx]
+            within_tolerance = (tolerance == 0.0 and np.abs(raw_error) < 1e-8) or (raw_error <= tolerance)
+            
+            normalization_factor = norm_factors[prop_name]
+            normalized_error = raw_error * normalization_factor
+            
+            scale = scales[prop_name]
+            weighted_error = normalized_error * prop.weight * scale
+            
+            effective_weighted_error = 0.0 if within_tolerance else weighted_error
+            
+            property_info[prop_name] = {
+                'raw_value': raw_value,
+                'target_value': raw_data['target_value'],
+                'raw_error': raw_error,
+                'normalized_error': normalized_error,
+                'normalization_factor': normalization_factor,
+                'weighted_error': weighted_error,
+                'effective_weighted_error': effective_weighted_error,
+                'scale': scale,
+                'tolerance': tolerance,
+                'within_tolerance': within_tolerance,
+            }
+            
+            weighted_errors.append(effective_weighted_error)
         
-        # Combine cached and uncached results, then apply scaling/normalization
-        results = []
-        for i, seq in enumerate(sequences):
-            if i in cached_results:
-                cached_raw_values = cached_results[i]
-            else:
-                cached_raw_values = uncached_raw_values[i]
-            
-            # Apply current scaling and normalization (same logic as original _evaluate_sequence)
-            property_info = {}
-            weighted_errors = []
-            
-            for prop in self.properties:
-                prop_name = prop.__class__.__name__
-                constraint_type = getattr(prop, 'constraint_type', None)
-                
-                # Get cached raw values with safety check
-                if prop_name not in cached_raw_values:
-                    raise ValueError(f"Property {prop_name} not found in cached values. Available: {list(cached_raw_values.keys())}")
-                
-                raw_data = cached_raw_values[prop_name]
-                raw_value = raw_data['raw_value']
-                raw_error = raw_data['raw_error']
-                tolerance = raw_data['tolerance']
-                
-                # Check if property is within tolerance (satisfied)
-                if tolerance == 0.0:
-                    within_tolerance = np.isclose(raw_error, 0.0, atol=1e-8)
-                else:
-                    within_tolerance = raw_error <= tolerance
-                
-                # Apply dynamic normalization based on initial errors
-                normalization_factor = self.normalization_factors.get(prop_name, 1.0)
-                normalized_error = raw_error * normalization_factor
-                
-                # Apply adaptive scaling
-                scale = self.property_scales.get(prop_name, 1.0)
-                weighted_error = normalized_error * prop.weight * scale
-                
-                # If within tolerance, don't contribute to total error
-                effective_weighted_error = 0.0 if within_tolerance else weighted_error
-                
-                # Store information
-                property_info[prop_name] = {
-                    'raw_value': raw_value,
-                    'target_value': raw_data['target_value'],
-                    'raw_error': raw_error,
-                    'normalized_error': normalized_error,
-                    'normalization_factor': normalization_factor,
-                    'weighted_error': weighted_error,
-                    'effective_weighted_error': effective_weighted_error,
-                    'scale': scale,
-                    'tolerance': tolerance,
-                    'within_tolerance': within_tolerance,
-                    'satisfied': within_tolerance,
-                    'constraint_type': constraint_type
-                }
-                
-                weighted_errors.append(effective_weighted_error)
-            
-            total_error = sum(weighted_errors)
-            results.append((total_error, property_info))
-        
-        return results
-
-
+        total_error = sum(weighted_errors)
+        return total_error, property_info
 
     def _evaluate_sequence(self, sequence: Union[str, List[str]], use_cache: bool = True) -> Union[Tuple[float, Dict[str, Dict[str, float]]], List[Tuple[float, Dict[str, Dict[str, float]]]]]:
-        """
-        Evaluate sequence(s) and return error and property info.
-        
-        Parameters
-        ----------
-        sequence : Union[str, List[str]]
-            Single sequence or list of sequences to evaluate
-        use_cache : bool, optional
-            Whether to use evaluation cache. Default: True
-        
-        Returns
-        -------
-        Union[Tuple[float, Dict[str, Dict[str, float]]], List[Tuple[float, Dict[str, Dict[str, float]]]]]
-            For single sequence: (total_error, property_info)
-            For multiple sequences: List of (total_error, property_info) tuples
-        """
-        # Handle batch evaluation
+        """Evaluate sequence(s) and return error and property info."""
         if isinstance(sequence, list):
             return self._evaluate_sequences_batch(sequence, use_cache=use_cache)
         
-        # Handle single sequence evaluation (original logic)
-        # For cache efficiency, separate raw property calculations from scaling/weighting
-        # Raw property values only depend on sequence, not on scaling factors
-        raw_cache_key = sequence
+        raw_cache_key = self._get_sequence_id(sequence)
         
-        # Initialize cache if needed
         if not hasattr(self, '_raw_property_cache'):
             self._raw_property_cache = {}
         
-        # Check if we have raw property values cached
         if use_cache and raw_cache_key in self._raw_property_cache:
             cached_raw_values = self._raw_property_cache[raw_cache_key]
             self._cache_hits += 1
         else:
-            # Calculate raw property values (expensive part)
             protein = sparrow.Protein(sequence)
             cached_raw_values = {}
             
@@ -605,11 +519,8 @@ class SequenceOptimizer:
                     'tolerance': getattr(prop, '_tolerance', 0.0)
                 }
             
-            # Cache the raw values
             if use_cache:
-                # Limit raw cache size
                 if len(self._raw_property_cache) > 500:
-                    # Remove oldest 20% of entries
                     items_to_remove = list(self._raw_property_cache.keys())[:100]
                     for key in items_to_remove:
                         del self._raw_property_cache[key]
@@ -618,90 +529,115 @@ class SequenceOptimizer:
             
             self._cache_misses += 1
         
-        # Now apply current scaling and normalization (fast)
-        property_info = {}
-        weighted_errors = []
+        # Use shared assembly function
+        return self._assemble_property_info(cached_raw_values)
+
+    def _evaluate_sequences_batch(self, sequences: List[str], use_cache: bool = True) -> List[Tuple[float, Dict[str, Dict[str, float]]]]:
+        """Evaluate multiple sequences in batch for improved performance."""
+        if not sequences:
+            return []
         
-        for prop in self.properties:
-            prop_name = prop.__class__.__name__
-            constraint_type = getattr(prop, 'constraint_type', None)
-            
-            # Get cached raw values with safety check
-            if prop_name not in cached_raw_values:
-                raise ValueError(f"Property {prop_name} not found in cached values. Available: {list(cached_raw_values.keys())}")
-            
-            raw_data = cached_raw_values[prop_name]
-            raw_value = raw_data['raw_value']
-            raw_error = raw_data['raw_error']
-            tolerance = raw_data['tolerance']
-            
-            # Check if property is within tolerance (satisfied)
-            # change to use np.isclose for better numerical stability
-            if tolerance == 0.0:
-                within_tolerance = np.isclose(raw_error, 0.0, atol=1e-8)
+        if not hasattr(self, '_raw_property_cache'):
+            self._raw_property_cache = {}
+        
+        sequence_ids = [self._get_sequence_id(seq) for seq in sequences]
+        
+        # ... existing cache lookup code ...
+        cached_results = {}
+        uncached_sequences = []
+        uncached_indices = []
+
+        for i, seq_id in enumerate(sequence_ids):
+            if use_cache and seq_id in self._raw_property_cache:
+                cached_results[i] = self._raw_property_cache[seq_id]
+                self._cache_hits += 1
             else:
-                within_tolerance = raw_error <= tolerance
-            
-            # Apply dynamic normalization based on initial errors
-            normalization_factor = self.normalization_factors.get(prop_name, 1.0)
-            normalized_error = raw_error * normalization_factor
-            
-            # Apply adaptive scaling
-            scale = self.property_scales.get(prop_name, 1.0)
-            weighted_error = normalized_error * prop.weight * scale
-            
-            # If within tolerance, don't contribute to total error
-            effective_weighted_error = 0.0 if within_tolerance else weighted_error
-            
-            # Store information
-            property_info[prop_name] = {
-                'raw_value': raw_value,
-                'target_value': raw_data['target_value'],
-                'raw_error': raw_error,
-                'normalized_error': normalized_error,
-                'normalization_factor': normalization_factor,
-                'weighted_error': weighted_error,
-                'effective_weighted_error': effective_weighted_error,
-                'scale': scale,
-                'tolerance': tolerance,
-                'within_tolerance': within_tolerance,
-                'satisfied': within_tolerance,
-                'constraint_type': constraint_type
-            }
-            
-            weighted_errors.append(effective_weighted_error)
+                uncached_sequences.append(sequences[i])
+                uncached_indices.append(i)
+                self._cache_misses += 1
         
-        total_error = sum(weighted_errors)
-        return total_error, property_info
+        # ... existing property calculation code ...
+        uncached_raw_values = {}
+        if uncached_sequences:
+            proteins = [sparrow.Protein(seq) for seq in uncached_sequences]
+            
+            for prop in self.properties:
+                prop_name = prop.__class__.__name__
+                
+                if prop.calculate_in_batch:
+                    batch_results = prop.calculate_batch(proteins)
+                    for i, (raw_value, raw_error) in enumerate(batch_results):
+                        seq_idx = uncached_indices[i]
+                        if seq_idx not in uncached_raw_values:
+                            uncached_raw_values[seq_idx] = {}
+                        uncached_raw_values[seq_idx][prop_name] = {
+                            'raw_value': raw_value,
+                            'raw_error': raw_error,
+                            'target_value': prop.target_value,
+                            'tolerance': getattr(prop, '_tolerance', 0.0)
+                        }
+                else:
+                    for i, protein in enumerate(proteins):
+                        seq_idx = uncached_indices[i]
+                        raw_value, raw_error = prop.calculate(protein)
+                        if seq_idx not in uncached_raw_values:
+                            uncached_raw_values[seq_idx] = {}
+                        uncached_raw_values[seq_idx][prop_name] = {
+                            'raw_value': raw_value,
+                            'raw_error': raw_error,
+                            'target_value': prop.target_value,
+                            'tolerance': getattr(prop, '_tolerance', 0.0)
+                        }
+            
+            if use_cache:
+                if len(self._raw_property_cache) > 500:
+                    items_to_remove = list(self._raw_property_cache.keys())[:100]
+                    for key in items_to_remove:
+                        del self._raw_property_cache[key]
+                
+                for i, seq_idx in enumerate(uncached_indices):
+                    seq_id = sequence_ids[seq_idx]
+                    self._raw_property_cache[seq_id] = uncached_raw_values[seq_idx]
+        
+        results = []
+        for i in range(len(sequences)):
+            if i in cached_results:
+                cached_raw_values = cached_results[i]
+            else:
+                cached_raw_values = uncached_raw_values[i]
+            
+            total_error, property_info = self._assemble_property_info(cached_raw_values)
+            results.append((total_error, property_info))
+        
+        return results
     
     def _get_best_sequence_property_info(self) -> Dict[str, Dict[str, float]]:
         """
         Get property info for the current best sequence (cached).
-        
-        Returns
-        -------
-        property_info : Dict[str, Dict[str, float]]
-            Cached property information for best sequence
+        Now caches by sequence ID to avoid re-evaluation.
         """
-        if self._best_sequence_property_info is None:
-            _, self._best_sequence_property_info = self._evaluate_sequence(self.best_sequence)
+        # Get sequence ID (consistent for same sequence content)
+        current_seq_id = self._get_sequence_id(self.best_sequence)
+        
+        # Check if we've already cached info for this sequence
+        if (self._best_sequence_property_info is not None and 
+            hasattr(self, '_best_sequence_property_info_cache_id') and
+            self._best_sequence_property_info_cache_id == current_seq_id):
+            return self._best_sequence_property_info
+        
+        # Evaluate and cache
+        _, self._best_sequence_property_info = self._evaluate_sequence(self.best_sequence)
+        self._best_sequence_property_info_cache_id = current_seq_id
         return self._best_sequence_property_info
-    
+
     def _update_best_sequence(self, new_sequence: str, new_error: float) -> None:
-        """
-        Update the best sequence and invalidate cached property info.
-        
-        Parameters
-        ----------
-        new_sequence : str
-            New best sequence
-        new_error : float
-            Error for the new best sequence
-        """
+        """Update the best sequence and invalidate cached property info."""
         self.best_sequence = new_sequence
         self.best_error = new_error
-        # Invalidate cached property info since sequence changed
+        # Invalidate cached property info
         self._best_sequence_property_info = None
+        if hasattr(self, '_best_sequence_property_info_cache_id'):
+            delattr(self, '_best_sequence_property_info_cache_id')
     
     def _calculate_initial_normalization(self, initial_sequence: str) -> None:
         """
@@ -799,7 +735,49 @@ class SequenceOptimizer:
             
             # Apply bounds
             self.property_scales[prop_name] = np.clip(new_scale, self.min_scale, self.max_scale)
-    
+
+    def _make_point_mutation_fast(self, sequence: str, aa_list: List[str], seq_length: int) -> str:
+        """
+        Optimized single point mutation.
+        
+        For long sequences, converts to list once to avoid O(n) string slicing.
+        """
+        pos = random.randint(0, seq_length - 1)
+        old_aa = sequence[pos]
+        
+        # Use pre-computed filtered list (no iteration needed)
+        new_aa = random.choice(self.aa_list_without[old_aa])
+        
+        # For sequences >200 AA, use list approach (much faster)
+        # For shorter sequences, string slicing is actually faster due to lower overhead
+        if seq_length > 200:
+            seq_list = list(sequence)
+            seq_list[pos] = new_aa
+            return ''.join(seq_list)
+        else:
+            return sequence[:pos] + new_aa + sequence[pos + 1:]
+
+    def _make_multi_mutations_fast(self, sequence: str, num_muts: int, aa_list: List[str], seq_length: int) -> str:
+        """
+        Optimized multiple mutations - converts to list once.
+        """
+        if num_muts >= seq_length:
+            num_muts = seq_length - 1
+        
+        # Convert to list once for efficient in-place mutation
+        seq_list = list(sequence)
+        
+        # Generate all mutation positions at once (no duplicates)
+        positions = random.sample(range(seq_length), num_muts)
+        
+        # Apply all mutations
+        for pos in positions:
+            old_aa = seq_list[pos]
+            # Use pre-computed filtered list
+            seq_list[pos] = random.choice(self.aa_list_without[old_aa])
+        
+        return ''.join(seq_list)
+
     def _generate_candidates(self, sequence: str, iteration: int) -> List[str]:
         """Generate candidate sequences with improved diversity"""
         candidates = []
@@ -822,28 +800,35 @@ class SequenceOptimizer:
             multi_mut_count = remaining // 2  # 1/2 for multi-mutations
             single_mut_count = remaining - multi_mut_count  # remainder for single
         
+        seq_length = len(sequence)
+
         # Generate single point mutations
         for _ in range(single_mut_count):
-            candidates.append(make_point_mutation(sequence))
+            candidates.append(self._make_point_mutation_fast(sequence, self.aa_list, seq_length))
         
-        # Generate multiple mutations with varied mutation counts
+        # use self.min_mutations and self.max_mutations and self.mutation_ratio to determine max_muts
+        max_muts = min(self.max_mutations, max(self.min_mutations, seq_length // self.mutation_ratio))
+
+        # Generate multiple mutations with varied mutation counts (optimized)
+        if max_muts > self.min_mutations:
+            # Pre-compute weights once
+            weights = [2 ** (max_muts - i) for i in range(self.min_mutations, max_muts + 1)]
+            mutation_counts = range(self.min_mutations, max_muts + 1)
+        else:
+            weights = None
+            mutation_counts = [self.min_mutations]
+        
         for _ in range(multi_mut_count):
-            mutated = sequence
-            max_muts = max(self.min_mutations, min(self.max_mutations, len(sequence) // self.mutation_ratio))
-            
-            # Use exponential distribution to favor smaller mutations but allow larger ones
-            if max_muts > self.min_mutations:
-                # Bias towards smaller mutations but allow larger ones occasionally
-                weights = [2 ** (max_muts - i) for i in range(self.min_mutations, max_muts + 1)]
-                num_muts = random.choices(range(self.min_mutations, max_muts + 1), weights=weights)[0]
+            # Choose mutation count
+            if weights:
+                num_muts = random.choices(mutation_counts, weights=weights)[0]
             else:
                 num_muts = self.min_mutations
             
-            for _ in range(num_muts):
-                mutated = make_point_mutation(mutated)
-            candidates.append(mutated)
+            # Generate all mutations at once for efficiency
+            candidates.append(self._make_multi_mutations_fast(sequence, num_muts, self.aa_list, seq_length))
         
-        # Add shuffled variants if enabled
+        # Add shuffled variants if enabled (already efficient)
         if self.enable_shuffling and iteration % self.shuffle_frequency == 0:
             for _ in range(shuffle_count):
                 candidates.append(shuffle_sequence(
@@ -924,12 +909,14 @@ class SequenceOptimizer:
         if len(self.best_error_history) < self.stagnation_threshold:
             return False
         
-        recent_errors = list(self.best_error_history)[-self.stagnation_threshold:]
-        
-        # Check if there's been any significant improvement
-        initial_error = recent_errors[0]
-        final_error = recent_errors[-1]
-        improvement = (initial_error - final_error) / max(initial_error, 1e-6)
+        # Direct indexing instead of list() conversion
+        initial_error = self.best_error_history[-self.stagnation_threshold]
+        final_error = self.best_error_history[-1]
+
+        if initial_error < 1e-10:
+            return final_error < 1e-10  # Already at perfect score
+
+        improvement = (initial_error - final_error) / initial_error
         
         return improvement < self.stagnation_improvement_threshold
     
@@ -1091,6 +1078,10 @@ class SequenceOptimizer:
             self.best_error, _ = self._evaluate_sequence(self.best_sequence, use_cache=False)
             # Invalidate cached property info since scaling changed
             self._best_sequence_property_info = None
+            # Invalidate cached sequence ID
+            if hasattr(self, '_best_sequence_property_info_cache_id'):  
+                delattr(self, '_best_sequence_property_info_cache_id')
+
             if self.debugging:
                 self.logger.info(f"   🔄 Recalculated best sequence error: {old_error:.6f} → {self.best_error:.6f}")
             
@@ -1395,7 +1386,7 @@ class SequenceOptimizer:
             if self._check_convergence():
                 if self.verbose:
                     conv_info = self.get_convergence_info()
-                    self.logger.info(f"\\n✅ Converged at iteration {self.iteration}")
+                    self.logger.info(f"\n✅ Converged at iteration {self.iteration}")
                 if self.debugging:
                     self.logger.info(f"   Error std: {conv_info['current_error_std']:.6f} < {conv_info['tolerance']:.6f}")
                     self.logger.info(f"   Patience satisfied: {self.convergence_counter}/{self.convergence_patience}")
@@ -1404,7 +1395,7 @@ class SequenceOptimizer:
             # Check for error tolerance
             if self._check_error_tolerance():
                 if self.verbose:
-                    self.logger.info(f"\\n🎯 Error tolerance reached at iteration {self.iteration}")
+                    self.logger.info(f"\n🎯 Error tolerance reached at iteration {self.iteration}")
                     self.logger.info(f"   Current error: {self.best_error:.6f} <= {self.error_tolerance:.6f}")
                 break
             
