@@ -454,6 +454,60 @@ Creating custom properties is straightforward by subclassing ``CustomProperty``.
     print(f"Alanine count: {optimized_sequence.count('A')}")
     print(f"GPG motifs: {optimized_sequence.count('GPG')}")
 
+**Implementing Batch Calculation for Performance (Optional):**
+
+For properties that benefit from batch processing (e.g., using external APIs or vectorized operations), 
+you can enable batch calculation by setting the ``calculate_in_batch`` class attribute and implementing 
+``calculate_raw_value_batch()``:
+
+.. code-block:: python
+
+    import numpy as np
+    from goose.backend.optimizer_properties import CustomProperty
+    import sparrow
+
+    class VectorizedHydrophobicity(CustomProperty):
+        """Example property with batch calculation support."""
+        
+        calculate_in_batch = True  # Enable batch processing
+        
+        def __init__(self, target_value: float, weight: float = 1.0):
+            super().__init__(target_value, weight)
+        
+        def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
+            """Single sequence calculation (fallback)."""
+            return protein.hydrophobicity
+        
+        def calculate_raw_value_batch(self, proteins: list) -> list:
+            """
+            Batch calculation for multiple proteins (more efficient).
+            
+            Parameters
+            ----------
+            proteins : list of sparrow.Protein
+                List of protein instances to calculate
+                
+            Returns
+            -------
+            list of float
+                List of calculated property values
+            """
+            # Example: Use vectorized operations for efficiency. This is not actually faster
+            return [p.hydrophobicity for p in proteins]
+
+.. note::
+   **When to Use Batch Calculation:**
+   
+   - When calling external APIs that support batch processing (e.g., metapredict or other predictors that support batches)
+   - When using vectorized NumPy operations across multiple sequences
+   - When property calculation has expensive setup costs that can be amortized
+   
+   **Performance Impact:**
+
+   - ``FractionDisorder`` uses batch calculation for ~2-5× speedup with metapredict
+   - Not all properties benefit from batch calculation
+   - Single-sequence calculation is used as fallback when batch is unavailable
+
 
 .. note::
    **Best Practices for Custom Properties:**
@@ -461,7 +515,8 @@ Creating custom properties is straightforward by subclassing ``CustomProperty``.
    - Always implement ``calculate_raw_value()`` instead of ``calculate()``
    - Use ``get_init_args()`` if your property has additional parameters
    - The base class automatically handles constraint types and tolerances
-
+   - Optionally implement batch calculation for performance with ``calculate_in_batch = True``
+   - Batch calculation is automatically used when available if calculate_in_batch is True; fallback is single-sequence mode
 
 Advanced Optimizer Configuration    
 ---------------------------------

@@ -11,6 +11,7 @@
 * Added the ability to optimize towards arbitrary vectors for linear profiles. 
 * Added the ability to optimize towards arbitrary matrices for properties involving matrix calculations. 
 * Update of demo notebooks in /demos to reflect changes in code. 
+* Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
 
 #### Available Demos
 * **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
