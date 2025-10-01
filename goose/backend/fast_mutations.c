@@ -5,7 +5,7 @@
     "distutils": {
         "depends": [],
         "include_dirs": [
-            "/private/var/folders/ww/r3d5hbss3vq8yxhqzqjv_p4w0000gn/T/pip-build-env-h_47ky6_/overlay/lib/python3.11/site-packages/numpy/_core/include"
+            "/private/var/folders/ww/r3d5hbss3vq8yxhqzqjv_p4w0000gn/T/build-env-dx8fwkla/lib/python3.8/site-packages/numpy/core/include"
         ],
         "name": "goose.backend.fast_mutations",
         "sources": [
