@@ -22,17 +22,21 @@ The main functionalities of GOOSE are:
 
 Importantly, GOOSE incorporates stochasticity into sequence generation, which allows you to create many sequences or sequence variants with the exact same overall properties but different primary sequences. 
 
-What is new in V0.2.2 and V0.2.3?
--------------------------------------
-The highlights of the new features in GOOSE V0.2.3 are:
-- SequenceOptimizer improvments:
+What is new in V0.2.2 through V0.2.5?
+--------------------------------------
+The highlights of the new features in GOOSE V0.2.3, V0.2.4, and V0.2.5 are:
+- SequenceOptimizer improvements:
 
   #. Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
   #. Cythonized the functionality for generating mutations in SequenceOptimizer (thanks Jeff!) 
   #. Improved speed of SequenceOptimizer and reduced memory usage
-  #. Changed minimum Python version to 3.9.  
+  #. Bug fixes in SequenceOptimizer.
 
-  
+- Other updates:  
+  #. Changed minimum Python version to 3.9.  
+  #. Tox implemented for automated testing across different Python versions.
+  #. Addition of tests for the SequenceOptimizer.
+
 The highlights of the new features in GOOSE V0.2.2 are:
 
 - Complete overhaul of the SequenceOptimizer architecture:

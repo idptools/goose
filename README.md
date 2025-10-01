@@ -1,7 +1,7 @@
 ![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
 # GOOSE : Generate disOrdered prOtiens Specifying propErties
 
-## Last updated October 2025, latest version V0.2.3
+## Last updated October 2025, latest version V0.2.5
 
 ### What's new (the highlights)?
 #### October 2025 update:
@@ -95,6 +95,12 @@ For the time being, you can cite our [preprint](https://www.biorxiv.org/content/
 ## Changes
 
 The section below logs changes to GOOSE.  
+
+#### V0.2.4 and V0.2.5 - More SequenceOptimzier updates! (October 2025)
+* Bug fixes in SequenceOptimizer
+* Addition of teests for the SequenceOptimizer
+* Implementation of Tox for automated testing across different Python versions
+* Minimum Python version changed to 3.9.
 
 #### V0.2.3 - More SequenceOptimzier updates! (October 2025)
 * Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
