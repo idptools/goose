@@ -4,7 +4,7 @@ from setuptools import Extension, setup, find_packages
 import os
 
 # set cython file
-cython_file = os.path.join("goose", "backend", "fast_mutations.pyx"
+cython_file = os.path.join("goose", "backend", "fast_mutations.pyx")
 
 # Define the extension
 extensions = [
