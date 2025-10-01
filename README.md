@@ -1,17 +1,23 @@
 ![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
 # GOOSE : Generate disOrdered prOtiens Specifying propErties
 
-## Last updated September 2025, latest version V0.2.2
+## Last updated October 2025, latest version V0.2.3
 
 ### What's new (the highlights)?
-* Complete overhaul of the SequenceOptimizer architecture to add support for optimization of properties that have highly variably seensitivies and scales of values.
+#### October 2025 update:
+* Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
+* Cythonized the functionality for generating mutations in SequenceOptimizer (thanks Jeff!) 
+* Improved speed of SequenceOptimizer and reduced memory usage
+
+#### September 2025 update:
+* Complete overhaul of the SequenceOptimizer architecture to add support for optimization of properties that have highly variably seensitivies and scales of values. 
 * Complete overhaul to the SequenceOptimizer properties. Added functionality to set targets to be minimum, maximum, or exact values. 
 * Introduction of numerous new SequenceOptimizer properties. 
 * Added linear profiles of properties in SequenceOptimizer so you can optimize across sliding windows of values across a sequence.
 * Added the ability to optimize towards arbitrary vectors for linear profiles. 
 * Added the ability to optimize towards arbitrary matrices for properties involving matrix calculations. 
 * Update of demo notebooks in /demos to reflect changes in code. 
-* Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
+
 
 #### Available Demos
 * **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
@@ -84,6 +90,11 @@ For the time being, you can cite our [preprint](https://www.biorxiv.org/content/
 ## Changes
 
 The section below logs changes to GOOSE.  
+
+#### V0.2.3 - More SequenceOptimzier updates! (October 2025)
+* Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
+* Cythonized the functionality for generating mutations in SequenceOptimizer (thanks Jeff!) 
+* Improved speed of SequenceOptimizer and reduced memory usage
 
 #### V0.2.2 - SequenceOptimizer update! (September 2025)
 * Complete overhaul of the SequenceOptimizer architecture to add support for optimization of properties that have highly variably seensitivies and scales of values.

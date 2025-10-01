@@ -15,6 +15,12 @@ import sparrow
 from tqdm import tqdm
 
 from goose.backend import optimizer_properties
+from goose.backend.fast_mutations import (
+    cython_make_point_mutation as make_point_mutation,
+    cython_make_multi_mutations as make_multi_mutations,
+)
+from goose.backend.fast_mutations import cython_shuffle_sequence as shuffle_sequence
+
 from goose.backend.optimizer_properties import ProteinProperty
 from goose.data import amino_acids
 
@@ -68,36 +74,6 @@ def build_diverse_initial_sequences(target_length: int, num_sequences: int = 5) 
     return sequences
 
 
-def shuffle_sequence(sequence: str, window_size: int = 10, global_shuffle_probability: float = 0.3) -> str:
-    """Shuffle sequence with window-based approach"""
-    seq_list = list(sequence)
-    
-    # Choose between global and local shuffling
-    if random.random() < global_shuffle_probability:
-        random.shuffle(seq_list)
-    else:  # Local window shuffle
-        if len(sequence) > window_size:
-            start = random.randint(0, len(sequence) - window_size)
-            window = seq_list[start:start + window_size]
-            random.shuffle(window)
-            seq_list[start:start + window_size] = window
-    
-    return ''.join(seq_list)
-
-
-def make_point_mutation(sequence: str, position: Optional[int] = None) -> str:
-    """Make a single point mutation"""
-    if not sequence:
-        return sequence
-    
-    pos = position if position is not None else random.randint(0, len(sequence) - 1)
-    old_aa = sequence[pos]
-    
-    # Choose new amino acid (different from current)
-    amino_acids_list = list(amino_acids.amino_acid_dat.keys())
-    new_aa = random.choice([aa for aa in amino_acids_list if aa != old_aa])
-    
-    return sequence[:pos] + new_aa + sequence[pos + 1:]
 
 
 # ==============================================================================
@@ -736,26 +712,6 @@ class SequenceOptimizer:
             # Apply bounds
             self.property_scales[prop_name] = np.clip(new_scale, self.min_scale, self.max_scale)
 
-    def _make_point_mutation_fast(self, sequence: str, aa_list: List[str], seq_length: int) -> str:
-        """
-        Optimized single point mutation.
-        
-        For long sequences, converts to list once to avoid O(n) string slicing.
-        """
-        pos = random.randint(0, seq_length - 1)
-        old_aa = sequence[pos]
-        
-        # Use pre-computed filtered list (no iteration needed)
-        new_aa = random.choice(self.aa_list_without[old_aa])
-        
-        # For sequences >200 AA, use list approach (much faster)
-        # For shorter sequences, string slicing is actually faster due to lower overhead
-        if seq_length > 200:
-            seq_list = list(sequence)
-            seq_list[pos] = new_aa
-            return ''.join(seq_list)
-        else:
-            return sequence[:pos] + new_aa + sequence[pos + 1:]
 
     def _make_multi_mutations_fast(self, sequence: str, num_muts: int, aa_list: List[str], seq_length: int) -> str:
         """
@@ -804,38 +760,35 @@ class SequenceOptimizer:
 
         # Generate single point mutations
         for _ in range(single_mut_count):
-            candidates.append(self._make_point_mutation_fast(sequence, self.aa_list, seq_length))
+            candidates.append(make_point_mutation(sequence))
         
-        # use self.min_mutations and self.max_mutations and self.mutation_ratio to determine max_muts
-        max_muts = min(self.max_mutations, max(self.min_mutations, seq_length // self.mutation_ratio))
-
-        # Generate multiple mutations with varied mutation counts (optimized)
-        if max_muts > self.min_mutations:
-            # Pre-compute weights once
-            weights = [2 ** (max_muts - i) for i in range(self.min_mutations, max_muts + 1)]
-            mutation_counts = range(self.min_mutations, max_muts + 1)
-        else:
-            weights = None
-            mutation_counts = [self.min_mutations]
+        # Generate multiple mutations with varied mutation counts
+        max_muts = max(
+            self.min_mutations,
+            min(self.max_mutations, seq_length // self.mutation_ratio),
+        )
         
         for _ in range(multi_mut_count):
-            # Choose mutation count
-            if weights:
-                num_muts = random.choices(mutation_counts, weights=weights)[0]
+            # Use exponential distribution to favor smaller mutations
+            if max_muts > self.min_mutations:
+                weights = [2 ** (max_muts - i) for i in range(self.min_mutations, max_muts + 1)]
+                num_muts = random.choices(range(self.min_mutations, max_muts + 1), weights=weights)[0]
             else:
                 num_muts = self.min_mutations
             
-            # Generate all mutations at once for efficiency
-            candidates.append(self._make_multi_mutations_fast(sequence, num_muts, self.aa_list, seq_length))
-        
+            # Single function call instead of loop over make_point_mutation
+            candidates.append(make_multi_mutations(sequence, num_muts))
+
         # Add shuffled variants if enabled (already efficient)
         if self.enable_shuffling and iteration % self.shuffle_frequency == 0:
             for _ in range(shuffle_count):
-                candidates.append(shuffle_sequence(
+                candidates.append(
+                    shuffle_sequence(
                     sequence, 
                     window_size=self.shuffle_window_size,
                     global_shuffle_probability=self.global_shuffle_probability
-                ))
+                )
+            )
         
         return candidates[:self.num_candidates]
     
