@@ -33,7 +33,8 @@ The highlights of the new features in GOOSE V0.2.3, V0.2.4, and V0.2.5 are:
   #. Bug fixes in SequenceOptimizer.
 
 - Other updates:  
-  #. Changed minimum Python version to 3.9.  
+
+  #. Changed minimum Python version to 3.9.
   #. Tox implemented for automated testing across different Python versions.
   #. Addition of tests for the SequenceOptimizer.
 

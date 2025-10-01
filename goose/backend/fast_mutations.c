@@ -5,7 +5,7 @@
     "distutils": {
         "depends": [],
         "include_dirs": [
-            "/Users/ryanemenecker/Desktop/lab_packages/goose/.tox/.pkg-cpython313/lib/python3.13/site-packages/numpy/_core/include"
+            "/private/var/folders/ww/r3d5hbss3vq8yxhqzqjv_p4w0000gn/T/build-env-j7ubqy0p/lib/python3.8/site-packages/numpy/core/include"
         ],
         "name": "goose.backend.fast_mutations",
         "sources": [
