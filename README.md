@@ -8,6 +8,7 @@
 * Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
 * Cythonized the functionality for generating mutations in SequenceOptimizer (thanks Jeff!) 
 * Improved speed of SequenceOptimizer and reduced memory usage
+* Changed minimum Python version to 3.9.
 
 #### September 2025 update:
 * Complete overhaul of the SequenceOptimizer architecture to add support for optimization of properties that have highly variably seensitivies and scales of values. 
@@ -47,6 +48,10 @@ The main functionalities of GOOSE are:
 ## How to use GOOSE
 
 You can use GOOSE from Python. There is also most of the functionality in GOOSE available in a [Google Colab notebook](https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing).
+
+## Python Requirements
+
+GOOSE requires a minimum Python version of 3.9. The primary developers all use MacBooks with Apple Silicon, which only support Python 3.9 or later. Because of this, testing Python 3.8 requires us to use a different machine. This is fine but does mean we can't find bugs specific to Python 3.8 during regular usage. Therefore, we chose to require 3.9 or later as of October 2025.
 
 ## Installation - GOOSE takes flight!
 

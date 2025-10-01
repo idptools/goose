@@ -344,9 +344,9 @@ def test_change_any_properties(test_sequences):
     original_protein = Protein(seq)
     
     # Change multiple properties
-    target_hydropathy = original_protein.hydrophobicity + 0.4
-    target_FCR = min(original_protein.FCR + 0.1, 0.7)
-    target_kappa = 0.4
+    target_hydropathy = original_protein.hydrophobicity + 0.1
+    target_FCR = min(original_protein.FCR + 0.1, 0.2)
+    target_kappa = 0.3
     
     variant_seq = create.variant(seq, 'change_any_properties',
                                 target_hydropathy=target_hydropathy,

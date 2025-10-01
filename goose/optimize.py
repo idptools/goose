@@ -461,6 +461,8 @@ class SequenceOptimizer:
                 'scale': scale,
                 'tolerance': tolerance,
                 'within_tolerance': within_tolerance,
+                'constraint_type': prop.constraint_type,
+                'weight': prop.weight
             }
             
             weighted_errors.append(effective_weighted_error)
@@ -1251,7 +1253,8 @@ class SequenceOptimizer:
                             if not info.get('within_tolerance', False))
         
         # Main optimization loop
-        for self.iteration in range(self.max_iterations):
+        for _ in range(self.max_iterations):
+            self.iteration += 1 # increment iteration count.
             # Generate candidates
             candidates = self._generate_candidates(self.best_sequence, self.iteration)
             
@@ -1349,7 +1352,7 @@ class SequenceOptimizer:
             if self._check_error_tolerance():
                 if self.verbose:
                     self.logger.info(f"\n🎯 Error tolerance reached at iteration {self.iteration}")
-                    self.logger.info(f"   Current error: {self.best_error:.6f} <= {self.error_tolerance:.6f}")
+                    self.logger.info(f"   Current error for properties not within tolerance: {self.best_error:.6f} <= {self.error_tolerance:.6f}")
                 break
             
             # Handle stagnation

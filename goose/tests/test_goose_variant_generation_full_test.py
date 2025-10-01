@@ -363,7 +363,7 @@ def test_change_properties_minimize_differences(test_sequences):
         target_NCPR = random.uniform(-target_FCR, target_FCR)
         target_NCPR = round(target_NCPR * len(seq)) / len(seq)  # round to nearest residue fraction
         # only set kappa if we can actually change it.
-        if target_FCR > 0 and target_NCPR != target_FCR:
+        if target_FCR > 0 and abs(target_NCPR - target_FCR) > 1e-5: # change to not check equivalence because of rounding
             target_kappa = random.uniform(0.1, 0.5)
             check_kappa=True
         else:

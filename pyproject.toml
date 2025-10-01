@@ -14,7 +14,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"  
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 
 # define dependencies
 # are not the same as the INSTALL dependencies. 

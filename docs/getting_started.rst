@@ -30,6 +30,7 @@ The highlights of the new features in GOOSE V0.2.3 are:
   #. Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
   #. Cythonized the functionality for generating mutations in SequenceOptimizer (thanks Jeff!) 
   #. Improved speed of SequenceOptimizer and reduced memory usage
+  #. Changed minimum Python version to 3.9.  
 
   
 The highlights of the new features in GOOSE V0.2.2 are:
@@ -58,6 +59,9 @@ How can I use GOOSE?
 --------------------
 You can use GOOSE from Python or from Google Colab. The Colab notebook can be found `in this link <https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing>`_.
 
+Python Requirements
+--------------------
+GOOSE requires Python 3.9 or above.
 
 Installation - GOOSE takes flight!
 ===================================
@@ -67,7 +71,6 @@ A few notes on how to best use GOOSE.
 * We strongly recommend using GOOSE in a virtual environment. This is not required, but it will help you avoid any issues with package dependencies. See conda or venv for more information on how to set up a virtual environment.
 * GOOSE was tested largely in Python 3.11, so you will likely run into the fewest issues if you use that version. 
 * As of GOOSE v0.2.0, GOOSE should work with Python 3.12 and above. However, if you run into issues, let us know and we will do our best to fix them.
-
 
 As of GOOSE V0.2.0, you should be able to install GOOSE with a single command. 
 
