@@ -409,7 +409,16 @@ class SequenceOptimizer:
         
         self.properties.append(prop)
         
-        prop_name = prop.__class__.__name__
+        prop_name = prop.tracking_property_name
+        if prop_name in self._property_names:
+            if prop.multi_target==False:
+                raise ValueError(f"Property {prop_name} already added.")
+            else:
+                # count number of properties with this name
+                count = sum(1 for p in self.properties if prop_name in p.__class__.__name__)
+                # add a number to the name
+                prop_name = f"{prop_name}_{count}"
+                prop.tracking_property_name = prop_name
         self._property_names.append(prop_name)
         self.property_scales[prop_name] = 1.0
         self.property_improvements[prop_name] = deque(maxlen=self.improvement_history_size)
@@ -435,22 +444,22 @@ class SequenceOptimizer:
         
         for prop, prop_name in zip(self.properties, self._property_names):
             
-            raw_data = cached_raw_values[prop_name]
+            raw_data = cached_raw_values[prop.tracking_property_name]
             raw_value = raw_data['raw_value']
             raw_error = raw_data['raw_error']
             tolerance = raw_data['tolerance']
             
             within_tolerance = (tolerance == 0.0 and np.abs(raw_error) < 1e-8) or (raw_error <= tolerance)
             
-            normalization_factor = norm_factors[prop_name]
+            normalization_factor = norm_factors[prop.tracking_property_name]
             normalized_error = raw_error * normalization_factor
             
-            scale = scales[prop_name]
+            scale = scales[prop.tracking_property_name]
             weighted_error = normalized_error * prop.weight * scale
             
             effective_weighted_error = 0.0 if within_tolerance else weighted_error
             
-            property_info[prop_name] = {
+            property_info[prop.tracking_property_name] = {
                 'raw_value': raw_value,
                 'target_value': raw_data['target_value'],
                 'raw_error': raw_error,
@@ -488,7 +497,7 @@ class SequenceOptimizer:
             cached_raw_values = {}
             
             for prop in self.properties:
-                prop_name = prop.__class__.__name__
+                prop_name = prop.tracking_property_name
                 raw_value, raw_error = prop.calculate(protein)
                 cached_raw_values[prop_name] = {
                     'raw_value': raw_value,
@@ -540,7 +549,7 @@ class SequenceOptimizer:
             proteins = [sparrow.Protein(seq) for seq in uncached_sequences]
             
             for prop in self.properties:
-                prop_name = prop.__class__.__name__
+                prop_name = prop.tracking_property_name
                 
                 if prop.calculate_in_batch:
                     batch_results = prop.calculate_batch(proteins)
@@ -627,7 +636,7 @@ class SequenceOptimizer:
         
         # Calculate initial errors for all properties
         for prop in self.properties:
-            prop_name = prop.__class__.__name__
+            prop_name = prop.tracking_property_name
             raw_value, raw_error = prop.calculate(protein)
             
             # Store initial error (use small minimum to avoid division by zero)
@@ -661,7 +670,7 @@ class SequenceOptimizer:
         else:
             # Single property - no normalization needed
             for prop in self.properties:
-                prop_name = prop.__class__.__name__
+                prop_name = prop.tracking_property_name
                 self.normalization_factors[prop_name] = 1.0
     
     def _update_property_scaling(self, property_info: Dict[str, Dict[str, float]]) -> None:

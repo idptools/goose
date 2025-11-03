@@ -151,6 +151,9 @@ class ProteinProperty(ABC):
         # set target value if needed.
         self.set_target_value()
 
+        # by default set variable tracking_property_name to class.name
+        self.tracking_property_name = self.__class__.__name__
+
     def set_target_value(self):
         '''
         override target value depending on what is set
