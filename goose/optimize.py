@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import sparrow
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from goose.backend import optimizer_properties
 from goose.backend.fast_mutations import (
@@ -1253,7 +1253,13 @@ class SequenceOptimizer:
             self.logger.info(f"   Normalized initial error: {self.best_error:.4f}")
         
         # Progress tracking
-        progress_bar = tqdm(total=self.max_iterations, disable=not self.verbose)
+        progress_bar = tqdm(
+            total=self.max_iterations,
+            disable=not self.verbose,
+            mininterval=0,
+            miniters=self.update_interval,
+            leave=True,
+        )
         stagnation_counter = 0
         
         # Track best raw error to ensure it never increases (only count unsatisfied properties)
@@ -1319,33 +1325,34 @@ class SequenceOptimizer:
             # Track error history
             self.best_error_history.append(self.best_error)
             
-            # Update progress bar once per iteration
-            if self.verbose:
-                progress_bar.update(1)
-                
-                # Update postfix display every update_interval iterations to avoid excessive overhead
-                if self.iteration % self.update_interval == 0:
-                    # Count satisfied properties for progress display (use cached version)
-                    current_property_info = self._get_best_sequence_property_info()
-                    satisfied_count = sum(1 for info in current_property_info.values() if info.get('within_tolerance', False))
-                    total_properties = len(self.properties)
-                    
-                    postfix = {
-                        'raw_error': f'{best_raw_error:.4f}',
-                        'satisfied': f'{satisfied_count}/{total_properties}',
-                        'stagnation': stagnation_counter
-                    }
-                    
-                    # Add error tolerance info if enabled
-                    if self.enable_error_tolerance and self.error_tolerance is not None:
-                        postfix['tolerance'] = f'{self.error_tolerance:.4f}'
-                    
-                    # Add convergence info if enabled and enough history
-                    if self.enable_early_convergence and len(self.best_error_history) >= self.convergence_window:
-                        conv_info = self.get_convergence_info()
-                        postfix['conv'] = f"{self.convergence_counter}/{self.convergence_patience}"
-                        
-                    progress_bar.set_postfix(postfix)
+            # Update progress bar every update_interval iterations
+            if self.verbose and (
+                self.iteration % self.update_interval == 0
+                or self.iteration == self.max_iterations
+            ):
+                # Count satisfied properties for progress display (use cached version)
+                current_property_info = self._get_best_sequence_property_info()
+                satisfied_count = sum(1 for info in current_property_info.values() if info.get('within_tolerance', False))
+                total_properties = len(self.properties)
+
+                postfix = {
+                    'raw_error': f'{best_raw_error:.4f}',
+                    'satisfied': f'{satisfied_count}/{total_properties}',
+                    'stagnation': stagnation_counter
+                }
+
+                # Add error tolerance info if enabled
+                if self.enable_error_tolerance and self.error_tolerance is not None:
+                    postfix['tolerance'] = f'{self.error_tolerance:.4f}'
+
+                # Add convergence info if enabled and enough history
+                if self.enable_early_convergence and len(self.best_error_history) >= self.convergence_window:
+                    conv_info = self.get_convergence_info()
+                    postfix['conv'] = f"{self.convergence_counter}/{self.convergence_patience}"
+
+                progress_bar.set_postfix(postfix, refresh=False)
+                # Advance the bar by the number of iterations since the last update
+                progress_bar.update(self.iteration - progress_bar.n)
             
             # Check for convergence
             if self._check_convergence():
@@ -1383,6 +1390,9 @@ class SequenceOptimizer:
                     
                     stagnation_counter = 0  # Reset counter after recovery
         
+        # Ensure progress bar reflects the final iteration count before closing
+        if self.verbose and progress_bar.n < self.iteration:
+            progress_bar.update(self.iteration - progress_bar.n)
         progress_bar.close()
         
         # Final evaluation and reporting
