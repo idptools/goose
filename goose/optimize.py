@@ -1351,7 +1351,8 @@ class SequenceOptimizer:
                     postfix['conv'] = f"{self.convergence_counter}/{self.convergence_patience}"
 
                 progress_bar.set_postfix(postfix, refresh=False)
-                # Advance the bar by the number of iterations since the last update
+                # Advance the bar by the number of iterations since the last update,
+                # producing a single in-place refresh instead of one per iteration.
                 progress_bar.update(self.iteration - progress_bar.n)
             
             # Check for convergence
@@ -1389,8 +1390,9 @@ class SequenceOptimizer:
                         best_raw_error = self._emergency_diversity_injection(best_raw_error)
                     
                     stagnation_counter = 0  # Reset counter after recovery
-        
-        # Ensure progress bar reflects the final iteration count before closing
+
+        # Ensure the bar reflects the final iteration count before closing
+        # (covers convergence/tolerance early-exit paths).
         if self.verbose and progress_bar.n < self.iteration:
             progress_bar.update(self.iteration - progress_bar.n)
         progress_bar.close()
