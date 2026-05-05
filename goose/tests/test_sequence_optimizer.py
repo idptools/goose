@@ -551,16 +551,16 @@ class TestComplexProperties:
 
 # custom properties to use for testing
 class AlanineFraction(CustomProperty):
-    def __init__(self, target_value, weight=1.0, tolerance=0.01):
-        super().__init__(target_value, weight, tolerance)
+    def __init__(self, target_value, weight=1.0):
+        super().__init__(target_value=target_value, weight=weight)
     def calculate_raw_value(self, protein_obj):        
         sequence = protein_obj.sequence
         alanine_fraction = sequence.count('A') / len(sequence)
         return alanine_fraction
     
 class GlycineContent(CustomProperty):
-    def __init__(self, target_value, weight=1.0, tolerance=0.01):
-        super().__init__(target_value, weight, tolerance)
+    def __init__(self, target_value, weight=1.0):
+        super().__init__(target_value=target_value, weight=weight)
     def calculate_raw_value(self, protein_obj):
         sequence = protein_obj.sequence
         return sequence.count('G') / len(sequence)

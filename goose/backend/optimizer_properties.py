@@ -521,10 +521,11 @@ class CustomProperty(ProteinProperty):
     allow_setting_target_by_sequence = True  # Class-level attribute - override to disallow setting target by sequence.
     can_set_target_sequence_and_target_value = True  # whether you can set the target sequence and target value at the same time.
     calculate_in_batch = False  # Whether this property can be calculated in batch mode (default False)
-    def __init__(self, target_value: float=None, target_sequence: str = None, weight: float = 1.0,
+    def __init__(self, target_value: float = None, weight: float = 1.0,
                  constraint_type: ConstraintType = ConstraintType.EXACT,
                  window_size: int = 5, end_mode: str = 'extend',
-                 calculate_as_linear_profile: bool = False, target_profile: np.ndarray = None):
+                 calculate_as_linear_profile: bool = False,
+                 target_sequence: str = None, target_profile: np.ndarray = None):
 
         super().__init__(target_value=target_value, weight=weight, constraint_type=constraint_type,
                          window_size=window_size, end_mode=end_mode,

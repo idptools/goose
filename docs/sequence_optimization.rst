@@ -1,7 +1,7 @@
 Using the SequenceOptimizer
 ==============================
 
-GOOSE's ``SequenceOptimizer`` is a flexible tool for designing protein sequences that match user-defined target value. It uses stochastic optimization with adaptive scaling to  explore sequence space and minimize the difference between calculated and target property values. You can simultaneously optimize towards arbitrary numbers of properties with individual weights, tolerances, and constraint types.
+GOOSE's ``SequenceOptimizer`` is a flexible tool for designing protein sequences that match user-defined target values. It uses stochastic optimization with adaptive scaling to explore sequence space and minimize the difference between calculated and target property values. You can simultaneously optimize toward arbitrary numbers of properties with individual weights, tolerances, and constraint types.
 
 **IMPORTANT NOTE PLEASE READ**: GOOSE is an IDR design tool. **HOWEVER**, when using SequenceOptimizer, you can design anything you want. Thus, sequences are not guaranteed to be predicted to be disordered unless you specify the ``FractionDisorder`` property. 
 
@@ -10,16 +10,19 @@ Key Features of the New SequenceOptimizer
 
 The ``SequenceOptimizer`` has been completely rewritten to provide:
 
-* **Adaptive Property Scaling**: Automatically adjusts optimization focus based on property convergence patterns and error magnitudes. This makes it easier to optimizer towards properties with highly variable scales or difficult optimization landscapes.
-* **Diverse Initial Sequences**: If you are generating a completely new sequence, you can specifiy the number of starting sequences to find better optimization.
+* **Adaptive Property Scaling**: Automatically adjusts optimization focus based on property convergence patterns and error magnitudes. This makes it easier to optimize toward properties with highly variable scales or difficult optimization landscapes.
+* **Diverse Initial Sequences**: If you are generating a completely new sequence, you can specify the number of starting sequences to screen before optimization begins.
 * **Flexible Constraint Types**: Support for exact matching, minimum thresholds, and maximum constraints for each specified property
 * **Per-Property Tolerances**: Set individual error tolerances for each property, allowing fine-grained control
 * **Advanced Convergence Detection**: Multiple convergence criteria including error tolerance, trend analysis, and stagnation detection
-* **Performance Optimization**: Comprehensive caching system for faster optimization
-* **Arbitrary Number of Properties**: Optimizer towards multiple instances of the same property. This was not previously supported.
+* **Performance Optimization**: Comprehensive caching, bounded cache size control, and batch property evaluation support for faster optimization
+* **Arbitrary Number of Properties**: Optimize toward multiple instances of the same property. This was not previously supported.
 * **Easier Property Value Setting**: For many of the properties, you can now set the target value using a sequence of interest rather than a numeric value. 
 * **Match to arbitrary interaction matrices**: You can now optimize sequences to match arbitrary interaction matrices.
 * **Linear Profiles for Values**: You can now set ``can_be_linear_profile=True`` for some properties and provide a sequence or list of target values. The optimizer will then attempt to match the profile along the values. 
+* **Hard Composition Constraints**: ``aa_fraction_ranges`` can enforce hard per-residue or grouped composition bounds during candidate generation, which is often faster and more reliable than treating composition as another soft optimization objective.
+* **Population Diversity Controls**: ``elite_pool_size`` and ``parent_selection`` can retain multiple strong parent sequences instead of mutating only the current best sequence.
+* **Reproducibility Controls**: ``seed`` makes repeated runs deterministic for the optimizer's own random choices, and ``max_cache_size`` bounds cache growth.
 
 Critical Differences between SequenceOptimizer and Create Functionality
 -----------------------------------------------------------------------
@@ -119,6 +122,10 @@ All property classes support three constraint types and individual tolerances:
 * **exact**: Minimize absolute difference from target (default)
 * **minimum**: Penalize only when below target value
 * **maximum**: Penalize only when above target value
+
+.. note::
+
+    ``AminoAcidFractions`` remains a soft optimization objective: the optimizer tries to improve it, but intermediate candidates may violate the target fractions. If you need hard composition bounds throughout optimization, use ``aa_fraction_ranges`` on ``SequenceOptimizer`` instead.
 
 To specify constraint type, use the ``constraint_type`` argument when adding a property:
 
@@ -275,10 +282,12 @@ The ``SequenceOptimizer`` provides extensive control over the optimization proce
         target_length=100,
         # Candidate generation
         num_candidates=5,               # Candidate sequences per iteration
-        num_starting_candidates=100,    # Number of sequences to start with. 
+        num_starting_candidates=100,    # Number of initial sequences to screen
         min_mutations=1,                # Minimum mutations per candidate
         max_mutations=15,               # Maximum mutations per candidate
         mutation_ratio=10,              # Length divisor for mutation calculation
+        elite_pool_size=3,              # Keep top-K parent sequences
+        parent_selection='weighted',    # weighted, uniform, or best
         
         # Shuffling for diversity
         enable_shuffling=True,          # Enable sequence shuffling
@@ -293,11 +302,47 @@ The ``SequenceOptimizer`` provides extensive control over the optimization proce
 .. code-block:: python
 
     # Start from a specific sequence
-    initial_seq = "MGSWAEFKQRLAAIKTRLQALGSQAGKKDAE" * 3  # Must match target_length
+    initial_seq = "MGSWAEFKQRLAAIKTRLQALGSQAGKKDAE" * 3  # length = 96
+    optimizer = goose.SequenceOptimizer(target_length=len(initial_seq), verbose=True)
     optimizer.set_initial_sequence(initial_seq)
     
     # The optimizer will automatically calculate normalization factors
     # based on the initial sequence for adaptive scaling
+
+If ``aa_fraction_ranges`` is set, any sequence passed to ``set_initial_sequence()`` must already satisfy those hard composition bounds.
+
+Hard Composition Constraints During Optimization
+------------------------------------------------
+
+If you want composition to act as a hard constraint on every generated candidate, use ``aa_fraction_ranges`` on the optimizer itself rather than the ``AminoAcidFractions`` property.
+
+.. code-block:: python
+
+    optimizer = goose.SequenceOptimizer(
+        target_length=100,
+        aa_fraction_ranges={
+            'A': (0.05, 0.15),          # Alanine fraction between 5% and 15%
+            ('W', 'F', 'Y'): (0.05, 0.15),  # Aromatic fraction between 5% and 15%
+            'DE': (0.10, 0.30),         # D + E acidic fraction between 10% and 30%
+        },
+        verbose=True,
+    )
+
+    optimizer.add_property(goose.FCR, target_value=0.2, tolerance=0.01)
+    optimized_sequence = optimizer.run()
+
+Supported key formats for ``aa_fraction_ranges`` are:
+
+- single-letter strings, for per-residue constraints: ``'A': (0.05, 0.15)``
+- multi-letter strings, for grouped constraints: ``'WFY': (0.05, 0.15)``
+- tuples, lists, sets, or frozensets of residue letters: ``('W', 'F', 'Y'): (0.05, 0.15)``
+
+Behavior notes:
+
+- These are hard constraints on generated initial candidates, mutation proposals, and emergency-diversity seeds.
+- Shuffling is always safe because it preserves composition.
+- Per-residue entries constrain individual amino acids; grouped entries constrain the sum of those amino acids.
+- Constraints are checked as integer counts derived from ``target_length``.
 
 Multiple Properties, Weights, and Tolerances
 --------------------------------------------
@@ -377,7 +422,11 @@ Creating custom properties is straightforward by subclassing ``CustomProperty``.
         
         def __init__(self, target_value: float, weight: float = 1.0, 
                      constraint_type: ConstraintType = ConstraintType.EXACT):
-            super().__init__(target_value, weight, constraint_type)
+            super().__init__(
+                target_value=target_value,
+                weight=weight,
+                constraint_type=constraint_type,
+            )
         
         def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
             """Calculate the raw property value (before constraint application)."""
@@ -388,7 +437,11 @@ Creating custom properties is straightforward by subclassing ``CustomProperty``.
         
         def __init__(self, motif: str, target_value: float, weight: float = 1.0,
                      constraint_type: ConstraintType = ConstraintType.EXACT):
-            super().__init__(target_value, weight, constraint_type)
+            super().__init__(
+                target_value=target_value,
+                weight=weight,
+                constraint_type=constraint_type,
+            )
             self.motif = motif
         
         def get_init_args(self) -> dict:
@@ -472,7 +525,7 @@ you can enable batch calculation by setting the ``calculate_in_batch`` class att
         calculate_in_batch = True  # Enable batch processing
         
         def __init__(self, target_value: float, weight: float = 1.0):
-            super().__init__(target_value, weight)
+            super().__init__(target_value=target_value, weight=weight)
         
         def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
             """Single sequence calculation (fallback)."""
@@ -510,13 +563,15 @@ you can enable batch calculation by setting the ``calculate_in_batch`` class att
 
 
 .. note::
-   **Best Practices for Custom Properties:**
-   
-   - Always implement ``calculate_raw_value()`` instead of ``calculate()``
-   - Use ``get_init_args()`` if your property has additional parameters
-   - The base class automatically handles constraint types and tolerances
-   - Optionally implement batch calculation for performance with ``calculate_in_batch = True``
-   - Batch calculation is automatically used when available if calculate_in_batch is True; fallback is single-sequence mode
+
+    **Best Practices for Custom Properties**
+
+    - Always implement ``calculate_raw_value()`` instead of ``calculate()``
+    - Pass base-class arguments to ``super().__init__()`` by keyword for clarity and forward compatibility
+    - Use ``get_init_args()`` if your property has additional parameters
+    - The base class automatically handles constraint types and tolerances
+    - Optionally implement batch calculation for performance with ``calculate_in_batch = True``
+    - Batch calculation is automatically used when available if ``calculate_in_batch`` is True; fallback is single-sequence mode
 
 Advanced Optimizer Configuration    
 ---------------------------------
@@ -568,7 +623,23 @@ The default parameter values are chosen to provide robust performance across a w
         stagnation_multiplier=1.0       # Multiplier for stagnation response
     )
 
-**History and Analysis Parameters:**
+**Stagnation Recovery and Multi-Objective Controls:**
+
+.. code-block:: python
+
+    optimizer = goose.SequenceOptimizer(
+        target_length=100,
+        enforce_raw_monotonicity=False,  # Allow weighted trade-offs by default
+        raw_monotonicity_slack=0.05,     # If monotonicity is enabled, allow 5% slack
+        scale_freeze_window=25,          # Freeze adaptive scaling after recovery
+        max_norm_boost=100.0,            # Cap on recovery-only normalization boosts
+        norm_boost_decay=0.95,           # Decay recovery boosts after progress resumes
+        recompute_norm_on_emergency=True,
+        improvement_trend_threshold=-0.001,
+        stagnation_boost_factor=2.0,
+    )
+
+**Population, Reproducibility, and Cache Parameters:**
 
 .. code-block:: python
 
@@ -577,15 +648,19 @@ The default parameter values are chosen to provide robust performance across a w
         # History tracking
         improvement_history_size=20,    # Recent improvements per property
         error_history_size=50,          # Recent error values to store
-        
-        # Analysis parameters
-        min_analysis_samples=5,         # Minimum samples for analysis
+
+        # Trend analysis
         min_trend_samples=5,            # Minimum samples for trend calculation
-        improvement_threshold=-0.001,   # Threshold for improvement detection
-        stability_threshold=0.01,       # Variance threshold for stability
-        
+
+        # Population diversity and reproducibility
+        elite_pool_size=3,              # Keep multiple strong parent sequences
+        parent_selection='weighted',    # weighted, uniform, or best
+        seed=1,                         # Reproducible optimizer random state
+        max_cache_size=1000,            # Bound evaluation-cache growth
+
         # Progress reporting
-        update_interval=10              # Update progress every N iterations
+        update_interval=10,             # Update progress every N iterations
+        debugging=False
     )
 
 **Dynamic Configuration Methods:**
@@ -612,6 +687,10 @@ You can modify convergence and error tolerance settings after initialization:
     convergence_info = optimizer.get_convergence_info()
     print(f"Convergence status: {convergence_info}")
 
+    # Inspect cache behavior
+    cache_stats = optimizer.get_cache_statistics()
+    print(f"Cache hit rate: {cache_stats['hit_rate']:.1%}")
+
 
 
 Troubleshooting and Optimization Tips
@@ -626,6 +705,7 @@ Troubleshooting and Optimization Tips
 - **Increase iterations**: ``max_iterations=5000`` or higher for complex problems
 - **Enable adaptive scaling**: ``enable_adaptive_scaling=True`` (default)
 - **Increase diversity**: ``shuffle_frequency=25``, ``num_candidates=10``
+- **Use hard composition bounds when appropriate**: ``aa_fraction_ranges`` removes composition-violating candidates before they are evaluated
 - **Check target compatibility**: Ensure properties don't fundamentally conflict
 - **Use tolerances**: Set reasonable ``tolerance`` values for each property
 - **Verify constraint types**: Make sure you're using appropriate constraints
@@ -640,6 +720,7 @@ Troubleshooting and Optimization Tips
 - **Disable expensive features**: ``enable_adaptive_scaling=False``, ``enable_shuffling=False``
 - **Use stricter early stopping**: ``error_tolerance=1e-4``, ``enable_early_convergence=True``
 - **Optimize caching**: Check cache hit rate with ``get_cache_statistics()``
+- **Bound cache growth**: Lower ``max_cache_size`` when exploring many large candidate sets
 - **Pre-load models**: Use ``preloaded_model`` for epsilon properties
 
 **Property Conflicts and Balancing**
@@ -651,6 +732,7 @@ Troubleshooting and Optimization Tips
 - **Adjust weights**: Higher weight = higher priority
 - **Use appropriate constraint types**: MINIMUM/MAXIMUM instead of EXACT when possible
 - **Set generous tolerances**: Allow some flexibility in less critical properties
+- **Use hard composition bounds for composition requirements**: Prefer ``aa_fraction_ranges`` over ``AminoAcidFractions`` when composition must stay inside a fixed range throughout optimization
 - **Check physical compatibility**: Some combinations may be impossible
 - **Monitor individual properties**: Enable ``verbose=True`` to track individual progress
 
@@ -658,12 +740,12 @@ Troubleshooting and Optimization Tips
 .. code-block:: python
 
     # Balanced multi-property optimization
-    optimizer.add_property(goose.FractionDisorder, target_value=0.8, weight=3.0, 
-                          constraint_type=ConstraintType.MINIMUM, tolerance=0.05)
-    optimizer.add_property(goose.FCR, target_value=0.3, weight=1.0, 
-                          constraint_type=ConstraintType.EXACT, tolerance=0.1)
-    optimizer.add_property(goose.Hydrophobicity, target_value=0.4, weight=0.5, 
-                          constraint_type=ConstraintType.EXACT, tolerance=0.2)
+    optimizer.add_property(goose.FractionDisorder, target_value=0.8, weight=3.0,
+                          constraint_type='minimum', tolerance=0.05)
+    optimizer.add_property(goose.FCR, target_value=0.3, weight=1.0,
+                          constraint_type='exact', tolerance=0.1)
+    optimizer.add_property(goose.Hydrophobicity, target_value=0.4, weight=0.5,
+                          constraint_type='exact', tolerance=0.2)
 
 **Memory Issues with Large Sequences**
 
@@ -673,7 +755,7 @@ Troubleshooting and Optimization Tips
 
 - **Reduce history sizes**: ``improvement_history_size=5``, ``error_history_size=10``
 - **Clear cache periodically**: Call ``optimizer._clear_evaluation_cache()`` if needed
-- **Disable caching**: Set caching parameters conservatively
+- **Lower ``max_cache_size``**: Useful when exploring many unique large sequences
 - **Use fewer candidates**: ``num_candidates=3`` for large sequences
 
 .. code-block:: python
