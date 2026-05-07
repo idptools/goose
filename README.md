@@ -3,23 +3,6 @@
 
 ## Last updated May 2026, latest version V0.2.5
 
-### Recent changes (the highlights):
-* Added ability to constrain sequence fractions in the SequenceOptimizer without having to add a property.
-* Launched a new Colab Notebook for making sequences with specific homotypic / heterotypic interactions -> [check it out!](https://colab.research.google.com/drive/1aJajo1IK66ApFSMwCCBumCZixlfshw7A?usp=sharing)
-* Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
-* Changed minimum Python version to 3.9.
-* Added functionality to set targets to be minimum, maximum, or exact values in SequenceOptimizer
-* Added linear profiles of properties in SequenceOptimizer so you can optimize across sliding windows of values across a sequence.
-* Added the ability to optimize towards arbitrary matrices for properties involving matrix calculations. 
-
-
-#### Available Demos
-* **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
-* **Custom properties**: see /demos/custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
-* **Design by interaction**: see /demos/generate_sequences_by_interaction.ipynb for designing sequences to interact with a target sequence using epsilon-based properties.
-* **Design by linear profiles**: see /demos/linear_profiles.ipynb for designing sequences to match linear profiles of properties like NCPR.
-* **Design by interaction matrices**: see /demos/epsilon_matrix_variants.ipynb for designing sequences to match or modify interaction matrices.
-
 ### What is GOOSE?
 GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. 
 
@@ -43,6 +26,15 @@ The main functionalities of GOOSE are:
 You can use GOOSE from Python. There is also much of the functionality in GOOSE available in two Colab Notebooks:
 * [Sequence generation and variant design](https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing)
 * [Generate IDRs with specific homotypic or heterotypic interactions](https://colab.research.google.com/drive/1aJajo1IK66ApFSMwCCBumCZixlfshw7A?usp=sharing)
+
+
+#### Available Demos
+* **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
+* **Custom properties**: see /demos/custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
+* **Design by interaction**: see /demos/generate_sequences_by_interaction.ipynb for designing sequences to interact with a target sequence using epsilon-based properties.
+* **Design by linear profiles**: see /demos/linear_profiles.ipynb for designing sequences to match linear profiles of properties like NCPR.
+* **Design by interaction matrices**: see /demos/epsilon_matrix_variants.ipynb for designing sequences to match or modify interaction matrices.
+
 
 ## Python Requirements
 
