@@ -1,27 +1,43 @@
-import numpy
-from Cython.Build import cythonize
-from setuptools import Extension, setup, find_packages
 import os
+import numpy
+from setuptools import Extension, setup, find_packages
 
-# set cython file
-cython_file = os.path.join("goose", "backend", "fast_mutations.pyx")
+# Path to the Cython source and its pre-generated C file.
+pyx_file = os.path.join("goose", "backend", "fast_mutations.pyx")
+c_file = os.path.join("goose", "backend", "fast_mutations.c")
 
-# Define the extension
-extensions = [
-    Extension(
-        name="goose.backend.fast_mutations",
-        sources=[cython_file],
-        include_dirs=[numpy.get_include()],
+# Prefer building from the .pyx via Cython when available; fall back to the
+# shipped .c file so installs work even if Cython is missing from the build env
+# (e.g. --no-build-isolation in conda-forge style builds).
+try:
+    from Cython.Build import cythonize
+    ext_modules = cythonize(
+        [
+            Extension(
+                name="goose.backend.fast_mutations",
+                sources=[pyx_file],
+                include_dirs=[numpy.get_include()],
+            )
+        ],
+        compiler_directives={"language_level": "3"},
     )
-]
+except ImportError:
+    if not os.path.exists(c_file):
+        raise RuntimeError(
+            "Cython is not available and the pre-generated C file "
+            f"{c_file} is missing. Install Cython or use a source "
+            "distribution that bundles the generated C file."
+        )
+    ext_modules = [
+        Extension(
+            name="goose.backend.fast_mutations",
+            sources=[c_file],
+            include_dirs=[numpy.get_include()],
+        )
+    ]
 
-# Setup function
 setup(
-    ext_modules = cythonize(extensions, compiler_directives={'language_level' : "3"}),
+    ext_modules=ext_modules,
     packages=find_packages(),
-
-    # Optional include package data to ship with your package
-    # Customize MANIFEST.in if the general case does not suit your needs
-    # Comment out this line to prevent the files from being packaged with your software
-    include_package_data=True
-    )
+    include_package_data=True,
+)

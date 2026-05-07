@@ -35,14 +35,17 @@ You can use GOOSE from Python. There is also much of the functionality in GOOSE 
 * **Design by linear profiles**: see /demos/linear_profiles.ipynb for designing sequences to match linear profiles of properties like NCPR.
 * **Design by interaction matrices**: see /demos/epsilon_matrix_variants.ipynb for designing sequences to match or modify interaction matrices.
 
+## Documentation
+
+Documentation for GOOSE can be found [here](https://goose.readthedocs.io/en/latest/index.html).
 
 ## Python Requirements
 
-GOOSE requires a minimum Python version of 3.9. The primary developers all use MacBooks with Apple Silicon, which only support Python 3.9 or later. Because of this, testing Python 3.8 requires us to use a different machine. This is fine but does mean we can't find bugs specific to Python 3.8 during regular usage. Therefore, we chose to require 3.9 or later as of October 2025.
+GOOSE requires a minimum Python version of 3.9 and a maximum version of 3.13. The maximum python version is primarily because torch often doesn't support the newest python release. <br>
 
 ## Installation - GOOSE takes flight!
 
-Right now you can only install GOOSE through Github. We plan to put it on PyPi at some point to allow for install via pip!  
+Right now you can only install GOOSE through Github.
 
 After moving GOOSE to use pyproject.toml, you should be able to install GOOSE in a single step. 
 
@@ -69,10 +72,80 @@ pip install git+https://github.com/holehouse-lab/sparrow.git
 
 This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have **numpy or cython** installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. If you keep having issues, please contact me or raise an issue and I'll get to it as soon as I can.
 
+### Installation failures
 
-## Documentation
+GOOSE and its dependencies (`sparrow`, `finches`, `metapredict`) include Cython/C extensions that are **compiled from source on your machine** during installation. This means you need a working C/C++ toolchain plus a few utilities. If `pip install` fails, the most common cause is a missing prerequisite. Below is what to install on each operating system before retrying.
 
-Documentation for GOOSE can be found [here](https://goose.readthedocs.io/en/latest/index.html).
+#### General prerequisites (all platforms)
+
+* **Python 3.9–3.13**
+* **`pip` ≥ 21** (older pip versions don't understand `pyproject.toml` build requirements properly). Upgrade with: `python -m pip install --upgrade pip`
+* **`git`** must be on your PATH (because GOOSE pulls some dependencies directly from GitHub)
+* A **C/C++ compiler** that matches your Python interpreter's architecture (see below)
+
+#### macOS
+
+1. Install the Xcode Command Line Tools (provides `clang`, headers, and `git`):
+   ```bash
+   xcode-select --install
+   ```
+2. Make sure your Python and your terminal are using the same architecture. On Apple Silicon, mixing an `x86_64` Python with an `arm64` shell (or vice-versa) is a common cause of build failures. You can check with:
+   ```bash
+   python -c "import platform; print(platform.machine())"
+   uname -m
+   ```
+   These should match (`arm64` on Apple Silicon, `x86_64` on Intel Macs).
+3. If you use Homebrew Python, make sure it matches your shell's architecture.
+
+#### Linux
+
+Install Python development headers and a C compiler. On Debian/Ubuntu:
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential python3-dev git
+```
+On Fedora/RHEL/CentOS:
+```bash
+sudo dnf install -y gcc gcc-c++ python3-devel git
+```
+On Arch:
+```bash
+sudo pacman -S base-devel python git
+```
+
+#### Windows
+
+Windows requires the **Microsoft C++ Build Tools** to compile Cython extensions:
+
+1. Download the [Visual Studio Build Tools installer](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+2. During installation, select the **"Desktop development with C++"** workload. This installs the MSVC compiler, the Windows SDK, and the headers Cython needs.
+3. Reboot, open a fresh terminal (PowerShell or `cmd`), and retry the install.
+4. We recommend using a [conda](https://docs.conda.io/projects/miniconda/en/latest/) environment on Windows because it sidesteps many PATH/SDK issues:
+   ```powershell
+   conda create -n goose python=3.11 -y
+   conda activate goose
+   pip install git+https://github.com/idptools/goose.git
+   ```
+
+#### Common error messages and what they mean
+
+| Error you see | Likely cause | Fix |
+| --- | --- | --- |
+| `error: Microsoft Visual C++ 14.0 or greater is required` | No C++ compiler on Windows | Install Visual Studio Build Tools (see above) |
+| `command 'gcc' failed with exit status 1` / `Python.h: No such file` | Missing dev headers on Linux | Install `python3-dev` (Debian/Ubuntu) or `python3-devel` (RHEL/Fedora) |
+| `xcrun: error: invalid active developer path` | Xcode CLT missing on macOS | `xcode-select --install` |
+| `ModuleNotFoundError: No module named 'Cython'` | Pip is not respecting the build-system requirements | Upgrade pip: `python -m pip install --upgrade pip` |
+| `fatal: unable to access 'https://github.com/...'` | `git` not on PATH, or network/proxy blocking GitHub | Install git; if behind a proxy, configure `HTTPS_PROXY` |
+| `Failed building wheel for torch` / very long stalls | Your Python version is newer than torch's latest wheel | Use Python 3.11 or 3.12, which have the broadest wheel coverage |
+| `ERROR: Could not find a version that satisfies the requirement sparrow` | Pip is configured to disallow direct URL deps (private mirror, `--require-hashes`) | Install with `pip install --no-deps git+...` then install deps manually, or remove the restrictive pip config |
+
+#### Still stuck?
+
+If a clean install still fails after the above:
+1. Make sure you're on the latest pip and a supported Python (3.9–3.13).
+2. Try a fresh conda env — this rules out interference from other packages in your environment.
+3. Save the **full** output of `pip install git+https://github.com/idptools/goose.git -v` to a file and [open an issue](https://github.com/idptools/goose/issues) with that log, your OS, your Python version, and the output of `pip --version`.
+
 
 
 ## How to cite GOOSE

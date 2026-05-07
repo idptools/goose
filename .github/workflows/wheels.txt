@@ -1,0 +1,51 @@
+name: Build wheels
+
+# change to a .yaml file if you actually want to use this. Not enabling right now. Need to get sparrow and finches on pypi and then this. 
+
+on: 
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build_wheels:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-13, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Required for Linux aarch64 cross-compilation
+      - name: Set up QEMU
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - uses: pypa/cibuildwheel@v2.21.0
+        env:
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
+          # Removed *-musllinux_* to ensure Alpine Linux compatibility
+          CIBW_SKIP: "*_i686 *-win32"
+          # Enabled Linux aarch64 build
+          CIBW_ARCHS_LINUX: "auto aarch64"
+          # Enabled Windows ARM64 build
+          CIBW_ARCHS_WINDOWS: "auto ARM64"
+          # CIBW_ARCHS_MACOS removed to allow auto native builds for macos-13 (x86_64) and macos-14 (arm64)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+
+  build_sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install build && python -m build --sdist
+      - uses: actions/upload-artifact@v4
+        with: { name: sdist, path: dist/*.tar.gz }
