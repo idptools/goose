@@ -63,6 +63,34 @@ class TestSequenceOptimizerInitialization:
         assert optimizer.error_tolerance == 1e-4
         assert optimizer.enable_error_tolerance == True
 
+    def test_initialization_with_scalar_aa_fraction_targets(self):
+        """Scalar aa_fraction_ranges values should be accepted as exact targets."""
+        optimizer = SequenceOptimizer(
+            target_length=100,
+            aa_fraction_ranges={
+                'A': 0.10,
+                ('W', 'F', 'Y'): 0.05,
+            },
+            verbose=False,
+        )
+
+        assert optimizer._aa_count_bounds['A'] == (10, 10)
+        assert (('W', 'F', 'Y'), 5, 5) in optimizer._aa_group_bounds
+
+    def test_initialization_with_bound_aa_fraction_targets(self):
+        """Range-based aa_fraction_ranges values should keep existing behavior."""
+        optimizer = SequenceOptimizer(
+            target_length=100,
+            aa_fraction_ranges={
+                'A': (0.05, 0.15),
+                'WFY': (0.03, 0.12),
+            },
+            verbose=False,
+        )
+
+        assert optimizer._aa_count_bounds['A'] == (5, 15)
+        assert (('W', 'F', 'Y'), 3, 12) in optimizer._aa_group_bounds
+
 
 class TestPropertyAddition:
     """Test suite for adding properties to SequenceOptimizer."""
@@ -686,6 +714,72 @@ class TestBestSequenceTracking:
         assert isinstance(optimizer.iteration, int)
         assert optimizer.iteration > 0
         assert optimizer.iteration <= 5000
+
+
+class TestSetInitialSequence:
+    """Tests for set_initial_sequence optimization convergence."""
+
+    def test_set_initial_sequence_converges_basic_properties(self):
+        """Test that set_initial_sequence converges for NCPR + Hydrophobicity."""
+        import random
+        random.seed(99)
+        start_seq = ''.join(random.choices('ACDEFGHIKLMNPQRSTVWY', k=50))
+        
+        optimizer = SequenceOptimizer(target_length=50, max_iterations=500, verbose=False)
+        optimizer.add_property(NCPR, target_value=0.15, tolerance=0.03)
+        optimizer.add_property(Hydrophobicity, target_value=3.8, tolerance=0.15)
+        optimizer.set_initial_sequence(start_seq)
+        result = optimizer.run()
+        
+        p = Protein(result)
+        assert abs(p.NCPR - 0.15) <= 0.035
+        assert abs(p.hydrophobicity - 3.8) <= 0.2
+
+    def test_set_initial_sequence_does_not_precompute_normalization(self):
+        """Test that set_initial_sequence defers normalization to run()."""
+        import random
+        random.seed(7)
+        start_seq = ''.join(random.choices('ACDEFGHIKLMNPQRSTVWY', k=50))
+        
+        optimizer = SequenceOptimizer(target_length=50, max_iterations=100, verbose=False)
+        optimizer.add_property(NCPR, target_value=0.1)
+        optimizer.set_initial_sequence(start_seq)
+        
+        # Normalization should NOT be initialized yet
+        assert not optimizer._normalization_initialized
+        # best_error should still be inf (not evaluated yet)
+        assert optimizer.best_error == float('inf')
+
+    def test_set_initial_sequence_validates_length(self):
+        """Test that set_initial_sequence rejects wrong-length sequences."""
+        optimizer = SequenceOptimizer(target_length=50, verbose=False)
+        optimizer.add_property(NCPR, target_value=0.1)
+        
+        with pytest.raises(ValueError, match="does not match target length"):
+            optimizer.set_initial_sequence("AAAA")
+
+    def test_set_initial_sequence_comparable_to_normal_path(self):
+        """Test that set_initial_sequence achieves similar results to normal path."""
+        import random
+        random.seed(123)
+        start_seq = ''.join(random.choices('ACDEFGHIKLMNPQRSTVWY', k=60))
+        
+        # With set_initial_sequence
+        opt1 = SequenceOptimizer(target_length=60, max_iterations=300, verbose=False)
+        opt1.add_property(FCR, target_value=0.25, tolerance=0.03)
+        opt1.set_initial_sequence(start_seq)
+        result1 = opt1.run()
+        
+        # Without (normal path)
+        opt2 = SequenceOptimizer(target_length=60, max_iterations=300, verbose=False)
+        opt2.add_property(FCR, target_value=0.25, tolerance=0.03)
+        result2 = opt2.run()
+        
+        p1 = Protein(result1)
+        p2 = Protein(result2)
+        # Both should achieve the target
+        assert abs(p1.FCR - 0.25) <= 0.05
+        assert abs(p2.FCR - 0.25) <= 0.05
 
 
 if __name__ == '__main__':

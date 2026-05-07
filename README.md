@@ -160,6 +160,10 @@ The section below logs changes to GOOSE.
 * Bug fixes and improvements to the SequenceOptimizer 
 * Added ability to constrain sequence fractions in the SequenceOptimizer without having to add a property.
 * Launched a new Colab Notebook for making sequences with specific homotypic / heterotypic interactions -> https://colab.research.google.com/drive/1aJajo1IK66ApFSMwCCBumCZixlfshw7A?usp=sharing
+* Updated README.md with install troubleshooting
+* Updated notebooks in demos
+* Improved install process to reduce frequency of hitting install problems.
+* Fixed bug in SequenceOptimizer causing best sequence to not always be returned when navigating difficult optimzation probelems.
 
 #### V0.2.4 and V0.2.5 - More SequenceOptimzier updates! (October 2025)
 * Bug fixes in SequenceOptimizer

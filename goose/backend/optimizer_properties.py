@@ -136,7 +136,7 @@ class ProteinProperty(ABC):
         self._scaling_value = 1.0
 
         # tolerance that can be overridden by the user.
-        self._tolerance = 0.0
+        self._tolerance = 1e-8 # set to be extremely small by default so it doesn't optimize to useless accuracy.
 
         # window size for linear profiles
         self.window_size = window_size
@@ -539,24 +539,58 @@ class CustomProperty(ProteinProperty):
 class ComputeIWD(ProteinProperty):
     """
     Compute the Inversed Weighted Distance (IWD) property for the target residues in the sequence.
+
+    The ``residues`` parameter accepts any of the following formats:
+
+    * A **string** of one-letter amino acid codes, e.g. ``"ST"`` targets
+      Serine and Threonine.
+    * A **list** of one-letter codes, e.g. ``["S", "T"]``.
+    * A **tuple** of one-letter codes, e.g. ``("S", "T")`` or ``("S",)``.
+
+    All formats are normalised to a list of individual characters internally.
     """
     can_be_linear_profile = False  # IWD does not make sense as a linear profile
-    def __init__(self, residues: Tuple[str, ...], target_value: float=None, 
+
+    def __init__(self, residues, target_value: float = None,
                  target_sequence: str = None, weight: float = 1.0,
                  constraint_type: ConstraintType = ConstraintType.EXACT):
-        # Store the residues parameter before calling super().__init__
-        self.residues = residues
-        # Pass all other parameters to the parent class
+        # Normalise residues to a list of individual single-character strings
+        # regardless of whether a str, list, or tuple was supplied.
+        if isinstance(residues, str):
+            normalised = list(residues)          # "ST"  -> ['S', 'T']
+        else:
+            normalised = [str(r) for r in residues]  # ("S",) / ["S","T"] -> ['S'] / ['S','T']
+        self.residues = normalised
         super().__init__(target_value, weight, constraint_type, target_sequence=target_sequence)
-    
+
     def get_init_args(self) -> dict:
         """Override to include residues parameter"""
         base_args = super().get_init_args()
         base_args['residues'] = self.residues
         return base_args
 
+    @staticmethod
+    def _compute_iwd(sequence: str, residues) -> float:
+        """Mean inverse pairwise distance for *residues* positions in *sequence*.
+
+        Returns 0.0 when fewer than two target residues are present (no pairs
+        to compute a distance for).
+        """
+        residues_set = set(residues)
+        positions = [i for i, aa in enumerate(sequence) if aa in residues_set]
+        n = len(positions)
+        if n < 2:
+            return 0.0
+        total = sum(
+            1.0 / (positions[j] - positions[i])
+            for i in range(n)
+            for j in range(i + 1, n)
+        )
+        pairs = n * (n - 1) // 2
+        return total / pairs
+
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
-        return protein.compute_iwd(list(self.residues))
+        return self._compute_iwd(protein.sequence, self.residues)
 
 
 class Hydrophobicity(ProteinProperty):

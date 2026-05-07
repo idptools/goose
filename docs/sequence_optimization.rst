@@ -20,7 +20,7 @@ The ``SequenceOptimizer`` has been completely rewritten to provide:
 * **Easier Property Value Setting**: For many of the properties, you can now set the target value using a sequence of interest rather than a numeric value. 
 * **Match to arbitrary interaction matrices**: You can now optimize sequences to match arbitrary interaction matrices.
 * **Linear Profiles for Values**: You can now set ``can_be_linear_profile=True`` for some properties and provide a sequence or list of target values. The optimizer will then attempt to match the profile along the values. 
-* **Hard Composition Constraints**: ``aa_fraction_ranges`` can enforce hard per-residue or grouped composition bounds during candidate generation, which is often faster and more reliable than treating composition as another soft optimization objective.
+* **Hard Composition Constraints**: ``aa_fraction_ranges`` can enforce hard per-residue or grouped composition targets or bounds during candidate generation, which is often faster and more reliable than treating composition as another soft optimization objective.
 * **Population Diversity Controls**: ``elite_pool_size`` and ``parent_selection`` can retain multiple strong parent sequences instead of mutating only the current best sequence.
 * **Reproducibility Controls**: ``seed`` makes repeated runs deterministic for the optimizer's own random choices, and ``max_cache_size`` bounds cache growth.
 
@@ -159,8 +159,8 @@ To specify constraint type, use the ``constraint_type`` argument when adding a p
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | Complexity                    | Wootton-Federhen complexity                   | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
-| ComputeIWD                    | Inverse Weighted Distance                     | residues (tuple), target_value, weight,        |
-|                               |                                               | constraint_type                                |
+| ComputeIWD                    | Inverse Weighted Distance                     | residues (string, list, or tuple),             |
+|                               |                                               | target_value, weight, constraint_type          |
 +-------------------------------+-----------------------------------------------+------------------------------------------------+
 | AminoAcidFractions            | Target amino acid composition                 | target_fractions (dict), weight,               |
 |                               |                                               | constraint_type                                |
@@ -309,20 +309,26 @@ The ``SequenceOptimizer`` provides extensive control over the optimization proce
     # The optimizer will automatically calculate normalization factors
     # based on the initial sequence for adaptive scaling
 
-If ``aa_fraction_ranges`` is set, any sequence passed to ``set_initial_sequence()`` must already satisfy those hard composition bounds.
+If ``aa_fraction_ranges`` is set, any sequence passed to ``set_initial_sequence()`` must already satisfy those hard composition targets or bounds.
 
 Hard Composition Constraints During Optimization
 ------------------------------------------------
 
 If you want composition to act as a hard constraint on every generated candidate, use ``aa_fraction_ranges`` on the optimizer itself rather than the ``AminoAcidFractions`` property.
 
+Each ``aa_fraction_ranges`` value can be either:
+
+- a single numeric target fraction, such as ``'G': 0.10``
+- a lower/upper bound pair, such as ``'A': (0.05, 0.15)``
+
 .. code-block:: python
 
     optimizer = goose.SequenceOptimizer(
         target_length=100,
         aa_fraction_ranges={
+            'G': 0.00,                  # Exact target: no glycines
             'A': (0.05, 0.15),          # Alanine fraction between 5% and 15%
-            ('W', 'F', 'Y'): (0.05, 0.15),  # Aromatic fraction between 5% and 15%
+            ('W', 'F', 'Y'): 0.05,      # Exact target: 5% total aromatics
             'DE': (0.10, 0.30),         # D + E acidic fraction between 10% and 30%
         },
         verbose=True,
@@ -333,9 +339,14 @@ If you want composition to act as a hard constraint on every generated candidate
 
 Supported key formats for ``aa_fraction_ranges`` are:
 
-- single-letter strings, for per-residue constraints: ``'A': (0.05, 0.15)``
-- multi-letter strings, for grouped constraints: ``'WFY': (0.05, 0.15)``
-- tuples, lists, sets, or frozensets of residue letters: ``('W', 'F', 'Y'): (0.05, 0.15)``
+- single-letter strings, for per-residue constraints: ``'A': 0.10`` or ``'A': (0.05, 0.15)``
+- multi-letter strings, for grouped constraints: ``'WFY': 0.05`` or ``'WFY': (0.05, 0.15)``
+- tuples, lists, sets, or frozensets of residue letters: ``('W', 'F', 'Y'): 0.05`` or ``('W', 'F', 'Y'): (0.05, 0.15)``
+
+Supported value formats for ``aa_fraction_ranges`` are:
+
+- a single numeric fraction, interpreted as an exact target before count conversion
+- a 2-item ``(low, high)`` pair
 
 Behavior notes:
 
@@ -343,6 +354,7 @@ Behavior notes:
 - Shuffling is always safe because it preserves composition.
 - Per-residue entries constrain individual amino acids; grouped entries constrain the sum of those amino acids.
 - Constraints are checked as integer counts derived from ``target_length``.
+- Scalar targets are treated as ``(value, value)`` before count conversion. If ``value * target_length`` is not an integer, the optimizer uses the tightest feasible count window around that target.
 
 Multiple Properties, Weights, and Tolerances
 --------------------------------------------
@@ -786,7 +798,7 @@ Examples and Demo Notebooks
 GOOSE includes comprehensive demo notebooks showcasing advanced ``SequenceOptimizer`` usage in the /demos directory. These include:
 
 - Basic optimization: see sequence_optimization.ipynb for basic usage. 
-- Custom properties: see custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
+- Custom properties: see custom_optimizer_properties.ipynb for creating and implementing custom user-defined properties  
 - Design by interaction: see generate_sequences_by_interaction.ipynb for designing sequences to interact with a target sequence using epsilon-based properties.
 - Design by linear profiles: see linear_profiles.ipynb for designing sequences to match linear profiles of properties like NCPR.
 - Design by interaction matrices: see epsilon_matrix_variants.ipynb for designing sequences to match or modify interaction matrices.

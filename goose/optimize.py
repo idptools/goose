@@ -110,7 +110,7 @@ class SequenceOptimizer:
         enable_error_tolerance: bool = True,  # Enable error tolerance early stopping
         # Mutation parameters
         num_candidates: int = 5,  # Significantly more candidates for better exploration
-        num_starting_candidates: int = 100,  # allow setting different number of starting candidates to explore more seq space.
+        num_starting_candidates: int = 1000,  # allow setting different number of starting candidates to explore more seq space.
         min_mutations: int = 1,
         max_mutations: int = 15,  # Allow more aggressive mutations
         mutation_ratio: int = 10,  # More mutations per sequence (length/10 vs length/20)
@@ -171,12 +171,14 @@ class SequenceOptimizer:
                                               # "uniform", or "best" (always
                                               # use top of pool). Only matters
                                               # when elite_pool_size > 1.
-        aa_fraction_ranges: Optional[Dict[Any, Tuple[float, float]]] = None,
+        aa_fraction_ranges: Optional[Dict[Any, Union[float, Tuple[float, float], List[float]]]] = None,
         # Optional amino-acid fraction ranges. Keys may be single residues
         # (e.g. ``'A'``) or residue groups (e.g. ``('W', 'F', 'Y')`` or
-        # ``'WFY'``). When provided, candidate generation (initial seeds,
-        # point mutations, and multi-mutations) is constrained so each
-        # configured per-AA or grouped fraction stays within ``[low, high]``.
+        # ``'WFY'``). Values may be either a single target fraction (e.g.
+        # ``0.10``) or an explicit ``(low, high)`` bound. When provided,
+        # candidate generation (initial seeds, point mutations, and
+        # multi-mutations) is constrained so each configured per-AA or
+        # grouped fraction stays within the derived count bounds.
         # Residues not listed in a per-AA entry are implicitly bounded
         # ``(0.0, 1.0)``. Shuffling already preserves composition so it is
         # unaffected.
@@ -301,13 +303,16 @@ class SequenceOptimizer:
             ``"uniform"`` (uniform random), or ``"best"`` (always top of
             pool). Ignored when ``elite_pool_size <= 1``.
         aa_fraction_ranges : dict, optional
-            Mapping of amino-acid keys to ``(low, high)`` fractional bounds
-            (each in ``[0, 1]``, inclusive). Keys may be:
+            Mapping of amino-acid keys to either a single target fraction or
+            ``(low, high)`` fractional bounds (each in ``[0, 1]``,
+            inclusive). Keys may be:
 
-            * a single-letter string -- per-AA bound, e.g. ``'A': (0.05, 0.15)``
+            * a single-letter string -- per-AA target/bound, e.g.
+              ``'A': 0.10`` or ``'A': (0.05, 0.15)``
             * a multi-letter string, tuple, set, or frozenset of single
-              letters -- bound on the SUM of those AAs' fractions, e.g.
-              ``('W', 'F', 'Y'): (0.05, 0.15)`` or ``'WFY': (0.05, 0.15)``.
+              letters -- target/bound on the SUM of those AAs' fractions,
+              e.g. ``('W', 'F', 'Y'): 0.05`` or
+              ``'WFY': (0.05, 0.15)``.
 
             When provided, all generated candidates -- initial seeds, point
             mutations, multi-mutations, and emergency-injection seeds -- are
@@ -315,7 +320,10 @@ class SequenceOptimizer:
             configured range. Per-AA bounds for unlisted residues are
             unconstrained. Shuffling preserves composition and is unaffected.
             Bounds are enforced as integer counts derived from
-            ``target_length`` (``floor(low * L)`` to ``ceil(high * L)``).
+            ``target_length``. Scalar targets are treated as
+            ``(value, value)`` before count conversion, so when
+            ``value * target_length`` is non-integral they become the
+            tightest feasible count window around that target.
         debugging : bool
             Enable extra logging for debugging
         update_interval : int
@@ -429,6 +437,22 @@ class SequenceOptimizer:
         self.iteration: int = 0
         self.convergence_counter: int = 0
         self.starting_sequence: str = None
+        # Track consecutive stagnation recoveries without improvement.
+        # Used to trigger emergency diversity injection.
+        self._consecutive_stagnation_recoveries: int = 0
+        
+        # Global-best tracking: the absolute best sequence seen during the
+        # entire run, measured by raw weighted error (scale-invariant). This
+        # ensures that exploratory moves (relaxed acceptance, sideways moves,
+        # emergency injection) never cause the optimizer to "forget" the true
+        # best sequence encountered.
+        self._global_best_sequence: Optional[str] = None
+        self._global_best_raw_error: float = float('inf')
+        
+        # Tabu set for sideways acceptance: prevents cycling when accepting
+        # equal-error candidates during stagnation. Holds recently visited
+        # sequences (bounded deque).
+        self._sideways_tabu: deque = deque(maxlen=20)
         
         # Evaluation cache for performance optimization
         # Replace hash-based cache with ID-based cache
@@ -516,7 +540,14 @@ class SequenceOptimizer:
 
 
     def set_initial_sequence(self, sequence: str) -> None:
-        """Set the initial sequence and calculate normalization factors"""
+        """Set the initial sequence for optimization.
+        
+        The sequence is validated and stored. Normalization factors are
+        computed at the start of ``run()`` using diverse reference sequences
+        rather than the starting sequence itself, which avoids pathological
+        normalization when the starting sequence has unbalanced property
+        errors.
+        """
         if len(sequence) != self.target_length:
             raise ValueError(f"Initial sequence length {len(sequence)} does not match target length {self.target_length}")
         
@@ -546,16 +577,9 @@ class SequenceOptimizer:
         
         self.starting_sequence = sequence
         
-        # Calculate initial normalization factors
-        self._calculate_initial_normalization(sequence)
-        
-        # Evaluate initial sequence
-        initial_error, _ = self._evaluate_sequence(sequence)
-        self.best_error = initial_error
-        self.best_error_history.append(initial_error)
-        
         if self.debugging:
-            self.logger.info(f"Initial sequence set. Initial weighted error: {initial_error:.6f}")
+            self.logger.info(f"Initial sequence set (length={len(sequence)}). "
+                           f"Normalization will be computed from diverse references at run time.")
     
     def _configure_logging(self) -> None:
         """Configure a per-instance logger.
@@ -835,13 +859,40 @@ class SequenceOptimizer:
         return self._best_sequence_property_info
 
     def _update_best_sequence(self, new_sequence: str, new_error: float) -> None:
-        """Update the best sequence and invalidate cached property info."""
+        """Update the best sequence and invalidate cached property info.
+        
+        Also updates the global-best checkpoint if the new sequence has a
+        lower raw weighted error (scale-invariant) than any previously seen.
+        This ensures that ALL code paths (normal acceptance, relaxed
+        acceptance, emergency injection, etc.) are captured by the checkpoint.
+        """
         self.best_sequence = new_sequence
         self.best_error = new_error
         # Invalidate cached property info
         self._best_sequence_property_info = None
         if hasattr(self, '_best_sequence_property_info_cache_id'):
             delattr(self, '_best_sequence_property_info_cache_id')
+        
+        # Update global-best checkpoint. Evaluate raw error (uses cache, so
+        # this is essentially free for sequences just evaluated in the main
+        # loop). Skip during initialization (before run() sets up the
+        # global-best fields) by checking if _global_best_sequence is not
+        # the sentinel None.
+        #
+        # NOTE: We use ``unsatisfied_only=False`` here (sum over ALL
+        # properties) so the metric is a *consistent* ordering across
+        # sequences. Using ``unsatisfied_only=True`` would compare different
+        # sequences on different property subsets (each sequence's own
+        # within-tolerance flags), which is non-monotonic and can let the
+        # working best drift away from the true global optimum after
+        # exploratory moves (relaxed acceptance, sideways moves, emergency
+        # diversity injection).
+        if hasattr(self, '_global_best_raw_error') and self._global_best_sequence is not None:
+            _, prop_info = self._evaluate_sequence(new_sequence)
+            raw_error = self._weighted_raw_sum(prop_info, unsatisfied_only=False)
+            if raw_error < self._global_best_raw_error:
+                self._global_best_sequence = new_sequence
+                self._global_best_raw_error = raw_error
     
     def _calculate_initial_normalization(self, initial_sequence: str) -> None:
         """
@@ -1090,20 +1141,24 @@ class SequenceOptimizer:
     # ------------------------------------------------------------------
     def _compute_aa_count_bounds(
         self,
-        aa_fraction_ranges: Dict[Any, Tuple[float, float]],
+        aa_fraction_ranges: Dict[Any, Union[float, Tuple[float, float], List[float]]],
         target_length: int,
     ) -> Tuple[Dict[str, Tuple[int, int]], List[Tuple[Tuple[str, ...], int, int]]]:
         """Validate ``aa_fraction_ranges`` and convert to integer count bounds.
         
         Keys may be:
-          * a single-letter string (per-AA bound), e.g. ``'A': (0.05, 0.15)``
+          * a single-letter string (per-AA target/bound), e.g.
+            ``'A': 0.10`` or ``'A': (0.05, 0.15)``
           * a multi-letter string, tuple, frozenset, or set of single letters
-            (group bound on the SUM of those AAs), e.g.
-            ``('W','F','Y'): (0.05, 0.15)`` or ``'WFY': (0.05, 0.15)``.
+            (group target/bound on the SUM of those AAs), e.g.
+            ``('W','F','Y'): 0.05`` or ``'WFY': (0.05, 0.15)``.
         
         AAs not constrained per-letter get ``(0, target_length)``. Min counts
-        are ``floor(low*L)``; max counts are ``ceil(high*L)``. Raises if the
-        per-AA totals or any group is structurally infeasible.
+        are ``floor(low*L)``; max counts are ``ceil(high*L)``. Scalar targets
+        are treated as ``(value, value)`` before integer conversion, which
+        yields the tightest feasible count window when an exact count is not
+        representable. Raises if the per-AA totals or any group is
+        structurally infeasible.
         
         Returns
         -------
@@ -1137,11 +1192,17 @@ class SequenceOptimizer:
                 raise ValueError(
                     f"aa_fraction_ranges key {key!r} contains duplicate amino acids."
                 )
-            if not (isinstance(rng, (tuple, list)) and len(rng) == 2):
+            if isinstance(rng, (int, float, np.integer, np.floating)) and not isinstance(rng, bool):
+                low = high = float(rng)
+            elif isinstance(rng, (tuple, list)) and len(rng) == 1:
+                low = high = float(rng[0])
+            elif isinstance(rng, (tuple, list)) and len(rng) == 2:
+                low, high = float(rng[0]), float(rng[1])
+            else:
                 raise ValueError(
-                    f"aa_fraction_ranges[{key!r}] must be a (low, high) tuple, got {rng!r}"
+                    f"aa_fraction_ranges[{key!r}] must be either a single fraction "
+                    f"or a (low, high) pair, got {rng!r}"
                 )
-            low, high = float(rng[0]), float(rng[1])
             if not (0.0 <= low <= high <= 1.0):
                 raise ValueError(
                     f"aa_fraction_ranges[{key!r}]=({low}, {high}) must satisfy "
@@ -1339,8 +1400,14 @@ class SequenceOptimizer:
                 group_counts[gi] += 1
         return ''.join(seq_list)
 
-    def _generate_candidates(self, sequence: str, iteration: int) -> List[str]:
-        """Generate candidate sequences with improved diversity"""
+    def _generate_candidates(self, sequence: str, iteration: int, stagnation_counter: int = 0) -> List[str]:
+        """Generate candidate sequences with improved diversity.
+        
+        When ``stagnation_counter`` is provided (passed from the main loop),
+        the multi-mutation size distribution adapts to favor larger mutations
+        as stagnation deepens. This widens the search radius without changing
+        acceptance criteria, so it cannot degrade convergence.
+        """
         candidates = []
         
         # Always include current sequence
@@ -1383,11 +1450,25 @@ class SequenceOptimizer:
             min(self.max_mutations, seq_length // self.mutation_ratio),
         )
         
+        # Adapt mutation intensity based on stagnation level.
+        # As stagnation deepens, shift from small mutations (exploitation)
+        # toward larger mutations (exploration). This widens the search
+        # radius to escape local minima without affecting acceptance rules.
+        stagnation_ratio = stagnation_counter / max(self.stagnation_threshold, 1)
+        
         for _ in range(multi_mut_count):
-            # Use exponential distribution to favor smaller mutations
             if max_muts > self.min_mutations:
-                weights = [2 ** (max_muts - i) for i in range(self.min_mutations, max_muts + 1)]
-                num_muts = random.choices(range(self.min_mutations, max_muts + 1), weights=weights)[0]
+                mut_range = range(self.min_mutations, max_muts + 1)
+                if stagnation_ratio > 0.5:
+                    # Deep stagnation: favor larger mutations (inverse exponential)
+                    weights = [2 ** i for i in range(max_muts - self.min_mutations + 1)]
+                elif stagnation_ratio > 0.3:
+                    # Moderate stagnation: flat distribution
+                    weights = [1] * (max_muts - self.min_mutations + 1)
+                else:
+                    # Normal: exponential favoring small mutations (original behavior)
+                    weights = [2 ** (max_muts - i) for i in mut_range]
+                num_muts = random.choices(list(mut_range), weights=weights)[0]
             else:
                 num_muts = self.min_mutations
             
@@ -1990,10 +2071,40 @@ class SequenceOptimizer:
             self.logger.info(f"   Initial error: {self.best_error:.4f}")        
             self.logger.info(f"📏 Calculating dynamic normalization factors:")
         
-        # calculate initial normalization factors (skip if already computed,
-        # e.g. via a prior call to set_initial_sequence)
+        # Compute normalization factors. When a starting sequence was provided
+        # via set_initial_sequence(), compute normalization from a diverse
+        # reference sequence rather than the (potentially unbalanced) starting
+        # sequence. This avoids pathological normalization where properties
+        # already near target get over-protected (high norm factor) while
+        # far-from-target properties get dampened (low norm factor).
         if not self._normalization_initialized:
-            self._calculate_initial_normalization(self.best_sequence)
+            if self.starting_sequence is not None:
+                # Generate a diverse reference sequence for normalization
+                if self._aa_count_bounds is not None:
+                    norm_ref = self._build_constrained_random_sequence(self.target_length)
+                else:
+                    norm_refs = build_diverse_initial_sequences(self.target_length, num_sequences=5)
+                    # Pick the reference with the most balanced errors
+                    # (closest to geometric mean across properties)
+                    best_balance = float('inf')
+                    norm_ref = norm_refs[0]
+                    for ref_seq in norm_refs:
+                        ref_protein = sparrow.Protein(ref_seq)
+                        ref_errors = []
+                        for prop in self.properties:
+                            _, raw_err = prop.calculate(ref_protein)
+                            ref_errors.append(max(raw_err, 1e-6))
+                        if len(ref_errors) > 1:
+                            # Balance = ratio of max to min error (lower = more balanced)
+                            balance_ratio = max(ref_errors) / min(ref_errors)
+                            if balance_ratio < best_balance:
+                                best_balance = balance_ratio
+                                norm_ref = ref_seq
+                self._calculate_initial_normalization(norm_ref)
+                if self.debugging:
+                    self.logger.info("   Normalization computed from diverse reference (not starting sequence).")
+            else:
+                self._calculate_initial_normalization(self.best_sequence)
         elif self.debugging:
             self.logger.info("   Using pre-computed normalization factors.")
         
@@ -2022,6 +2133,28 @@ class SequenceOptimizer:
         best_raw_error = self._weighted_raw_sum(initial_property_info, unsatisfied_only=True)
         self.best_raw_error_history.append(best_raw_error)
         
+        # Initialize global-best tracking with the starting sequence.
+        # This is the scale-invariant "checkpoint" that ensures we never
+        # return a sequence worse than the best we've ever seen. The metric
+        # is the total weighted raw error over ALL properties
+        # (``unsatisfied_only=False``) so it provides a consistent ordering
+        # across sequences regardless of which properties happen to be
+        # within tolerance for any given candidate.
+        self._global_best_sequence = self.best_sequence
+        self._global_best_raw_error = self._weighted_raw_sum(
+            initial_property_info, unsatisfied_only=False
+        )
+
+        # Sweep all initial candidates against the checkpoint too: the seed
+        # selected by ``best_initial_raw_sum`` (unsatisfied-weighted) may not
+        # be the absolute best by total-raw-sum, and we already paid for
+        # those evaluations.
+        for cand_seq, (_, cand_prop_info) in zip(initial_candidates, initial_results):
+            cand_total_raw = self._weighted_raw_sum(cand_prop_info, unsatisfied_only=False)
+            if cand_total_raw < self._global_best_raw_error:
+                self._global_best_sequence = cand_seq
+                self._global_best_raw_error = cand_total_raw
+        
         # Main optimization loop
         for _ in range(self.max_iterations):
             self.iteration += 1 # increment iteration count.
@@ -2030,7 +2163,7 @@ class SequenceOptimizer:
             # include best_sequence so we never lose the global optimum; the
             # cache makes this essentially free.
             parent = self._select_parent_from_pool()
-            candidates = self._generate_candidates(parent, self.iteration)
+            candidates = self._generate_candidates(parent, self.iteration, stagnation_counter)
             if self.elite_pool_size > 1 and self.best_sequence not in candidates:
                 candidates.append(self.best_sequence)
             
@@ -2052,7 +2185,22 @@ class SequenceOptimizer:
                 # for pool ranking and progress tracking; respects priorities
                 # while staying invariant to adaptive scaling.
                 candidate_raw_error = self._weighted_raw_sum(property_info, unsatisfied_only=True)
-                
+
+                # Global-best checkpoint: track the absolute best sequence
+                # ever evaluated, regardless of whether it was accepted by
+                # the (scale-dependent) weighted-error acceptance rule. This
+                # is the metric we use to restore at end-of-run, so it must
+                # be updated for EVERY candidate -- not just accepted ones.
+                # Use the all-properties weighted raw sum so the metric is
+                # scale-invariant AND consistent across sequences with
+                # different "satisfied" subsets.
+                candidate_total_raw = self._weighted_raw_sum(
+                    property_info, unsatisfied_only=False
+                )
+                if candidate_total_raw < self._global_best_raw_error:
+                    self._global_best_sequence = candidate
+                    self._global_best_raw_error = candidate_total_raw
+
                 # Maintain elite pool from every evaluated candidate (#13).
                 # No extra cost: we already have raw_error / weighted_error.
                 if self.elite_pool_size > 1:
@@ -2068,12 +2216,58 @@ class SequenceOptimizer:
                 # ``enforce_raw_monotonicity`` is on, additionally require that
                 # the unsatisfied raw-error sum does not worsen beyond the
                 # configured slack. (#7)
-                if weighted_error >= best_candidate_error:
+                accepted = False
+                if weighted_error < best_candidate_error:
+                    if self.enforce_raw_monotonicity:
+                        raw_limit = best_raw_error * (1.0 + self.raw_monotonicity_slack)
+                        if candidate_raw_error > raw_limit:
+                            continue
+                    accepted = True
+                
+                # Sideways acceptance: during stagnation, accept candidates
+                # with equal total error but a different sequence. This lets
+                # the optimizer walk along error-plateaus (ridges) to find
+                # downhill exits. A small tabu set prevents cycling.
+                if (not accepted
+                    and stagnation_counter >= self.stagnation_threshold // 3
+                    and abs(weighted_error - self.best_error) < 1e-8
+                    and candidate != self.best_sequence
+                    and candidate not in self._sideways_tabu):
+                    accepted = True
+                
+                # Relaxed acceptance for coupled-property stagnation:
+                # When stagnant with unsatisfied properties, accept candidates
+                # that improve those specific unsatisfied properties even if
+                # total weighted error worsens slightly (because a previously-
+                # satisfied property regressed). This lets the optimizer escape
+                # traps caused by interdependent properties (e.g., FCR + NCPR).
+                if not accepted and stagnation_counter >= self.stagnation_threshold // 2:
+                    current_best_info = self._get_best_sequence_property_info()
+                    currently_unsatisfied = [
+                        name for name, info in current_best_info.items()
+                        if not info.get('within_tolerance', False)
+                    ]
+                    if currently_unsatisfied:
+                        # Compute targeted improvement: sum of raw errors for
+                        # the currently-unsatisfied properties in the candidate.
+                        candidate_target_err = sum(
+                            property_info[name]['raw_error'] * property_info[name].get('weight', 1.0)
+                            for name in currently_unsatisfied
+                        )
+                        current_target_err = sum(
+                            current_best_info[name]['raw_error'] * current_best_info[name].get('weight', 1.0)
+                            for name in currently_unsatisfied
+                        )
+                        # Accept if the unsatisfied properties improved and
+                        # the total regression is bounded (max 50% of the
+                        # unsatisfied improvement can be "spent" on regression).
+                        improvement = current_target_err - candidate_target_err
+                        regression = max(0.0, weighted_error - self.best_error)
+                        if improvement > 0 and regression < improvement * 0.5:
+                            accepted = True
+                
+                if not accepted:
                     continue
-                if self.enforce_raw_monotonicity:
-                    raw_limit = best_raw_error * (1.0 + self.raw_monotonicity_slack)
-                    if candidate_raw_error > raw_limit:
-                        continue
                 best_candidate = candidate
                 best_candidate_error = weighted_error
                 best_candidate_raw_error = candidate_raw_error
@@ -2081,6 +2275,8 @@ class SequenceOptimizer:
 
             # If we found a better candidate, update best sequence
             if best_candidate is not None:
+                # Record in tabu set to prevent sideways cycling
+                self._sideways_tabu.append(best_candidate)
                 self._update_best_sequence(best_candidate, best_candidate_error)
                 # Reset stagnation counter only when raw error actually improves
                 if best_candidate_raw_error < best_raw_error:
@@ -2174,17 +2370,23 @@ class SequenceOptimizer:
                 
                 if stagnation_counter >= self.stagnation_threshold:
                     self._apply_stagnation_recovery()
+                    self._consecutive_stagnation_recoveries += 1
                     
                     # Recalculate best raw error after stagnation recovery (scaling may have changed)
                     # Use cached property info (already updated by stagnation recovery)
                     updated_property_info = self._get_best_sequence_property_info()
                     best_raw_error = self._weighted_raw_sum(updated_property_info, unsatisfied_only=True)
                     
-                    # If severely stagnant, try emergency diversity injection
-                    if stagnation_counter >= self.stagnation_threshold * 2:
+                    # If severely stagnant (multiple consecutive recoveries without
+                    # improvement), try emergency diversity injection
+                    if self._consecutive_stagnation_recoveries >= 2:
                         best_raw_error = self._emergency_diversity_injection(best_raw_error)
+                        self._consecutive_stagnation_recoveries = 0
                     
                     stagnation_counter = 0  # Reset counter after recovery
+            else:
+                # Reset consecutive stagnation counter on improvement
+                self._consecutive_stagnation_recoveries = 0
 
         # Ensure the bar reflects the final iteration count before closing
         # (covers convergence/tolerance early-exit paths).
@@ -2192,6 +2394,33 @@ class SequenceOptimizer:
             progress_bar.n = self.iteration
             progress_bar.refresh()
         progress_bar.close()
+        
+        # Before final reporting, check if the global-best sequence (by raw
+        # error) is actually better than the current working best. Exploratory
+        # moves (relaxed acceptance, sideways moves, emergency injection) can
+        # cause the working best to drift away from the true optimum.
+        #
+        # We compare using the total weighted raw error over ALL properties
+        # -- the same scale-invariant, sequence-consistent metric used to
+        # update the checkpoint -- so this restoration reliably swaps back
+        # to the true best sequence seen at any point during the run.
+        if (self._global_best_sequence is not None
+            and self._global_best_sequence != self.best_sequence):
+            # Re-evaluate the global best under current scaling to get its
+            # weighted error for a fair comparison.
+            global_weighted_error, global_prop_info = self._evaluate_sequence(self._global_best_sequence)
+            global_raw_error = self._weighted_raw_sum(global_prop_info, unsatisfied_only=False)
+            # Compare raw errors (scale-invariant ground truth)
+            current_raw_error = self._weighted_raw_sum(
+                self._get_best_sequence_property_info(), unsatisfied_only=False
+            )
+            if global_raw_error < current_raw_error:
+                if self.debugging:
+                    self.logger.info(
+                        f"\n🔄 Restoring global-best sequence "
+                        f"(raw_error {global_raw_error:.6f} < current {current_raw_error:.6f})"
+                    )
+                self._update_best_sequence(self._global_best_sequence, global_weighted_error)
         
         # Final evaluation and reporting
         final_property_info = self._get_best_sequence_property_info()
