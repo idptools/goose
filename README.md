@@ -1,23 +1,16 @@
 ![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
 # GOOSE : Generate disOrdered prOtiens Specifying propErties
 
-## Last updated October 2025, latest version V0.2.5
+## Last updated May 2026, latest version V0.2.5
 
-### What's new (the highlights)?
-#### October 2025 update:
+### Recent changes (the highlights)?
+* Added ability to constrain sequence fractions in the SequenceOptimizer without having to add a property.
+* Launched a new Colab Notebook for making sequences with specific homotypic / heterotypic interactions -> [check it out!](https://colab.research.google.com/drive/1aJajo1IK66ApFSMwCCBumCZixlfshw7A?usp=sharing)
 * Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
-* Cythonized the functionality for generating mutations in SequenceOptimizer (thanks Jeff!) 
-* Improved speed of SequenceOptimizer and reduced memory usage
 * Changed minimum Python version to 3.9.
-
-#### September 2025 update:
-* Complete overhaul of the SequenceOptimizer architecture to add support for optimization of properties that have highly variably seensitivies and scales of values. 
-* Complete overhaul to the SequenceOptimizer properties. Added functionality to set targets to be minimum, maximum, or exact values. 
-* Introduction of numerous new SequenceOptimizer properties. 
+* Added functionality to set targets to be minimum, maximum, or exact values in SequenceOptimizer
 * Added linear profiles of properties in SequenceOptimizer so you can optimize across sliding windows of values across a sequence.
-* Added the ability to optimize towards arbitrary vectors for linear profiles. 
 * Added the ability to optimize towards arbitrary matrices for properties involving matrix calculations. 
-* Update of demo notebooks in /demos to reflect changes in code. 
 
 
 #### Available Demos
@@ -47,7 +40,9 @@ The main functionalities of GOOSE are:
 
 ## How to use GOOSE
 
-You can use GOOSE from Python. There is also most of the functionality in GOOSE available in a [Google Colab notebook](https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing).
+You can use GOOSE from Python. There is also much of the functionality in GOOSE available in two Colab Notebooks:
+* [Sequence generation and variant design](https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing)
+* [Generate IDRs with specific homotypic or heterotypic interactions](https://colab.research.google.com/drive/1aJajo1IK66ApFSMwCCBumCZixlfshw7A?usp=sharing)
 
 ## Python Requirements
 
@@ -95,6 +90,11 @@ For the time being, you can cite our [preprint](https://www.biorxiv.org/content/
 ## Changes
 
 The section below logs changes to GOOSE.  
+
+#### V0.2.5 - More SequenceOptimizer updates and a new colab notebook! (May 2026)
+* Bug fixes and improvements to the SequenceOptimizer 
+* Added ability to constrain sequence fractions in the SequenceOptimizer without having to add a property.
+* Launched a new Colab Notebook for making sequences with specific homotypic / heterotypic interactions -> https://colab.research.google.com/drive/1aJajo1IK66ApFSMwCCBumCZixlfshw7A?usp=sharing
 
 #### V0.2.4 and V0.2.5 - More SequenceOptimzier updates! (October 2025)
 * Bug fixes in SequenceOptimizer
