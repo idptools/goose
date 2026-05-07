@@ -3,7 +3,7 @@
 
 ## Last updated May 2026, latest version V0.2.5
 
-### Recent changes (the highlights)?
+### Recent changes (the highlights):
 * Added ability to constrain sequence fractions in the SequenceOptimizer without having to add a property.
 * Launched a new Colab Notebook for making sequences with specific homotypic / heterotypic interactions -> [check it out!](https://colab.research.google.com/drive/1aJajo1IK66ApFSMwCCBumCZixlfshw7A?usp=sharing)
 * Added batch functionality in SequenceOptimizer to support batch calculation or batch prediction functionality.
