@@ -67,7 +67,7 @@ GOOSE requires the package ``sparrow``. Sparrow should be downloaded automatical
 pip install git+https://github.com/holehouse-lab/sparrow.git
 ```
 
-This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have **numpy or cython** installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. See step 1. of Installation for instructions on installing cython and numpy. If you keep having issues, please contact me or raise an issue and I'll get to it as soon as I can.
+This will install SPARROW. **Important note**: if your attempted install of SPARROW fails, it may be because you do not have **numpy or cython** installed. I made them both required for installation of GOOSE, so if you install GOOSE first, you should be ok. If you keep having issues, please contact me or raise an issue and I'll get to it as soon as I can.
 
 
 ## Documentation
