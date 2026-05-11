@@ -29,11 +29,14 @@ You can use GOOSE from Python. There is also much of the functionality in GOOSE 
 
 
 #### Available Demos
+* **Sequence and Variant Generation**: see /demos/sequence_and_variant_generation.ipynb
 * **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
 * **Custom properties**: see /demos/custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
 * **Design by interaction**: see /demos/generate_sequences_by_interaction.ipynb for designing sequences to interact with a target sequence using epsilon-based properties.
 * **Design by linear profiles**: see /demos/linear_profiles.ipynb for designing sequences to match linear profiles of properties like NCPR.
 * **Design by interaction matrices**: see /demos/epsilon_matrix_variants.ipynb for designing sequences to match or modify interaction matrices.
+
+Demos should take a few minutes to run; however, for some of the more difficult design objectives (linear profiles and interaction matrices) individual cells may take a few minutes. 
 
 ## Documentation
 
@@ -241,6 +244,53 @@ Development of GOOSE was led primarily by Ryan Emenecker. Numerous ideas were co
 **Cookiecutter**
 Project based on the 
 [Computational Molecular Science Python Cookiecutter](https://github.com/molssi/cookiecutter-cms) version 1.6.
+
+### Dependencies
+
+GOOSE depends on the following packages.
+
+**Runtime dependencies**
+
+These are declared in `pyproject.toml` under `project.dependencies` and are installed automatically when you install GOOSE with `pip`:
+
+* `scipy`
+* `matplotlib`
+* `numpy`
+* `torch`
+* `metapredict>=3.0.1`
+* `PredictDSSP>=1.3.1`
+* `protfasta`
+* `tqdm`
+* `alphaPredict>=1.3.0`
+* `getSequence>=2.2.1`
+* `sparrow` from GitHub: `git+https://github.com/idptools/sparrow.git`
+* `finches` from GitHub: `git+https://github.com/idptools/finches.git`
+
+**Build / installation dependencies**
+
+GOOSE includes a compiled extension for fast mutation generation (`goose.backend.fast_mutations`), so source installs also rely on the following build requirements:
+
+* `setuptools>=77`
+* `wheel`
+* `versioningit~=2.0`
+* `cython>=3.0`
+* `numpy>=2.0`
+
+**Optional test dependencies**
+
+If you want to run the test suite, install the test extra, which currently includes:
+
+* `pytest>=6.1.2`
+
+In practice, the two most important non-PyPI dependencies for GOOSE functionality are `sparrow` and `finches`, which are installed directly from their GitHub repositories during installation.
+
+### System Requirements
+* GOOSE has been tested thoroughly on MacOS and Linux (Ubuntu 22.04)
+* GOOSE has been tested in Python versions 3.9 through 3.13
+* GOOSE does not have any specific hardware requirements. 
+
+### Install time
+Installation of GOOSE should take a few minutes. However, if you do not have cached packages locally, if you have a slow internet  connection (less than 10mb/s) this may take longer.
 
 ### Copyright
 
