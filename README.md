@@ -1,7 +1,9 @@
 GOOSE : Generate disOrdered prOtiens Specifying propErties
 ==============================================================
+ 
 [//]: # (Badges)
 [![DOI](https://zenodo.org/badge/501008847.svg)](https://doi.org/10.5281/zenodo.20127101)
+<br>
 <br>
 ![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
 <br>
