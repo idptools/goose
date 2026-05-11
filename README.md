@@ -1,7 +1,10 @@
-![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
-# GOOSE : Generate disOrdered prOtiens Specifying propErties
-
+GOOSE : Generate disOrdered prOtiens Specifying propErties
+==============================================================
+[//]: # (Badges)
 [![DOI](https://zenodo.org/badge/501008847.svg)](https://doi.org/10.5281/zenodo.20127101)
+<br>
+![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
+<br>
 
 ## Last updated May 2026, latest version V0.2.5
 
