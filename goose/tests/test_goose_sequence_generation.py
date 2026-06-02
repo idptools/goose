@@ -15,6 +15,20 @@ import re
 from goose.data.defined_aa_classes import aa_classes
 
 
+def test_calculate_max_charge_theoretical_returns_fcr_bound():
+    """The theoretical max charge helper should return an FCR-scale value."""
+    short_length = parameters.calculate_max_charge_theoretical(25, 4.5)
+    long_length = parameters.calculate_max_charge_theoretical(250, 4.5)
+
+    assert 0 <= short_length <= 1
+    assert short_length == pytest.approx(long_length)
+
+
+def test_sequence_rejects_impossible_fcr_hydropathy_pair():
+    """Impossible FCR and hydropathy pairs should fail validation."""
+    with pytest.raises(goose_exceptions.GooseInputError):
+        create.sequence(100, FCR=0.6, hydropathy=4.5)
+
 
 class TestSequenceGeneration:
     """Test suite for the main sequence() function."""

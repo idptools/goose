@@ -494,6 +494,15 @@ class SequenceOptimizer:
                 for m in members:
                     self._aa_to_group_indices[m].append(gi)
 
+        # Detect whether per-AA bounds are "tight" (min==max for all AAs).
+        # When tight, standard constrained mutations cannot change composition
+        # so we must rely on composition-preserving swap mutations instead.
+        self._composition_fully_constrained: bool = False
+        if self._aa_count_bounds is not None:
+            self._composition_fully_constrained = all(
+                lo == hi for lo, hi in self._aa_count_bounds.values()
+            )
+
         # track property names
         self._property_names: List[str] = []
 
@@ -1400,6 +1409,45 @@ class SequenceOptimizer:
                 group_counts[gi] += 1
         return ''.join(seq_list)
 
+    def _swap_positions_mutation(self, sequence: str, n: int) -> str:
+        """Composition-preserving mutation: swap positions of different AAs.
+
+        Picks ``n`` random pairs of positions whose amino acids differ and
+        exchanges them.  All amino-acid counts remain unchanged, so this
+        is always legal regardless of how tight the ``aa_fraction_ranges``
+        bounds are.
+
+        Parameters
+        ----------
+        sequence : str
+            Input amino-acid sequence.
+        n : int
+            Number of position swaps to perform.
+
+        Returns
+        -------
+        str
+            Mutated sequence with the same composition.
+        """
+        if n <= 0:
+            return sequence
+        seq_list = list(sequence)
+        seq_len = len(seq_list)
+        if seq_len < 2:
+            return sequence
+
+        for _ in range(n):
+            # Pick a random first position.
+            i = random.randrange(seq_len)
+            # Find a second position with a different AA (up to 10 attempts
+            # to keep this O(1) average-case).
+            for _ in range(10):
+                j = random.randrange(seq_len)
+                if seq_list[i] != seq_list[j]:
+                    seq_list[i], seq_list[j] = seq_list[j], seq_list[i]
+                    break
+        return ''.join(seq_list)
+
     def _generate_candidates(self, sequence: str, iteration: int, stagnation_counter: int = 0) -> List[str]:
         """Generate candidate sequences with improved diversity.
         
@@ -1433,7 +1481,13 @@ class SequenceOptimizer:
         # Choose mutation primitives. When per-AA fraction ranges are set we
         # need pure-Python mutators that respect those bounds; otherwise we
         # use the much faster Cython implementations.
-        if self._aa_count_bounds is not None:
+        # When composition is fully constrained (all min==max), standard
+        # constrained mutations are no-ops since no AA can be added or
+        # removed. Use composition-preserving swap mutations instead.
+        if self._composition_fully_constrained:
+            point_mut = lambda seq: self._swap_positions_mutation(seq, 1)
+            multi_mut = self._swap_positions_mutation
+        elif self._aa_count_bounds is not None:
             point_mut = self._constrained_point_mutation
             multi_mut = self._constrained_multi_mutations
         else:

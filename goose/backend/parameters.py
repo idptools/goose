@@ -130,32 +130,65 @@ def calculate_max_charge_emperical(cur_hydropathy):
 
 def calculate_max_charge_theoretical(length, cur_hydropathy, net_charge=-1):
     '''
-    Function to determine the maximum FCR value depending
-    on the objective hydropathy of a sequence. Uses mathematical
-    bounds based on hydropathy scale and contributions 
-    from charged and uncharged amino acids. 
-
-    Parameters
-    ----------
-    length : Int
-        The length of the sequence to be generated
-    cur_hydropathy : Float
-        The objective hydropathy for the final sequence
-    net_charge : Float, optional
-        The objective net_charge for the final sequence. If not specified,
-        it will be set to -1.
-
-    Returns
-    -------
-        The maximum possible FCR that a sequence can have
-        for a specific hydropathy value. Uses the assumption
-        that we can use any residues, so non-charged residues
-        can have hydropathy as high as 9.0 and charged residues
-        can have hydropathy as high as 1.0.
+    Calculates the maximum theoretical fraction of charged residues (FCR) 
+    for a sequence of given length and target mean hydropathy on a shifted 
+    Kyte-Doolittle scale (K=0.6, R=0, D/E=1, I=9).
+    
+    Parameters:
+    -----------
+    length : int
+        Total number of amino acids in the sequence.
+    cur_hydropathy : float
+        The target mean hydropathy per residue.
+    net_charge : int, optional
+        The net charge (Basic - Acidic). If None, calculates the 
+        unrestricted absolute maximum FCR.
+        
+    Returns:
+    --------
+    float
+        The maximum possible Fraction of Charged Residues (FCR), bounded [0, 1].
     '''
-    hydro_from_NCPR = (net_charge*0.2)+0.8
-    # determine the number of charged residues 
-    return length * (9-cur_hydropathy) / (9.0 - hydro_from_NCPR)
+    if net_charge is None:
+        # Unrestricted: Maximize FCR by assuming all charged residues are D/E (h=1)
+        fcr_max = (9.0 - cur_hydropathy) / 8.0
+        
+        if cur_hydropathy < 1.0:
+            raise ValueError("Target hydropathy is below the unrestricted theoretical minimum of 1.0 (100% D/E).")
+        if cur_hydropathy > 9.0:
+            raise ValueError("Target hydropathy exceeds the maximum of 9.0 (100% Isoleucine).")
+            
+        return min(1.0, max(0.0, fcr_max))
+
+    else:
+        # Restricted by net charge (Q)
+        ncpr = net_charge / length
+        
+        # 1. Check if target hydropathy is too low.
+        # Minimum H occurs at FCR=1.0 using Arginine (h=0) for all basic residues.
+        # h_min = [N_acidic(1) + N_basic(0)] / L
+        h_min = 0.5 - (ncpr / 2.0)
+        
+        if cur_hydropathy < h_min:
+            raise ValueError(f"Hydropathy {cur_hydropathy} is below theoretical minimum ({h_min:.3f}) for NCPR = {ncpr:.3f}.")
+            
+        # 2. Check if target hydropathy is too high.
+        # Maximum H occurs when sequence is just Isoleucine + the minimum charged residues to satisfy Q.
+        if net_charge > 0:
+            # All basic residues are Lysine (h=0.6)
+            h_max = (ncpr * 0.6) + ((1.0 - ncpr) * 9.0)
+        else:
+            # All acidic residues are D/E (h=1.0)
+            h_max = (abs(ncpr) * 1.0) + ((1.0 - abs(ncpr)) * 9.0)
+            
+        if cur_hydropathy > h_max:
+            raise ValueError(f"Hydropathy {cur_hydropathy} is above theoretical maximum ({h_max:.3f}) for NCPR = {ncpr:.3f}.")
+
+        # 3. Calculate FCR assuming we balance D/E and Lysine to offset Isoleucine
+        fcr_max = (9.0 - cur_hydropathy - 0.2 * ncpr) / 8.2
+        
+        # Cap at 1.0 (meaning we must start utilizing Arginine to lower hydropathy further)
+        return min(1.0, max(abs(ncpr), fcr_max))
 
 def calculate_max_charge(length, cur_hydropathy, net_charge=-1, empirical=True):
     '''
