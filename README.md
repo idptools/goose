@@ -8,7 +8,7 @@ GOOSE : Generate disOrdered prOtiens Specifying propErties
 ![GOOSE_LOGO_FULL](https://github.com/idptools/goose/blob/main/images/goose_logo_3.png) 
 <br>
 
-## Last updated May 2026, latest version V0.2.5
+## Last updated July 2026, latest version V0.2.5
 
 ### What is GOOSE?
 GOOSE is a python package developed to make the generation of IDRs or IDR variants easy. 
@@ -34,6 +34,8 @@ You can use GOOSE from Python. There is also much of the functionality in GOOSE 
 * [Sequence generation and variant design](https://colab.research.google.com/drive/1U9B-TfoNEZbbjhPUG5lrMPS0JL0nDB3o?usp=sharing)
 * [Generate IDRs with specific homotypic or heterotypic interactions](https://colab.research.google.com/drive/1aJajo1IK66ApFSMwCCBumCZixlfshw7A?usp=sharing)
 
+## How to cite GOOSE
+GOOSE is now published! The link to the paper is [here](https://www.nature.com/articles/s41586-026-10849-1). Please cite the paper if you use GOOSE.
 
 #### Available Demos
 * **Sequence and Variant Generation**: see /demos/sequence_and_variant_generation.ipynb
@@ -158,9 +160,6 @@ If a clean install still fails after the above:
 
 
 
-## How to cite GOOSE
-
-For the time being, you can cite our [preprint](https://www.biorxiv.org/content/10.1101/2023.10.29.564547v2). It would also be helpful to link the GitHub page in your methods section so readers of your paper can understand how you generated the sequences you used.  
 
 ## Changes
 
