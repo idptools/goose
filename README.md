@@ -17,16 +17,21 @@ GOOSE is a python package developed to make the generation of IDRs or IDR varian
 
 The main functionalities of GOOSE are:
 
-**1.** Generate synthetic IDRs where you can specify length and...
- • Simultaneously specify *average hydrophobicity*, *fraction of charged residues (FCR)*, *net charge per residue (NCPR)*, and *kappa* (quantifies opposite charge distribution)  
- • Fractions of amino acids (multiple fractions simultaneously)  
- • End-to-end distance (Re) or radius of gyration (Rg)  
+1. Generate synthetic IDRs where you can specify length and...
+   * Simultaneously specify physical parameters:
+     * *Average hydrophobicity*
+     * *Fraction of charged residues (FCR)*
+     * *Net charge per residue (NCPR)*
+     * *Kappa* (quantifies opposite charge distribution)
+   * Fractions of amino acids (multiple fractions simultaneously)  
+   * End-to-end distance (Re) or radius of gyration (Rg)  
 
- **2.** Generate sequences by *sequence optimization*. There are many predefined properties you can optimzie towards. In addition, you can **define your own functions to design sequences**!
+2. Generate sequences by *sequence optimization*. There are many predefined properties you can optimize towards. In addition, you can **define your own functions to design sequences**!
 
-**3.** Generate IDR variants. There are now 16 different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
+3. Generate IDR variants. There are now 16 different kinds of sequence variants in GOOSE, and they are intended to change your IDR of interest in ways that let you test various hypotheses.  
 
-**4.** Analyze sequences. Although this is possible in GOOSE, I recommend using [SPARROW](https://github.com/idptools/sparrow) for sequence analysis. 
+4. Analyze sequences. Although this is possible in GOOSE, I recommend using [SPARROW](https://github.com/idptools/sparrow) for sequence analysis.
+
 
 ## How to use GOOSE
 
@@ -37,7 +42,7 @@ You can use GOOSE from Python. There is also much of the functionality in GOOSE 
 ## How to cite GOOSE
 GOOSE is now published! The link to the paper is [here](https://www.nature.com/articles/s41586-026-10849-1). Please cite the paper if you use GOOSE.
 
-#### Available Demos
+## Available Demos
 * **Sequence and Variant Generation**: see /demos/sequence_and_variant_generation.ipynb
 * **Basic optimization**: see /demos/sequence_optimization.ipynb for basic usage. 
 * **Custom properties**: see /demos/custom_optimizer_peroperties.ipynb for creating and implementing custom user-defined properties  
