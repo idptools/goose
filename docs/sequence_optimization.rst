@@ -356,6 +356,61 @@ Behavior notes:
 - Constraints are checked as integer counts derived from ``target_length``.
 - Scalar targets are treated as ``(value, value)`` before count conversion. If ``value * target_length`` is not an integer, the optimizer uses the tightest feasible count window around that target.
 
+Holding Specific Residues Constant
+-----------------------------------
+
+Use ``fixed_positions`` to pin individual sequence positions so they never change, while the rest of the sequence is optimized toward your targets. This is useful for preserving a binding motif, a phosphosite, catalytic residues, or fixed termini.
+
+There are two ways to specify it.
+
+**1. As a** ``{index: residue}`` **mapping.** Self-contained, so no starting sequence is needed:
+
+.. code-block:: python
+
+    optimizer = goose.SequenceOptimizer(target_length=100, verbose=True)
+    optimizer.fixed_positions = {0: 'M', 45: 'W', 46: 'W', -1: 'K'}
+
+    # or, more typically, at construction:
+    optimizer = goose.SequenceOptimizer(
+        target_length=100,
+        fixed_positions={0: 'M', 45: 'W', 46: 'W', -1: 'K'},
+        verbose=True,
+    )
+    optimizer.add_property(goose.FCR, target_value=0.3, tolerance=0.01)
+    optimized_sequence = optimizer.run()
+    # optimized_sequence[0] == 'M', [45] == 'W', [46] == 'W', [-1] == 'K'
+
+**2. As an iterable of indices**, taking the residues from your starting sequence. This is the natural form for "keep these positions of my sequence, change everything else":
+
+.. code-block:: python
+
+    starting_sequence = "MGSWAEFKQRLAAIKTRLQALGSQAGKKDAE" * 3
+
+    optimizer = goose.SequenceOptimizer(
+        target_length=len(starting_sequence),
+        fixed_positions=[0, 3, 17, 42],     # or range(10, 21) for a contiguous motif
+        verbose=True,
+    )
+    optimizer.set_initial_sequence(starting_sequence)
+    optimizer.add_property(goose.Hydrophobicity, target_value=3.5, tolerance=0.05)
+    optimized_sequence = optimizer.run()
+
+    # These positions still hold their original residues:
+    assert all(optimized_sequence[i] == starting_sequence[i] for i in [0, 3, 17, 42])
+
+Behavior notes:
+
+- Indices are 0-based and may be negative, counted from the end (``-1`` is the last residue).
+- At least one position must remain free.
+- The constraint is hard and applies to every candidate-producing path: initial seed generation, point and multi mutations, shuffling, composition-preserving swaps, the normalization reference sequence, and the emergency-diversity seeds used to escape stagnation. The optimizer explores only the free positions, so the returned sequence is guaranteed to carry the fixed residues.
+- The mapping form takes precedence over a starting sequence. If you supply both and they disagree at a pinned index, the mapping wins and the starting sequence is stamped to match (logged as a warning when ``verbose=True``).
+- The iterable form requires ``set_initial_sequence()``; calling ``run()`` without one raises a ``ValueError``.
+- ``fixed_positions`` combines with ``aa_fraction_ranges``. The fixed residues count toward the composition bounds, and the two constraints are checked for joint feasibility when the optimizer is constructed, so conflicts raise immediately rather than failing to converge.
+- Enabling ``fixed_positions`` routes mutation through pure-Python primitives instead of the Cython ones. Those honor the ``seed`` argument (the Cython path uses C ``rand()``, which does not), so runs become reproducible but somewhat slower.
+- ``get_fixed_positions()`` returns the resolved ``{index: residue}`` map, or ``None`` if the constraint is not in use.
+
+Because fixed positions reduce the search space, very tight constraints can make some targets unreachable. If a target that is normally easy stops converging, try pinning fewer positions or relaxing the tolerance.
+
 Multiple Properties, Weights, and Tolerances
 --------------------------------------------
 

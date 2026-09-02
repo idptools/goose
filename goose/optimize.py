@@ -8,7 +8,7 @@ import logging
 import math
 import random
 from collections import deque
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 import sparrow
 from tqdm.auto import tqdm
@@ -182,6 +182,9 @@ class SequenceOptimizer:
         # Residues not listed in a per-AA entry are implicitly bounded
         # ``(0.0, 1.0)``. Shuffling already preserves composition so it is
         # unaffected.
+        fixed_positions: Optional[Union[Dict[int, str], Iterable[int]]] = None,
+        # Optional positions that must never change during optimization.
+        # See docs for more info with respect to indexing, etc. 0-indexed.
         debugging: bool = False,  # Enable extra logging for debugging
         update_interval: int = 1  # Update progress bar every N iterations
     ):
@@ -324,6 +327,39 @@ class SequenceOptimizer:
             ``(value, value)`` before count conversion, so when
             ``value * target_length`` is non-integral they become the
             tightest feasible count window around that target.
+        fixed_positions : dict or iterable of int, optional
+            Sequence positions that must be held constant for the entire
+            run. Two forms are accepted:
+
+            * ``{index: residue}`` -- e.g. ``{0: 'M', 10: 'W', -1: 'K'}``.
+              Fully self-contained: the residues are specified explicitly so
+              no starting sequence is required. If a starting sequence *is*
+              provided and disagrees at one of these indices, the mapping
+              wins and the starting sequence is stamped accordingly.
+            * an iterable of indices -- e.g. ``[0, 10, 24]`` or
+              ``range(10, 21)``. The residues are taken from the sequence
+              passed to :meth:`set_initial_sequence`, which therefore
+              becomes required.
+
+            Indices are 0-based and may be negative (counted from the end,
+            so ``-1`` is the last residue). At least one position must
+            remain free.
+
+            Every candidate-producing path honors these positions: initial
+            seed generation, point and multi mutations, shuffling,
+            composition-preserving swaps, the normalization reference
+            sequence, and emergency diversity injection. The optimizer
+            therefore explores only the free positions, and the returned
+            sequence is guaranteed to carry the fixed residues.
+
+            Combines with ``aa_fraction_ranges``: the fixed residues count
+            toward the configured composition bounds, and the combination is
+            checked for feasibility up front.
+
+            Note that enabling ``fixed_positions`` routes mutation through
+            pure-Python primitives rather than the Cython ones. Those honor
+            ``seed`` (the Cython path uses C ``rand()``, which does not), so
+            runs are more reproducible but somewhat slower.
         debugging : bool
             Enable extra logging for debugging
         update_interval : int
@@ -503,6 +539,23 @@ class SequenceOptimizer:
                 lo == hi for lo, hi in self._aa_count_bounds.values()
             )
 
+        # Fixed-position constraints. ``_fixed_map`` maps a 0-based index to
+        # the residue that must occupy it; ``_free_indices`` is the ordered
+        # list of positions mutation is allowed to touch. When the user gives
+        # bare indices instead of a mapping we cannot resolve the residues
+        # until a starting sequence exists, so resolution is deferred to
+        # ``set_initial_sequence()`` / ``run()`` and flagged by
+        # ``_fixed_needs_sequence``.
+        self._fixed_positions_spec: Optional[Union[Dict[int, str], Iterable[int]]] = None
+        self._fixed_map: Optional[Dict[int, str]] = None
+        self._fixed_indices: frozenset = frozenset()
+        self._free_indices: List[int] = []
+        self._fixed_needs_sequence: bool = False
+        # Assigned through the property setter below, which parses and
+        # validates the spec (and does the same for post-construction
+        # assignment, so `optimizer.fixed_positions = {...}` works too).
+        self.fixed_positions = fixed_positions
+
         # track property names
         self._property_names: List[str] = []
 
@@ -556,10 +609,40 @@ class SequenceOptimizer:
         rather than the starting sequence itself, which avoids pathological
         normalization when the starting sequence has unbalanced property
         errors.
+
+        When ``fixed_positions`` was given as bare indices, the residues at
+        those indices are read from this sequence. When it was given as a
+        ``{index: residue}`` mapping, the mapping takes precedence and this
+        sequence is stamped to match it.
         """
         if len(sequence) != self.target_length:
             raise ValueError(f"Initial sequence length {len(sequence)} does not match target length {self.target_length}")
-        
+
+        # An explicit mapping takes precedence, so stamp it in first. This
+        # does not touch the fixed map itself, and it has to happen before
+        # the composition check below so that check sees the sequence as it
+        # will actually be used.
+        if self._fixed_map and not self._fixed_needs_sequence:
+            conflicts = {
+                i: (sequence[i], aa)
+                for i, aa in self._fixed_map.items()
+                if sequence[i] != aa
+            }
+            if conflicts:
+                stamped = self._apply_fixed(sequence)
+                if self.verbose:
+                    detail = ', '.join(
+                        f"{i}: {have!r}->{want!r}"
+                        for i, (have, want) in sorted(conflicts.items())[:5]
+                    )
+                    more = '' if len(conflicts) <= 5 else f" (+{len(conflicts) - 5} more)"
+                    self.logger.warning(
+                        f"Starting sequence disagreed with fixed_positions at "
+                        f"{len(conflicts)} position(s); applying fixed_positions "
+                        f"[{detail}{more}]."
+                    )
+                sequence = stamped
+
         # If per-AA fraction ranges are configured, the starting sequence
         # must satisfy them -- otherwise constrained mutation would be
         # unable to repair it without first violating bounds.
@@ -583,9 +666,15 @@ class SequenceOptimizer:
                         f"Starting sequence violates aa_fraction_ranges group {members}: "
                         f"count={gc} (fraction={frac:.3f}), required count in [{gmin}, {gmax}]."
                     )
-        
+
+        # Resolve the index-only form last, from the now fully validated
+        # sequence. Doing it here means a rejected sequence cannot leave the
+        # fixed map resolved against residues we never accepted.
+        if self._fixed_needs_sequence:
+            self._set_fixed_map({i: sequence[i] for i in sorted(self._fixed_indices)})
+
         self.starting_sequence = sequence
-        
+
         if self.debugging:
             self.logger.info(f"Initial sequence set (length={len(sequence)}). "
                            f"Normalization will be computed from diverse references at run time.")
@@ -1146,8 +1235,355 @@ class SequenceOptimizer:
         )[0]
 
     # ------------------------------------------------------------------
+    # Fixed-position constraints
+    # ------------------------------------------------------------------
+
+    @property
+    def fixed_positions(self) -> Optional[Union[Dict[int, str], Iterable[int]]]:
+        """The configured fixed-position specification, or None.
+
+        Assigning re-parses and re-validates immediately, so setting this
+        after construction behaves exactly like passing it to ``__init__``.
+        Use :meth:`get_fixed_positions` to read back the resolved
+        ``{index: residue}`` map.
+        """
+        return self._fixed_positions_spec
+
+    @fixed_positions.setter
+    def fixed_positions(
+        self, value: Optional[Union[Dict[int, str], Iterable[int]]]
+    ) -> None:
+        # Snapshot so a rejected assignment leaves the optimizer exactly as
+        # it was. Without this, catching the ValueError would leave the spec
+        # pointing at an invalid value with no constraint actually enforced.
+        previous = (
+            self._fixed_positions_spec,
+            self._fixed_map,
+            self._fixed_indices,
+            self._free_indices,
+            self._fixed_needs_sequence,
+            self.starting_sequence,
+        )
+        self._fixed_positions_spec = value
+        self._fixed_map = None
+        self._fixed_indices = frozenset()
+        self._free_indices = []
+        self._fixed_needs_sequence = False
+        if value is None:
+            return
+        try:
+            self._parse_fixed_positions(value)
+            if self.starting_sequence is not None:
+                if self._fixed_needs_sequence:
+                    # Resolve the index-only form right away rather than
+                    # waiting for run().
+                    self._resolve_fixed_positions()
+                else:
+                    # Re-run the starting-sequence path so an explicit mapping
+                    # is stamped in now and the result is re-checked against
+                    # aa_fraction_ranges, rather than silently breaking those
+                    # bounds when run() stamps it later.
+                    self.set_initial_sequence(self.starting_sequence)
+        except Exception:
+            (
+                self._fixed_positions_spec,
+                self._fixed_map,
+                self._fixed_indices,
+                self._free_indices,
+                self._fixed_needs_sequence,
+                self.starting_sequence,
+            ) = previous
+            raise
+
+    def _normalize_fixed_index(self, index: Any) -> int:
+        """Validate one fixed-position index and resolve negatives.
+
+        Negative indices are Python-style (``-1`` is the last residue).
+        """
+        if isinstance(index, bool) or not isinstance(index, (int, np.integer)):
+            raise ValueError(
+                f"fixed_positions index {index!r} must be an integer, "
+                f"got {type(index).__name__}."
+            )
+        idx = int(index)
+        if idx < 0:
+            idx += self.target_length
+        if not (0 <= idx < self.target_length):
+            raise ValueError(
+                f"fixed_positions index {index!r} is out of range for a "
+                f"sequence of length {self.target_length} "
+                f"(valid: 0..{self.target_length - 1}, or -1..-{self.target_length})."
+            )
+        return idx
+
+    def _parse_fixed_positions(
+        self, fixed_positions: Union[Dict[int, str], Iterable[int]]
+    ) -> None:
+        """Parse ``fixed_positions`` into internal state.
+
+        A ``{index: residue}`` mapping is fully resolvable here. A bare
+        iterable of indices needs a starting sequence to supply the residues,
+        so it only records the index set and sets
+        ``_fixed_needs_sequence``.
+        """
+        if isinstance(fixed_positions, dict):
+            resolved: Dict[int, str] = {}
+            for raw_index, residue in fixed_positions.items():
+                idx = self._normalize_fixed_index(raw_index)
+                if not isinstance(residue, str) or len(residue) != 1:
+                    raise ValueError(
+                        f"fixed_positions[{raw_index!r}]={residue!r} must be a "
+                        f"single-letter amino acid string."
+                    )
+                aa = residue.upper()
+                if aa not in self.aa_list:
+                    raise ValueError(
+                        f"fixed_positions[{raw_index!r}]={residue!r} is not a valid "
+                        f"amino acid; must be one of {sorted(self.aa_list)}."
+                    )
+                if idx in resolved and resolved[idx] != aa:
+                    raise ValueError(
+                        f"fixed_positions specifies conflicting residues for "
+                        f"position {idx} ({resolved[idx]!r} and {aa!r}); this "
+                        f"usually means a negative index collided with a "
+                        f"positive one."
+                    )
+                resolved[idx] = aa
+            if not resolved:
+                raise ValueError("fixed_positions is empty; pass None to disable it.")
+            self._fixed_needs_sequence = False
+            self._set_fixed_map(resolved)
+            return
+
+        # Iterable-of-indices form.
+        try:
+            raw_indices = list(fixed_positions)
+        except TypeError:
+            raise ValueError(
+                f"fixed_positions must be a dict of {{index: residue}} or an "
+                f"iterable of integer indices, got {type(fixed_positions).__name__}."
+            ) from None
+        if not raw_indices:
+            raise ValueError("fixed_positions is empty; pass None to disable it.")
+        if any(isinstance(i, str) for i in raw_indices):
+            raise ValueError(
+                "fixed_positions given as an iterable must contain integer "
+                "indices. To pin specific residues without a starting "
+                "sequence, use the mapping form, e.g. {0: 'M', 10: 'W'}."
+            )
+        indices = {self._normalize_fixed_index(i) for i in raw_indices}
+        if len(indices) >= self.target_length:
+            raise ValueError(
+                f"fixed_positions pins all {self.target_length} positions; at "
+                f"least one position must remain free to optimize."
+            )
+        self._fixed_indices = frozenset(indices)
+        self._free_indices = [
+            i for i in range(self.target_length) if i not in self._fixed_indices
+        ]
+        self._fixed_needs_sequence = True
+
+    def _set_fixed_map(self, fixed_map: Dict[int, str]) -> None:
+        """Install a resolved index->residue map and derive dependent state."""
+        if len(fixed_map) >= self.target_length:
+            raise ValueError(
+                f"fixed_positions pins all {self.target_length} positions; at "
+                f"least one position must remain free to optimize."
+            )
+        # The mapping form validates residues while parsing, but the
+        # index-only form reads them straight out of the starting sequence,
+        # which may hold non-standard or lowercase characters. Reject those
+        # here with a clear message rather than letting them propagate into
+        # generated sequences (or surface as a bare KeyError downstream).
+        valid = set(self.aa_list)
+        invalid = {i: aa for i, aa in fixed_map.items() if aa not in valid}
+        if invalid:
+            detail = ', '.join(f"{i}: {aa!r}" for i, aa in sorted(invalid.items()))
+            raise ValueError(
+                f"fixed_positions resolved to invalid amino acid(s) at "
+                f"[{detail}]. Fixed positions must hold standard uppercase "
+                f"amino acids ({''.join(sorted(valid))}); check the residues "
+                f"at those indices in the starting sequence."
+            )
+        # Build and validate into locals, committing only once everything
+        # passes, so a rejected map cannot leave the optimizer half-updated.
+        new_map = dict(fixed_map)
+        new_indices = frozenset(new_map)
+        new_free = [i for i in range(self.target_length) if i not in new_indices]
+        self._validate_fixed_against_aa_bounds(new_map, new_free)
+        self._fixed_map = new_map
+        self._fixed_indices = new_indices
+        self._free_indices = new_free
+
+    def _resolve_fixed_positions(self) -> None:
+        """Resolve deferred (index-only) fixed positions from the starting sequence.
+
+        Idempotent, and safe to call when ``fixed_positions`` was never set.
+        Re-resolves on every call for the index-only form so that a second
+        ``set_initial_sequence()`` picks up the new residues.
+        """
+        if self.fixed_positions is None or not self._fixed_needs_sequence:
+            return
+        if self.starting_sequence is None:
+            raise ValueError(
+                "fixed_positions was given as an iterable of indices, which "
+                "takes its residues from the starting sequence, but no "
+                "starting sequence was set. Either call "
+                "set_initial_sequence(...) before run(), or specify residues "
+                "explicitly with the mapping form, e.g. "
+                "fixed_positions={0: 'M', 10: 'W'}."
+            )
+        self._set_fixed_map(
+            {i: self.starting_sequence[i] for i in sorted(self._fixed_indices)}
+        )
+
+    def _validate_fixed_against_aa_bounds(
+        self, fixed_map: Dict[int, str], free_indices: List[int]
+    ) -> None:
+        """Check fixed residues against ``aa_fraction_ranges``, if configured.
+
+        Fixed residues occupy real sequence positions, so they count toward
+        every composition bound. This catches the cases where the two
+        constraints cannot be satisfied simultaneously, up front rather than
+        as a silent failure to converge.
+
+        Takes the candidate map/free list as arguments rather than reading
+        ``self`` so it can be called before those are committed.
+        """
+        if self._aa_count_bounds is None or fixed_map is None:
+            return
+        per_aa = self._aa_count_bounds
+        fixed_counts: Dict[str, int] = {aa: 0 for aa in self.aa_list}
+        for aa in fixed_map.values():
+            fixed_counts[aa] += 1
+        n_free = len(free_indices)
+
+        # A fixed residue can push an AA past its maximum on its own.
+        for aa, (lo, hi) in per_aa.items():
+            if fixed_counts[aa] > hi:
+                raise ValueError(
+                    f"fixed_positions conflicts with aa_fraction_ranges: "
+                    f"{fixed_counts[aa]} fixed position(s) hold {aa!r} but its "
+                    f"maximum allowed count is {hi}."
+                )
+
+        # The free positions must still be able to satisfy every AA minimum.
+        required_extra = sum(
+            max(0, lo - fixed_counts[aa]) for aa, (lo, _hi) in per_aa.items()
+        )
+        if required_extra > n_free:
+            raise ValueError(
+                f"fixed_positions conflicts with aa_fraction_ranges: the "
+                f"minimum counts still unmet by the fixed residues require "
+                f"{required_extra} free position(s), but only {n_free} "
+                f"position(s) are free."
+            )
+
+        for members, gmin, gmax in (self._aa_group_bounds or []):
+            group_fixed = sum(fixed_counts[a] for a in members)
+            if group_fixed > gmax:
+                raise ValueError(
+                    f"fixed_positions conflicts with aa_fraction_ranges group "
+                    f"{members}: {group_fixed} fixed position(s) hold members of "
+                    f"this group but its maximum allowed count is {gmax}."
+                )
+            headroom = sum(max(0, per_aa[a][1] - fixed_counts[a]) for a in members)
+            max_reachable = group_fixed + min(n_free, headroom)
+            if max_reachable < gmin:
+                raise ValueError(
+                    f"fixed_positions conflicts with aa_fraction_ranges group "
+                    f"{members}: the group minimum count is {gmin} but at most "
+                    f"{max_reachable} can be reached given the fixed residues "
+                    f"and {n_free} free position(s)."
+                )
+
+    def _apply_fixed(self, sequence: str) -> str:
+        """Stamp the fixed residues onto an externally generated sequence.
+
+        Used for sequences produced by generators that are unaware of the
+        constraint (diverse initial seeds, normalization references,
+        emergency-injection seeds).
+
+        Do not use this to stamp a *newly generated* sequence when
+        ``aa_fraction_ranges`` is also set -- stamping would silently break
+        the composition bounds. Those paths build fixed-aware sequences
+        natively via ``_build_constrained_random_sequence`` instead. Calling
+        it on ``starting_sequence`` is always safe: that sequence is already
+        reconciled with the fixed map by ``set_initial_sequence``, so the
+        call is a no-op there.
+        """
+        if not self._fixed_map:
+            return sequence
+        seq_list = list(sequence)
+        for idx, aa in self._fixed_map.items():
+            seq_list[idx] = aa
+        return ''.join(seq_list)
+
+    def get_fixed_positions(self) -> Optional[Dict[int, str]]:
+        """Return the resolved ``{index: residue}`` map, or None if unset.
+
+        Returns None when ``fixed_positions`` was not configured. When it was
+        given as bare indices, the map is only available after a starting
+        sequence has been set.
+        """
+        if self._fixed_map is None:
+            return None
+        return dict(self._fixed_map)
+
+    def _fixed_point_mutation(self, sequence: str) -> str:
+        """Single point mutation restricted to non-fixed positions."""
+        return self._fixed_multi_mutations(sequence, 1)
+
+    def _fixed_multi_mutations(self, sequence: str, n: int) -> str:
+        """Apply ``n`` point mutations, never touching a fixed position.
+
+        Mirrors the semantics of the Cython mutators (distinct positions,
+        each mutation actually changes the residue) but samples only from
+        ``_free_indices``. Uses Python's ``random`` so it honors ``seed``.
+        """
+        free = self._free_indices
+        if n <= 0 or not free:
+            return sequence
+        n = min(n, len(free))
+        seq_list = list(sequence)
+        for pos in random.sample(free, n):
+            old_aa = seq_list[pos]
+            choices = self.aa_list_without.get(old_aa, self.aa_list)
+            if choices:
+                seq_list[pos] = random.choice(choices)
+        return ''.join(seq_list)
+
+    def _fixed_aware_shuffle(self, sequence: str) -> str:
+        """Shuffle only the free positions, leaving fixed residues in place.
+
+        Composition-preserving over the free positions, mirroring
+        ``cython_shuffle_sequence``: a global shuffle with probability
+        ``global_shuffle_probability``, otherwise a windowed shuffle. The
+        window is taken in free-position space so it stays local among the
+        residues that are actually allowed to move.
+        """
+        free = self._free_indices
+        if len(free) < 2:
+            return sequence
+        seq_list = list(sequence)
+        free_chars = [seq_list[i] for i in free]
+        n_free = len(free_chars)
+        window = self.shuffle_window_size
+        if random.random() < self.global_shuffle_probability or n_free <= window:
+            random.shuffle(free_chars)
+        else:
+            start = random.randrange(n_free - window + 1)
+            block = free_chars[start:start + window]
+            random.shuffle(block)
+            free_chars[start:start + window] = block
+        for pos, char in zip(free, free_chars):
+            seq_list[pos] = char
+        return ''.join(seq_list)
+
+    # ------------------------------------------------------------------
     # AA fraction-range constraints
     # ------------------------------------------------------------------
+
     def _compute_aa_count_bounds(
         self,
         aa_fraction_ranges: Dict[Any, Union[float, Tuple[float, float], List[float]]],
@@ -1270,11 +1706,27 @@ class SequenceOptimizer:
     def _build_constrained_random_sequence(self, target_length: int) -> str:
         """Build a random sequence whose AA counts respect both per-AA and
         group bounds in ``_aa_count_bounds`` / ``_aa_group_bounds``.
+
+        When ``fixed_positions`` is also configured, the fixed residues are
+        seeded into the counts (so they count toward the bounds) and placed
+        at their required indices; only the free positions receive the
+        randomly drawn remainder.
         """
         per_aa = self._aa_count_bounds
         groups = self._aa_group_bounds or []
         aa_to_groups = self._aa_to_group_indices
-        counts = {aa: per_aa[aa][0] for aa in self.aa_list}
+        fixed_map = self._fixed_map
+        fixed_counts: Optional[Dict[str, int]] = None
+        if fixed_map:
+            fixed_counts = {aa: 0 for aa in self.aa_list}
+            for aa in fixed_map.values():
+                fixed_counts[aa] += 1
+            # Start each AA at the larger of its floor and what the fixed
+            # positions already commit to. Feasibility of this was checked in
+            # _validate_fixed_against_aa_bounds.
+            counts = {aa: max(per_aa[aa][0], fixed_counts[aa]) for aa in self.aa_list}
+        else:
+            counts = {aa: per_aa[aa][0] for aa in self.aa_list}
         group_counts = [sum(counts[a] for a in members) for members, _gmin, _gmax in groups]
         remainder = target_length - sum(counts.values())
         aa_pool = list(self.aa_list)
@@ -1315,6 +1767,31 @@ class SequenceOptimizer:
             for gi in aa_to_groups[chosen]:
                 group_counts[gi] += 1
             remainder -= 1
+
+        if fixed_map:
+            # Only the surplus over what the fixed positions already provide
+            # gets scattered across the free positions.
+            free_chars: List[str] = []
+            for aa, c in counts.items():
+                extra = c - fixed_counts[aa]
+                if extra > 0:
+                    free_chars.extend([aa] * extra)
+            if len(free_chars) != len(self._free_indices):
+                raise RuntimeError(
+                    f"Failed to build a constrained sequence honoring "
+                    f"fixed_positions: produced {len(free_chars)} residue(s) for "
+                    f"{len(self._free_indices)} free position(s). Check that "
+                    f"aa_fraction_ranges and fixed_positions are jointly "
+                    f"satisfiable."
+                )
+            random.shuffle(free_chars)
+            seq_list: List[str] = [''] * target_length
+            for idx, aa in fixed_map.items():
+                seq_list[idx] = aa
+            for pos, char in zip(self._free_indices, free_chars):
+                seq_list[pos] = char
+            return ''.join(seq_list)
+
         chars: List[str] = []
         for aa, c in counts.items():
             if c:
@@ -1334,6 +1811,11 @@ class SequenceOptimizer:
         mutation is O(20 * G) where G is the number of group constraints.
         If at any point no legal swap exists, returns the partially-mutated
         sequence.
+
+        When ``fixed_positions`` is configured, fixed residues still count
+        toward the composition bounds (they are part of the sequence) but
+        are excluded from the per-AA position lists, so they are never
+        selected as a mutation site.
         """
         if n <= 0:
             return sequence
@@ -1344,9 +1826,15 @@ class SequenceOptimizer:
         seq_list = list(sequence)
         counts: Dict[str, int] = {aa: 0 for aa in aa_list}
         aa_positions: Dict[str, List[int]] = {aa: [] for aa in aa_list}
+        # counts covers every position; aa_positions only the mutable ones.
         for i, c in enumerate(seq_list):
             counts[c] = counts.get(c, 0) + 1
-            aa_positions.setdefault(c, []).append(i)
+        if self._fixed_map:
+            for i in self._free_indices:
+                aa_positions.setdefault(seq_list[i], []).append(i)
+        else:
+            for i, c in enumerate(seq_list):
+                aa_positions.setdefault(c, []).append(i)
         group_counts = [sum(counts[a] for a in members) for members, _gmin, _gmax in groups]
 
         def _pair_legal(old_aa: str, new_aa: str) -> bool:
@@ -1417,6 +1905,9 @@ class SequenceOptimizer:
         is always legal regardless of how tight the ``aa_fraction_ranges``
         bounds are.
 
+        When ``fixed_positions`` is configured, both ends of every swap are
+        drawn from the free positions, so fixed residues never move.
+
         Parameters
         ----------
         sequence : str
@@ -1436,13 +1927,19 @@ class SequenceOptimizer:
         if seq_len < 2:
             return sequence
 
+        # Draw swap endpoints from the mutable positions only.
+        swappable = self._free_indices if self._fixed_map else None
+        n_swappable = len(swappable) if swappable is not None else seq_len
+        if n_swappable < 2:
+            return sequence
+
         for _ in range(n):
             # Pick a random first position.
-            i = random.randrange(seq_len)
+            i = swappable[random.randrange(n_swappable)] if swappable is not None else random.randrange(seq_len)
             # Find a second position with a different AA (up to 10 attempts
             # to keep this O(1) average-case).
             for _ in range(10):
-                j = random.randrange(seq_len)
+                j = swappable[random.randrange(n_swappable)] if swappable is not None else random.randrange(seq_len)
                 if seq_list[i] != seq_list[j]:
                     seq_list[i], seq_list[j] = seq_list[j], seq_list[i]
                     break
@@ -1456,8 +1953,15 @@ class SequenceOptimizer:
         as stagnation deepens. This widens the search radius without changing
         acceptance criteria, so it cannot degrade convergence.
         """
+        # Guard against mutating while fixed positions are still unresolved
+        # (index-only form, no starting sequence yet). run() resolves before
+        # it gets here, but a direct call would otherwise silently produce
+        # candidates that violate the constraint.
+        if self._fixed_needs_sequence and self._fixed_map is None:
+            self._resolve_fixed_positions()
+
         candidates = []
-        
+
         # Always include current sequence
         candidates.append(sequence)
         
@@ -1478,18 +1982,24 @@ class SequenceOptimizer:
         
         seq_length = len(sequence)
 
-        # Choose mutation primitives. When per-AA fraction ranges are set we
-        # need pure-Python mutators that respect those bounds; otherwise we
-        # use the much faster Cython implementations.
+        # Choose mutation primitives. When per-AA fraction ranges or fixed
+        # positions are set we need pure-Python mutators that respect those
+        # constraints; otherwise we use the much faster Cython
+        # implementations.
         # When composition is fully constrained (all min==max), standard
         # constrained mutations are no-ops since no AA can be added or
         # removed. Use composition-preserving swap mutations instead.
+        # The constrained mutators already exclude fixed positions
+        # internally, so they cover the combined case too.
         if self._composition_fully_constrained:
             point_mut = lambda seq: self._swap_positions_mutation(seq, 1)
             multi_mut = self._swap_positions_mutation
         elif self._aa_count_bounds is not None:
             point_mut = self._constrained_point_mutation
             multi_mut = self._constrained_multi_mutations
+        elif self._fixed_map:
+            point_mut = self._fixed_point_mutation
+            multi_mut = self._fixed_multi_mutations
         else:
             point_mut = make_point_mutation
             multi_mut = make_multi_mutations
@@ -1529,17 +2039,22 @@ class SequenceOptimizer:
             # Single function call instead of loop over make_point_mutation
             candidates.append(multi_mut(sequence, num_muts))
 
-        # Add shuffled variants if enabled (already efficient)
+        # Add shuffled variants if enabled (already efficient). With fixed
+        # positions we shuffle only the free positions so the pinned
+        # residues stay put; otherwise use the Cython shuffler.
         if self.enable_shuffling and iteration % self.shuffle_frequency == 0:
             for _ in range(shuffle_count):
-                candidates.append(
-                    shuffle_sequence(
-                    sequence, 
-                    window_size=self.shuffle_window_size,
-                    global_shuffle_probability=self.global_shuffle_probability
+                if self._fixed_map:
+                    candidates.append(self._fixed_aware_shuffle(sequence))
+                else:
+                    candidates.append(
+                        shuffle_sequence(
+                        sequence,
+                        window_size=self.shuffle_window_size,
+                        global_shuffle_probability=self.global_shuffle_probability
+                    )
                 )
-            )
-        
+
         return candidates[:self.num_candidates]
     
     def _compute_convergence_state(self) -> Tuple[bool, float]:
@@ -1868,7 +2383,12 @@ class SequenceOptimizer:
                 attempts += 1
         else:
             diverse_sequences = build_diverse_initial_sequences(self.target_length, num_sequences=10)
-        
+            if self._fixed_map:
+                # Never let the escape hatch discard the fixed residues.
+                diverse_sequences = list(dict.fromkeys(
+                    self._apply_fixed(seq) for seq in diverse_sequences
+                ))
+
         best_emergency_weighted_error = self.best_error
         best_emergency_raw_error = current_best_raw_error
         best_emergency_seq = self.best_sequence
@@ -2026,7 +2546,12 @@ class SequenceOptimizer:
         """
         if not self.properties:
             raise ValueError("No properties defined for optimization")
-        
+
+        # Resolve any deferred fixed positions (index-only form) now that the
+        # starting sequence, if any, is known. No-op when fixed_positions is
+        # unset or already resolved.
+        self._resolve_fixed_positions()
+
         # Initialize with best of multiple diverse sequences
         if self.starting_sequence is None:
             if self._aa_count_bounds is not None:
@@ -2054,8 +2579,20 @@ class SequenceOptimizer:
                     )
             else:
                 initial_candidates = build_diverse_initial_sequences(self.target_length, num_sequences=self.num_starting_candidates)
+                if self._fixed_map:
+                    # The diverse builder is unaware of fixed positions, so
+                    # stamp them in. Re-deduplicate afterwards since stamping
+                    # can collapse distinct seeds together.
+                    seen_fixed: set = set()
+                    stamped_candidates = []
+                    for seq in initial_candidates:
+                        seq = self._apply_fixed(seq)
+                        if seq not in seen_fixed:
+                            seen_fixed.add(seq)
+                            stamped_candidates.append(seq)
+                    initial_candidates = stamped_candidates
         else:
-            initial_candidates = [self.starting_sequence]
+            initial_candidates = [self._apply_fixed(self.starting_sequence)]
         
         # set logging info
         if self.verbose:
@@ -2138,6 +2675,11 @@ class SequenceOptimizer:
                     norm_ref = self._build_constrained_random_sequence(self.target_length)
                 else:
                     norm_refs = build_diverse_initial_sequences(self.target_length, num_sequences=5)
+                    if self._fixed_map:
+                        # Keep the reference inside the feasible space so the
+                        # normalization scale reflects sequences the optimizer
+                        # can actually reach.
+                        norm_refs = [self._apply_fixed(s) for s in norm_refs]
                     # Pick the reference with the most balanced errors
                     # (closest to geometric mean across properties)
                     best_balance = float('inf')

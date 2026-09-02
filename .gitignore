@@ -17,6 +17,8 @@ goose/roadmap.txt
 # claude
 ./claude
 /claude
+./.claude
+/.claude
 # _version.py
 goose/_version.py
 

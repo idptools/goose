@@ -782,5 +782,407 @@ class TestSetInitialSequence:
         assert abs(p2.FCR - 0.25) <= 0.05
 
 
+class TestFixedPositions:
+    """Tests for the fixed_positions constraint."""
+
+    def test_mapping_form_resolves_at_init(self):
+        """A {index: residue} mapping is usable without a starting sequence."""
+        optimizer = SequenceOptimizer(
+            target_length=30, fixed_positions={0: 'M', 10: 'W'}, verbose=False
+        )
+        assert optimizer.get_fixed_positions() == {0: 'M', 10: 'W'}
+        assert 0 not in optimizer._free_indices
+        assert 10 not in optimizer._free_indices
+        assert len(optimizer._free_indices) == 28
+
+    def test_negative_indices_are_normalized(self):
+        """Negative indices count from the end, Python-style."""
+        optimizer = SequenceOptimizer(
+            target_length=30, fixed_positions={-1: 'K', -2: 'R'}, verbose=False
+        )
+        assert optimizer.get_fixed_positions() == {29: 'K', 28: 'R'}
+
+    def test_index_form_resolves_from_initial_sequence(self):
+        """Bare indices take their residues from the starting sequence."""
+        start = 'M' + 'A' * 28 + 'K'
+        optimizer = SequenceOptimizer(
+            target_length=30, fixed_positions=[0, 29], verbose=False
+        )
+        assert optimizer.get_fixed_positions() is None
+        optimizer.set_initial_sequence(start)
+        assert optimizer.get_fixed_positions() == {0: 'M', 29: 'K'}
+
+    def test_index_form_reresolves_on_second_initial_sequence(self):
+        """A second set_initial_sequence() re-reads the fixed residues."""
+        optimizer = SequenceOptimizer(
+            target_length=10, fixed_positions=[0, 9], verbose=False
+        )
+        optimizer.set_initial_sequence('MAAAAAAAAK')
+        assert optimizer.get_fixed_positions() == {0: 'M', 9: 'K'}
+        optimizer.set_initial_sequence('WAAAAAAAAR')
+        assert optimizer.get_fixed_positions() == {0: 'W', 9: 'R'}
+
+    def test_mapping_overrides_conflicting_initial_sequence(self):
+        """An explicit mapping wins over the starting sequence's residues."""
+        optimizer = SequenceOptimizer(
+            target_length=20, fixed_positions={0: 'M', 5: 'W'}, verbose=False
+        )
+        optimizer.set_initial_sequence('A' * 20)
+        assert optimizer.starting_sequence[0] == 'M'
+        assert optimizer.starting_sequence[5] == 'W'
+
+    def test_no_fixed_positions_leaves_state_empty(self):
+        """Default behavior is unchanged when fixed_positions is not used."""
+        optimizer = SequenceOptimizer(target_length=30, verbose=False)
+        assert optimizer.get_fixed_positions() is None
+        assert optimizer._fixed_map is None
+        assert optimizer._free_indices == []
+
+    def test_assignment_after_construction_takes_effect(self):
+        """Setting .fixed_positions post-construction parses and validates."""
+        optimizer = SequenceOptimizer(target_length=40, verbose=False)
+        optimizer.fixed_positions = {0: 'M', 39: 'K'}
+        assert optimizer.get_fixed_positions() == {0: 'M', 39: 'K'}
+        assert 0 not in optimizer._free_indices
+
+        with pytest.raises(ValueError, match="out of range"):
+            optimizer.fixed_positions = {99: 'M'}
+
+    def test_assignment_resolves_against_existing_initial_sequence(self):
+        """Index form assigned after set_initial_sequence resolves immediately."""
+        optimizer = SequenceOptimizer(target_length=20, verbose=False)
+        optimizer.set_initial_sequence('M' + 'A' * 18 + 'K')
+        optimizer.fixed_positions = [0, 19]
+        assert optimizer.get_fixed_positions() == {0: 'M', 19: 'K'}
+
+    def test_assignment_revalidates_starting_sequence_composition(self):
+        """A mapping assigned later cannot silently break aa_fraction_ranges."""
+        optimizer = SequenceOptimizer(
+            target_length=20, verbose=False, aa_fraction_ranges={'W': (0.0, 0.05)}
+        )
+        optimizer.set_initial_sequence('W' + 'A' * 19)  # already at the W cap
+        with pytest.raises(ValueError, match="violates aa_fraction_ranges"):
+            optimizer.fixed_positions = {5: 'W'}
+
+    def test_assignment_stamps_existing_starting_sequence(self):
+        """A mapping assigned later is stamped onto the starting sequence."""
+        optimizer = SequenceOptimizer(target_length=10, verbose=False)
+        optimizer.set_initial_sequence('A' * 10)
+        optimizer.fixed_positions = {0: 'M', 9: 'K'}
+        assert optimizer.starting_sequence == 'M' + 'A' * 8 + 'K'
+
+    def test_rejects_non_standard_residue_from_initial_sequence(self):
+        """Index form must reject a non-standard residue at a fixed index."""
+        for ranges in (None, {'G': (0.0, 0.5)}):
+            optimizer = SequenceOptimizer(
+                target_length=10, fixed_positions=[0], verbose=False,
+                aa_fraction_ranges=ranges,
+            )
+            with pytest.raises(ValueError, match="invalid amino acid"):
+                optimizer.set_initial_sequence('X' + 'A' * 9)
+
+    def test_rejects_lowercase_residue_from_initial_sequence(self):
+        optimizer = SequenceOptimizer(
+            target_length=10, fixed_positions=[0], verbose=False
+        )
+        with pytest.raises(ValueError, match="invalid amino acid"):
+            optimizer.set_initial_sequence('m' + 'A' * 9)
+
+    def test_failed_assignment_leaves_state_untouched(self):
+        """A rejected assignment must not drop the existing constraint."""
+        optimizer = SequenceOptimizer(
+            target_length=20, fixed_positions={0: 'M'}, verbose=False
+        )
+        optimizer.set_initial_sequence('M' + 'A' * 19)
+        before = (
+            optimizer.fixed_positions,
+            optimizer.get_fixed_positions(),
+            optimizer.starting_sequence,
+        )
+        for bad in ({99: 'W'}, {0: 'Z'}, ['M']):
+            with pytest.raises(ValueError):
+                optimizer.fixed_positions = bad
+        assert (
+            optimizer.fixed_positions,
+            optimizer.get_fixed_positions(),
+            optimizer.starting_sequence,
+        ) == before
+
+    def test_failed_assignment_rolls_back_composition_revalidation(self):
+        optimizer = SequenceOptimizer(
+            target_length=20, verbose=False, aa_fraction_ranges={'W': (0.0, 0.05)}
+        )
+        optimizer.set_initial_sequence('W' + 'A' * 19)
+        before = (optimizer.get_fixed_positions(), optimizer.starting_sequence)
+        with pytest.raises(ValueError):
+            optimizer.fixed_positions = {5: 'W'}
+        assert (optimizer.get_fixed_positions(), optimizer.starting_sequence) == before
+
+    def test_rejected_initial_sequence_leaves_fixed_map_consistent(self):
+        """A rejected sequence must not resolve the map against its residues."""
+        optimizer = SequenceOptimizer(
+            target_length=10, fixed_positions=[0], verbose=False,
+            aa_fraction_ranges={'G': (0.5, 0.6)},
+        )
+        optimizer.set_initial_sequence('GGGGGAAAAA')
+        before = (optimizer.get_fixed_positions(), optimizer.starting_sequence)
+        with pytest.raises(ValueError, match="violates aa_fraction_ranges"):
+            optimizer.set_initial_sequence('A' * 10)
+        assert (optimizer.get_fixed_positions(), optimizer.starting_sequence) == before
+        # The map still agrees with the sequence actually in use.
+        assert optimizer.get_fixed_positions()[0] == optimizer.starting_sequence[0]
+
+    def test_unresolved_index_form_cannot_generate_candidates(self):
+        """Mutating before resolution would silently violate the constraint."""
+        optimizer = SequenceOptimizer(
+            target_length=20, fixed_positions=[0, 19], verbose=False
+        )
+        with pytest.raises(ValueError, match="no starting sequence was set"):
+            optimizer._generate_candidates('M' + 'A' * 18 + 'K', 50, 0)
+
+    def test_assignment_of_none_clears_the_constraint(self):
+        optimizer = SequenceOptimizer(
+            target_length=20, fixed_positions={0: 'M'}, verbose=False
+        )
+        optimizer.fixed_positions = None
+        assert optimizer.get_fixed_positions() is None
+        assert optimizer._free_indices == []
+
+    def test_mutation_primitives_never_touch_fixed_positions(self):
+        """All fixed-aware mutators leave the pinned residues in place."""
+        optimizer = SequenceOptimizer(
+            target_length=40, fixed_positions={0: 'M', 7: 'W', 39: 'K'}, verbose=False
+        )
+        seq = optimizer._apply_fixed('A' * 40)
+        for _ in range(200):
+            for mutant in (
+                optimizer._fixed_point_mutation(seq),
+                optimizer._fixed_multi_mutations(seq, 10),
+                optimizer._fixed_aware_shuffle(seq),
+                optimizer._swap_positions_mutation(seq, 5),
+            ):
+                assert len(mutant) == 40
+                assert mutant[0] == 'M'
+                assert mutant[7] == 'W'
+                assert mutant[39] == 'K'
+
+    def test_fixed_aware_shuffle_preserves_composition(self):
+        """Shuffling only permutes the free positions."""
+        import random
+        random.seed(11)
+        optimizer = SequenceOptimizer(
+            target_length=40, fixed_positions={0: 'M', 39: 'K'}, verbose=False
+        )
+        seq = optimizer._apply_fixed(
+            ''.join(random.choices('ACDEFGHIKLMNPQRSTVWY', k=40))
+        )
+        for _ in range(50):
+            mutant = optimizer._fixed_aware_shuffle(seq)
+            assert sorted(mutant) == sorted(seq)
+            assert mutant[0] == 'M' and mutant[39] == 'K'
+
+    def test_generated_candidates_respect_fixed_positions(self):
+        """_generate_candidates honors the constraint, shuffle iterations included."""
+        optimizer = SequenceOptimizer(
+            target_length=40, fixed_positions={0: 'M', 7: 'W', 39: 'K'}, verbose=False
+        )
+        seq = optimizer._apply_fixed('A' * 40)
+        # iteration 50 triggers the shuffle branch (shuffle_frequency default 50)
+        for iteration in (1, 50, 100):
+            for _ in range(50):
+                for candidate in optimizer._generate_candidates(seq, iteration, 0):
+                    assert len(candidate) == 40
+                    assert candidate[0] == 'M'
+                    assert candidate[7] == 'W'
+                    assert candidate[39] == 'K'
+
+    def test_run_preserves_fixed_positions_without_initial_sequence(self):
+        """A full run from scratch returns a sequence carrying the fixed residues."""
+        optimizer = SequenceOptimizer(
+            target_length=50, max_iterations=150, verbose=False,
+            fixed_positions={0: 'M', 10: 'W', 49: 'K'}, seed=7,
+        )
+        optimizer.add_property(FCR, target_value=0.25)
+        result = optimizer.run()
+
+        assert len(result) == 50
+        assert result[0] == 'M'
+        assert result[10] == 'W'
+        assert result[49] == 'K'
+
+    def test_run_preserves_fixed_positions_and_optimizes_the_rest(self):
+        """The pinned residues survive while free positions move toward target."""
+        import random
+        random.seed(3)
+        # Uncharged start (FCR 0) so reaching the target demands many edits.
+        start = ''.join(random.choices('GSQNAPT', k=60))
+        keep = [0, 5, 12, 19, 33, 59]
+
+        optimizer = SequenceOptimizer(
+            target_length=60, max_iterations=300, verbose=False,
+            fixed_positions=keep, seed=3,
+        )
+        optimizer.set_initial_sequence(start)
+        optimizer.add_property(FCR, target_value=0.5, tolerance=0.02)
+        result = optimizer.run()
+
+        # Fixed positions unchanged...
+        for i in keep:
+            assert result[i] == start[i]
+        # ...while the rest of the sequence was substantially rewritten to
+        # reach a target the starting sequence was far from.
+        assert sum(1 for i in range(60) if result[i] != start[i]) > 10
+        assert abs(Protein(result).FCR - 0.5) <= 0.05
+
+    def test_run_with_range_object(self):
+        """A contiguous motif can be pinned with range()."""
+        import random
+        random.seed(6)
+        start = ''.join(random.choices('GSQNAPTED', k=40))
+
+        optimizer = SequenceOptimizer(
+            target_length=40, max_iterations=150, verbose=False,
+            fixed_positions=range(10, 21), seed=6,
+        )
+        optimizer.set_initial_sequence(start)
+        optimizer.add_property(FCR, target_value=0.4)
+        result = optimizer.run()
+
+        assert result[10:21] == start[10:21]
+
+    def test_combines_with_aa_fraction_ranges(self):
+        """Fixed residues count toward the composition bounds and both hold."""
+        optimizer = SequenceOptimizer(
+            target_length=50, max_iterations=150, verbose=False,
+            fixed_positions={0: 'M', 25: 'W'},
+            aa_fraction_ranges={'W': (0.02, 0.10), 'E': (0.1, 0.3)},
+            seed=11,
+        )
+        optimizer.add_property(FCR, target_value=0.3)
+        result = optimizer.run()
+
+        assert result[0] == 'M' and result[25] == 'W'
+        assert 0.02 <= result.count('W') / 50 <= 0.10
+        assert 0.1 <= result.count('E') / 50 <= 0.3
+
+    def test_constrained_builder_honors_fixed_positions(self):
+        """The composition-constrained seed builder places fixed residues."""
+        optimizer = SequenceOptimizer(
+            target_length=40, verbose=False,
+            fixed_positions={0: 'M', 3: 'C', 39: 'W'},
+            aa_fraction_ranges={'C': (0.0, 0.1), 'G': (0.1, 0.2)},
+        )
+        for _ in range(100):
+            seq = optimizer._build_constrained_random_sequence(40)
+            assert len(seq) == 40
+            assert seq[0] == 'M' and seq[3] == 'C' and seq[39] == 'W'
+            assert seq.count('C') <= 4
+            assert 4 <= seq.count('G') <= 8
+
+    def test_fully_constrained_composition_with_fixed_positions(self):
+        """The swap-only mutation path also respects fixed positions."""
+        fractions = {aa: 2 / 40 for aa in 'ACDEFGHIKLMNPQRSTVWY'}
+        optimizer = SequenceOptimizer(
+            target_length=40, max_iterations=100, verbose=False,
+            fixed_positions={0: 'W', 20: 'C', 39: 'K'},
+            aa_fraction_ranges=fractions, seed=8,
+        )
+        assert optimizer._composition_fully_constrained
+        optimizer.add_property(Kappa, target_value=0.25)
+        result = optimizer.run()
+
+        assert result[0] == 'W' and result[20] == 'C' and result[39] == 'K'
+        assert all(result.count(aa) == 2 for aa in 'ACDEFGHIKLMNPQRSTVWY')
+
+    def test_emergency_injection_preserves_fixed_positions(self):
+        """The stagnation escape hatch cannot discard the fixed residues."""
+        optimizer = SequenceOptimizer(
+            target_length=40, verbose=False,
+            fixed_positions={0: 'M', 39: 'K'}, seed=1,
+        )
+        optimizer.add_property(FCR, target_value=0.3)
+        optimizer.best_sequence = optimizer._apply_fixed('A' * 40)
+        optimizer.best_error = float('inf')
+        for _ in range(10):
+            optimizer._emergency_diversity_injection(float('inf'))
+            assert optimizer.best_sequence[0] == 'M'
+            assert optimizer.best_sequence[39] == 'K'
+
+    def test_single_free_position(self):
+        """Pinning all but one position still runs."""
+        optimizer = SequenceOptimizer(
+            target_length=5, max_iterations=25, verbose=False,
+            fixed_positions={0: 'M', 1: 'W', 2: 'K', 4: 'E'}, seed=4,
+        )
+        optimizer.add_property(FCR, target_value=0.5)
+        result = optimizer.run()
+
+        assert len(result) == 5
+        assert result[0] == 'M' and result[1] == 'W'
+        assert result[2] == 'K' and result[4] == 'E'
+
+    def test_reproducible_with_seed(self):
+        """The pure-Python fixed path honors ``seed``."""
+        def build_and_run(seed):
+            optimizer = SequenceOptimizer(
+                target_length=40, max_iterations=100, verbose=False,
+                fixed_positions={0: 'M', 39: 'K'}, seed=seed,
+            )
+            optimizer.add_property(FCR, target_value=0.3)
+            return optimizer.run()
+
+        assert build_and_run(42) == build_and_run(42)
+
+    def test_rejects_out_of_range_index(self):
+        with pytest.raises(ValueError, match="out of range"):
+            SequenceOptimizer(target_length=10, fixed_positions={20: 'M'}, verbose=False)
+
+    def test_rejects_invalid_residue(self):
+        with pytest.raises(ValueError, match="not a valid amino acid"):
+            SequenceOptimizer(target_length=10, fixed_positions={0: 'Z'}, verbose=False)
+
+    def test_rejects_pinning_every_position(self):
+        with pytest.raises(ValueError, match="at least one position must remain free"):
+            SequenceOptimizer(
+                target_length=3, fixed_positions={0: 'M', 1: 'W', 2: 'K'}, verbose=False
+            )
+
+    def test_rejects_empty_specification(self):
+        with pytest.raises(ValueError, match="empty"):
+            SequenceOptimizer(target_length=10, fixed_positions={}, verbose=False)
+
+    def test_rejects_residue_letters_in_iterable_form(self):
+        with pytest.raises(ValueError, match="integer indices"):
+            SequenceOptimizer(
+                target_length=10, fixed_positions=['M', 'W'], verbose=False
+            )
+
+    def test_rejects_fixed_residues_exceeding_aa_maximum(self):
+        with pytest.raises(ValueError, match="maximum allowed count"):
+            SequenceOptimizer(
+                target_length=100,
+                fixed_positions={i: 'W' for i in range(10)},
+                aa_fraction_ranges={'W': (0.0, 0.05)},
+                verbose=False,
+            )
+
+    def test_rejects_unreachable_aa_minimum(self):
+        with pytest.raises(ValueError, match="free position"):
+            SequenceOptimizer(
+                target_length=10,
+                fixed_positions={i: 'A' for i in range(9)},
+                aa_fraction_ranges={'G': (0.5, 0.6)},
+                verbose=False,
+            )
+
+    def test_index_form_without_initial_sequence_raises_on_run(self):
+        optimizer = SequenceOptimizer(
+            target_length=20, fixed_positions=[0, 1], verbose=False
+        )
+        optimizer.add_property(FCR, target_value=0.3)
+        with pytest.raises(ValueError, match="no starting sequence was set"):
+            optimizer.run()
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
