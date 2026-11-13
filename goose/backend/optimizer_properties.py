@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Tuple, Dict, Callable, Union, List
 from enum import Enum
+from functools import lru_cache as _lru_cache
 import numpy as np
 import statistics as stat
 import logging
@@ -8,8 +9,41 @@ import logging
 import sparrow
 import metapredict as meta
 import finches
+from sparrow.data.amino_acids import AA_hydro_KD as _AA_HYDRO_KD
 
 from goose.backend.optimizer_tools import MatrixManipulation, VectorManipulation
+
+
+_PROFILE_AMINO_ACIDS = 'ACDEFGHIKLMNPQRSTVWY'
+_FCR_PROFILE_WEIGHTS = np.zeros(256)
+_NCPR_PROFILE_WEIGHTS = np.zeros(256)
+_HYDROPATHY_PROFILE_WEIGHTS = np.zeros(256)
+for _residue in _PROFILE_AMINO_ACIDS:
+    _FCR_PROFILE_WEIGHTS[ord(_residue)] = _residue in 'DEKR'
+    _NCPR_PROFILE_WEIGHTS[ord(_residue)] = int(_residue in 'KR') - int(_residue in 'DE')
+    _HYDROPATHY_PROFILE_WEIGHTS[ord(_residue)] = _AA_HYDRO_KD[_residue]
+
+# Kappa depends only on positive, negative and neutral residue positions.
+_KAPPA_PROFILE_TRANSLATION = str.maketrans({
+    residue: 'K' if residue in 'KR' else 'E' if residue in 'DE' else 'A'
+    for residue in _PROFILE_AMINO_ACIDS
+})
+
+
+def _rolling_profile(sequence, window_size, weights):
+    values = weights[np.frombuffer(sequence.encode('ascii'), dtype=np.uint8)]
+    prefix = np.empty(len(values) + 1)
+    prefix[0] = 0.0
+    np.cumsum(values, out=prefix[1:])
+    return (prefix[window_size:] - prefix[:-window_size]) / window_size
+
+
+@_lru_cache(maxsize=8192)
+def _cached_profile_kappa(charge_pattern):
+    # Retain Sparrow's exact normalization, flattening and undefined-value rules.
+    # The bounded cache is shared across properties and optimizer candidates.
+    return sparrow.Protein(charge_pattern).kappa
+
 
 class ConstraintType(Enum):
     """Enumeration for different constraint types in property optimization."""
@@ -414,10 +448,14 @@ class ProteinProperty(ABC):
             self.target_resized = True
             return self.target_profile
 
+    def _calculate_linear_profile_fast(self, sequence: str):
+        """Optional unpadded fast path for standard, uppercase sequences."""
+        return None
+
     def calculate_linear_profile(self, sequence: str) -> np.ndarray:
         """
         Calculate the linear profile for the property across the sequence.
-        This is a simple moving window average of the raw property values.
+        Evaluate the raw property independently in each sliding window.
 
         Parameters
         ----------
@@ -430,6 +468,20 @@ class ProteinProperty(ABC):
             The calculated linear profile as a numpy array
         """
         seq_length = len(sequence)
+        # Keep the generic path for unsupported inputs and custom properties.
+        # In particular, preserve its behavior for invalid/oversized windows.
+        if (isinstance(self.window_size, (int, np.integer))
+                and 1 <= self.window_size <= seq_length and sequence.isascii()):
+            normalized = sequence.upper()
+            if not normalized.strip(_PROFILE_AMINO_ACIDS):
+                values = self._calculate_linear_profile_fast(normalized)
+                if values is not None:
+                    if self.end_mode not in ('extend', 'zeros'):
+                        return values
+                    left = self.window_size // 2
+                    right = self.window_size - 1 - left
+                    mode = 'edge' if self.end_mode == 'extend' else 'constant'
+                    return np.pad(values, (left, right), mode=mode)
         end = (seq_length-self.window_size)+1
         profile_values=[]
         for i in range(end):
@@ -600,12 +652,22 @@ class Hydrophobicity(ProteinProperty):
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.hydrophobicity
 
+    def _calculate_linear_profile_fast(self, sequence):
+        if getattr(self.calculate_raw_value, '__func__', None) is Hydrophobicity.calculate_raw_value:
+            return _rolling_profile(sequence, self.window_size, _HYDROPATHY_PROFILE_WEIGHTS)
+        return None
+
 class FCR(ProteinProperty):
     """
     Calculate the FCR property.
     """
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.FCR
+
+    def _calculate_linear_profile_fast(self, sequence):
+        if getattr(self.calculate_raw_value, '__func__', None) is FCR.calculate_raw_value:
+            return _rolling_profile(sequence, self.window_size, _FCR_PROFILE_WEIGHTS)
+        return None
 
 class NCPR(ProteinProperty):
     """
@@ -614,6 +676,11 @@ class NCPR(ProteinProperty):
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.NCPR
 
+    def _calculate_linear_profile_fast(self, sequence):
+        if getattr(self.calculate_raw_value, '__func__', None) is NCPR.calculate_raw_value:
+            return _rolling_profile(sequence, self.window_size, _NCPR_PROFILE_WEIGHTS)
+        return None
+
 
 class Kappa(ProteinProperty):
     """
@@ -621,6 +688,18 @@ class Kappa(ProteinProperty):
     """
     def calculate_raw_value(self, protein: 'sparrow.Protein') -> float:
         return protein.kappa
+
+    def _calculate_linear_profile_fast(self, sequence):
+        if getattr(self.calculate_raw_value, '__func__', None) is not Kappa.calculate_raw_value:
+            return None
+        count = len(sequence) - self.window_size + 1
+        if self.window_size < 6:
+            return np.full(count, -1)
+        pattern = sequence.translate(_KAPPA_PROFILE_TRANSLATION)
+        return np.fromiter(
+            (_cached_profile_kappa(pattern[i:i + self.window_size]) for i in range(count)),
+            dtype=float, count=count,
+        )
 
 class RadiusOfGyration(ProteinProperty):
     """

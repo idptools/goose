@@ -19,3 +19,18 @@ GOOSE functions
 .. automodule:: goose.create
    :members:
 
+Sequence library functions
+--------------------------
+
+.. automodule:: goose.property_library
+   :members: generate_property_library, enumerate_property_combinations
+
+.. automodule:: goose.fractions_library
+   :members:
+
+.. automodule:: goose.class_library
+   :members:
+
+.. automodule:: goose.dimensions_library
+   :members:
+

@@ -7,7 +7,7 @@ import numpy as np
 import metapredict as meta
 from numpy.lib.stride_tricks import sliding_window_view
 from goose import goose_exceptions
-from goose.backend import parameters
+from goose.backend import goose_tools, parameters
 from goose.backend_property_calculation.calculate_properties_batch import matrices_to_sequences
 from goose.backend_property_calculation.calculate_kappa import kappa as calculate_kappa
 from goose.backend_property_optimization.optimize_kappa import optimize_kappa
@@ -161,7 +161,9 @@ def by_properties(length,
                            use_weighted_probabilities=False,
                            chosen_probabilities=None,
                            batch_size=None,
-                           check_sequence_disorder=True):
+                           check_sequence_disorder=True,
+                           max_hydropathy_iterations=None,
+                           max_kappa_iterations=None):
     """
     Generate sequences with specific properties and check for disorder.
     
@@ -180,7 +182,7 @@ def by_properties(length,
     exclude_residues : list
         List of residues to exclude from the sequence
     num_attempts : int
-        Number of attempts to make a sequence
+        Maximum number of candidate batches, not inner optimization iterations.
     strict_disorder : bool
         If True, all residues must be above the disorder cutoff
         default is False
@@ -217,12 +219,20 @@ def by_properties(length,
     check_sequence_disorder : bool
         If True, check the generated sequences for disorder
         default is True
+    max_hydropathy_iterations : int or None
+        Per-batch hydropathy iteration limit. None uses the optimizer's default.
+    max_kappa_iterations : int or None
+        Per-batch kappa iteration limit. None uses the optimizer's default.
 
     Returns
     -------
     list
         List of sequences that meet the criteria
     """
+    goose_tools.check_property_optimization_iterations(max_hydropathy_iterations,
+                                                      max_kappa_iterations)
+    hydro_options = {} if max_hydropathy_iterations is None else {'max_iterations': max_hydropathy_iterations}
+    kappa_options = {} if max_kappa_iterations is None else {'num_iterations': max_kappa_iterations}
     # set batch size based on what is specified.
     if batch_size is None:
         # dynamic batch size. Basically slowly increases until it reaches a maximum size.
@@ -287,9 +297,10 @@ def by_properties(length,
                                                 hydropathy_tolerance=hydropathy_tolerance,
                                                 return_when_num_hit=required_hydro_batch_size,
                                                 only_return_within_tolernace=True,
-                                                exclude_residues=exclude_residues)
+                                                exclude_residues=exclude_residues,
+                                                **hydro_options)
         # make sure we still have sequences
-        if len(seqs) == 0:
+        if seqs is None or len(seqs) == 0:
             continue
 
         # see if we need to optimize kappa
@@ -308,10 +319,11 @@ def by_properties(length,
             seqs = optimize_kappa(seqs, kappa, 
                                             return_when_num_hit=required_kappa_batch_size, 
                                             only_return_within_tolerance=True,
-                                            kappa_tolerance=kappa_tolerance)
+                                            kappa_tolerance=kappa_tolerance,
+                                            **kappa_options)
             
             # make sure we still have sequences
-            if len(seqs) == 0:
+            if seqs is None or len(seqs) == 0:
                 continue
 
         else:

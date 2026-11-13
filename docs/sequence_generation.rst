@@ -70,7 +70,7 @@ The only required argument is the length, which must be between the minimum and 
    .. note::
       The legacy parameter name ``cutoff`` is still supported for backward compatibility but ``disorder_cutoff`` is recommended.
 
-2. ``attempts``: The number of attempts defines how many times GOOSE will try to generate a desired sequence. Default is 20. Higher values increase success probability but take longer. For more complex sequence compositions you may need to increase this from the default value.
+2. ``attempts``: Maximum number of candidate batches. Default is 5000 for ``create.sequence``. Each batch runs its own hydropathy and kappa optimization, so ``attempts=1`` can still take substantial time on difficult targets. With default dynamic batching, the first attempt starts ten candidates. Higher values allow more batches and increase the chance of success.
 
 3. ``exclude``: A list of residues to exclude from your generated sequence. **NOTE** - If you specify FCR or NCPR, you CANNOT have any charged residues in the ``exclude`` list. Additionally, **you can not specify more than 10 residues to be excluded**.
 
@@ -100,6 +100,16 @@ The only required argument is the length, which must be between the minimum and 
 12. ``hydropathy_tolerance``: Tolerance for hydropathy matching. Default value comes from the parameters module.
 
 13. ``kappa_tolerance``: Tolerance for kappa matching. Default value comes from the parameters module.
+
+14. ``max_hydropathy_iterations``: Optional positive integer limiting hydropathy optimization iterations per batch. ``None`` keeps the optimizer default of 1000.
+
+15. ``max_kappa_iterations``: Optional positive integer limiting kappa optimization iterations per batch. ``None`` keeps the optimizer default of 20000. Each iteration can perform several charge rearrangements.
+
+To keep exploratory searches short, limit both outer attempts and inner
+iterations. For example, ``attempts=1, max_hydropathy_iterations=100,
+max_kappa_iterations=100``. Smaller limits may miss targets that a longer
+search could reach. These limits control iteration counts, not elapsed time.
+Use ``batch_size`` to control the number of starting candidates separately.
 
 
 Examples of sequence generation by properties

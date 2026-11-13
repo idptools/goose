@@ -32,6 +32,10 @@ The main functionalities of GOOSE are:
 
 4. Analyze sequences. Although this is possible in GOOSE, I recommend using [SPARROW](https://github.com/idptools/sparrow) for sequence analysis.
 
+5. Generate sequence libraries spanning physical properties, individual amino-acid fractions,
+   amino-acid class fractions, or predicted Rg/Re values. See the
+   [sequence-library guide](docs/sequence_library_generation.rst) for examples and length-aware fraction intervals.
+
 
 ## How to use GOOSE
 

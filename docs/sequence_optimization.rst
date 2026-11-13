@@ -414,6 +414,13 @@ Because fixed positions reduce the search space, very tight constraints can make
 Multiple Properties, Weights, and Tolerances
 --------------------------------------------
 
+The returned sequence prioritizes meeting every property's stopping tolerance.
+Among candidates with the same feasibility, the saved best sequence minimizes
+the sum of ``weight * raw_error`` across all properties. A candidate meeting
+every tolerance cannot be replaced at the end by an infeasible candidate with
+a smaller total raw error. This also applies when early stopping is disabled;
+if no candidate meets all tolerances, the best saved approximation is returned.
+
 The optimizer excels at balancing multiple competing properties simultaneously. Each property can have individual weights, tolerances, and constraint types:
 
 .. code-block:: python
@@ -846,6 +853,30 @@ Troubleshooting and Optimization Tips
 - **Adjust stagnation detection**: Lower ``stagnation_threshold=15``
 - **Increase mutation diversity**: Higher ``max_mutations=20``
 - **Check for impossible targets**: Some property combinations may be unachievable
+
+Linear Profile Performance
+--------------------------
+
+With ``calculate_as_linear_profile=True``, ``FCR``, ``NCPR``, and
+``Hydrophobicity`` use rolling sums automatically. ``Kappa`` reuses Sparrow
+calculations for equivalent positive/negative/neutral window patterns in a
+shared cache limited to 8,192 entries. Kappa benefits most when windows repeat,
+as they often do among related mutation candidates; unrelated long windows
+may see little improvement. End padding and profile error normalization are
+unchanged. Properties with overridden ``calculate_raw_value`` methods retain
+the generic window calculation.
+
+For an exact profile target with the default ``end_mode='extend'``, the
+property's error is the mean absolute difference between candidate and target
+profile values, including the padded ends. The tolerance bounds that overall
+profile error, rather than the error at every individual window. For
+``end_mode='clip'``, the sum is still divided by the full candidate sequence
+length. The reported mean profile value is descriptive; acceptance uses the
+profile error, and does not compare that mean to zero.
+
+For kappa profiles, choose ``window_size >= 6``. Sparrow returns ``-1`` for
+shorter windows, and also for windows lacking either positive or negative
+residues. These undefined values are preserved in the profile.
 
 Examples and Demo Notebooks
 ----------------------------

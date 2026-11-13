@@ -60,8 +60,9 @@ def sequence(length, **kwargs):
         closer to 1 indicate more even charge distribution.
 
     attempts : int, optional
-        Number of attempts to generate the sequence. Default is 20. Higher
-        values increase success probability but take longer.
+        Maximum number of candidate batches. Default is 5000. Each batch can
+        run its own hydropathy and kappa optimization loops, so attempts=1
+        does not mean one mutation or a wall-clock time limit.
 
     disorder_cutoff : float, optional
         Disorder threshold for sequence validation. Sequences must have
@@ -112,6 +113,16 @@ def sequence(length, **kwargs):
     kappa_tolerance : float, optional
         Tolerance for kappa matching. Default from parameters module.
 
+    max_hydropathy_iterations : int or None, optional
+        Maximum hydropathy optimization iterations per candidate batch.
+        None preserves the optimizer default of 1000.
+
+    max_kappa_iterations : int or None, optional
+        Maximum kappa optimization iterations per candidate batch.
+        None preserves the optimizer default of 20000. Each iteration can
+        perform multiple charge rearrangements. Lower limits finish sooner
+        but may fail to generate sequences that a longer search could find.
+
     Returns
     -------
     str or list
@@ -161,7 +172,8 @@ def sequence(length, **kwargs):
                                   'strict_disorder', 'return_all_sequences', 'custom_probabilities', 
                                   'metapredict_version', 'max_consecutive_ordered',
                                   'max_total_ordered', 'batch_size',
-                                  'hydropathy_tolerance', 'kappa_tolerance'])
+                                  'hydropathy_tolerance', 'kappa_tolerance',
+                                  'max_hydropathy_iterations', 'max_kappa_iterations'])
     
     # Validate and correct parameter values, setting defaults where needed
     # This must be done before parameter validation to ensure correct types
@@ -201,7 +213,9 @@ def sequence(length, **kwargs):
                                                         max_total_ordered=kwargs['max_total_ordered'],
                                                         batch_size=kwargs['batch_size'],
                                                         hydropathy_tolerance=kwargs['hydropathy_tolerance'],
-                                                        kappa_tolerance=kwargs['kappa_tolerance'])
+                                                        kappa_tolerance=kwargs['kappa_tolerance'],
+                                                        max_hydropathy_iterations=kwargs['max_hydropathy_iterations'],
+                                                        max_kappa_iterations=kwargs['max_kappa_iterations'])
         
     # Check if sequence generation failed and raise appropriate error
     if generated_seq is None:

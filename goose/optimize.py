@@ -478,12 +478,11 @@ class SequenceOptimizer:
         self._consecutive_stagnation_recoveries: int = 0
         
         # Global-best tracking: the absolute best sequence seen during the
-        # entire run, measured by raw weighted error (scale-invariant). This
-        # ensures that exploratory moves (relaxed acceptance, sideways moves,
-        # emergency injection) never cause the optimizer to "forget" the true
-        # best sequence encountered.
+        # entire run. Meeting every stopping tolerance takes priority over
+        # total weighted raw error, which breaks ties without adaptive scaling.
         self._global_best_sequence: Optional[str] = None
         self._global_best_raw_error: float = float('inf')
+        self._global_best_rank: Tuple[bool, float] = (True, float('inf'))
         
         # Tabu set for sideways acceptance: prevents cycling when accepting
         # equal-error candidates during stagnation. Holds recently visited
@@ -770,7 +769,9 @@ class SequenceOptimizer:
         
         if self.verbose:
             tolerance_info = f", tolerance: ±{tolerance}" if tolerance > 0 else ""
-            self.logger.info(f"Added property: {prop_name} (target: {prop.target_value}, weight: {prop.weight}{tolerance_info})")
+            target_description = (f"{prop.constraint_type} profile" if prop.calculate_as_linear_profile
+                                  else str(prop.target_value))
+            self.logger.info(f"Added property: {prop_name} (target: {target_description}, weight: {prop.weight}{tolerance_info})")
     
     def _assemble_property_info(self, cached_raw_values: Dict[str, Dict[str, Any]]) -> Tuple[float, Dict[str, Dict[str, float]]]:
         """
@@ -822,7 +823,8 @@ class SequenceOptimizer:
                 'tolerance': tolerance,
                 'within_tolerance': within_tolerance,
                 'constraint_type': prop.constraint_type,
-                'weight': prop.weight
+                'weight': prop.weight,
+                'calculate_as_linear_profile': prop.calculate_as_linear_profile,
             }
             
             weighted_errors.append(effective_weighted_error)
@@ -959,8 +961,8 @@ class SequenceOptimizer:
     def _update_best_sequence(self, new_sequence: str, new_error: float) -> None:
         """Update the best sequence and invalidate cached property info.
         
-        Also updates the global-best checkpoint if the new sequence has a
-        lower raw weighted error (scale-invariant) than any previously seen.
+        Also updates the global-best checkpoint, prioritizing solutions that
+        meet every stopping tolerance, then lower total weighted raw error.
         This ensures that ALL code paths (normal acceptance, relaxed
         acceptance, emergency injection, etc.) are captured by the checkpoint.
         """
@@ -971,26 +973,11 @@ class SequenceOptimizer:
         if hasattr(self, '_best_sequence_property_info_cache_id'):
             delattr(self, '_best_sequence_property_info_cache_id')
         
-        # Update global-best checkpoint. Evaluate raw error (uses cache, so
-        # this is essentially free for sequences just evaluated in the main
-        # loop). Skip during initialization (before run() sets up the
-        # global-best fields) by checking if _global_best_sequence is not
-        # the sentinel None.
-        #
-        # NOTE: We use ``unsatisfied_only=False`` here (sum over ALL
-        # properties) so the metric is a *consistent* ordering across
-        # sequences. Using ``unsatisfied_only=True`` would compare different
-        # sequences on different property subsets (each sequence's own
-        # within-tolerance flags), which is non-monotonic and can let the
-        # working best drift away from the true global optimum after
-        # exploratory moves (relaxed acceptance, sideways moves, emergency
-        # diversity injection).
-        if hasattr(self, '_global_best_raw_error') and self._global_best_sequence is not None:
+        # Cached values make this inexpensive for a just-evaluated sequence.
+        # Skip before run() initializes its checkpoint.
+        if self._global_best_sequence is not None:
             _, prop_info = self._evaluate_sequence(new_sequence)
-            raw_error = self._weighted_raw_sum(prop_info, unsatisfied_only=False)
-            if raw_error < self._global_best_raw_error:
-                self._global_best_sequence = new_sequence
-                self._global_best_raw_error = raw_error
+            self._record_global_best(new_sequence, prop_info)
     
     def _calculate_initial_normalization(self, initial_sequence: str) -> None:
         """
@@ -1187,6 +1174,20 @@ class SequenceOptimizer:
             info['raw_error'] * info.get('weight', 1.0)
             for info in property_info.values()
         )
+
+    def _checkpoint_rank(self, property_info: Dict[str, Dict[str, Any]]) -> Tuple[bool, float]:
+        """Prefer meeting all tolerances, then minimize total weighted raw error."""
+        return (
+            not self._all_properties_within_tolerance(property_info),
+            self._weighted_raw_sum(property_info, unsatisfied_only=False),
+        )
+
+    def _record_global_best(self, sequence: str, property_info: Dict[str, Dict[str, Any]]) -> None:
+        rank = self._checkpoint_rank(property_info)
+        if self._global_best_sequence is None or rank < self._global_best_rank:
+            self._global_best_sequence = sequence
+            self._global_best_rank = rank
+            self._global_best_raw_error = rank[1]
 
     def _maybe_add_to_pool(self, sequence: str, raw_unsat: float, weighted: float) -> None:
         """Insert a sequence into the elite pool if it qualifies.
@@ -2116,16 +2117,17 @@ class SequenceOptimizer:
         bool
             True if error tolerance criterion is met (all properties satisfied)
         """
-        if not self.enable_error_tolerance:
+        if not self.enable_error_tolerance or not self.properties:
             return False
-        if not self.properties:
+        return self._all_properties_within_tolerance(self._get_best_sequence_property_info())
+
+    def _all_properties_within_tolerance(self, property_info: Dict[str, Dict[str, Any]]) -> bool:
+        """Shared stopping and checkpoint criterion, independent of early stopping."""
+        if not property_info:
             # Defense-in-depth: an empty property set should not be reported
             # as "tolerance reached".
             return False
-        
-        # Check if all properties are satisfied (either by per-property or global tolerance)
-        property_info = self._get_best_sequence_property_info()
-        
+
         for prop_name, info in property_info.items():
             per_property_tolerance = info.get('tolerance', 0.0)
             
@@ -2604,23 +2606,17 @@ class SequenceOptimizer:
         # Batch evaluate initial candidates
         initial_results = self._evaluate_sequence(initial_candidates)
 
-        # Select best initial candidate using a *weight-aware*, scale-invariant
-        # metric: sum(raw_error * weight) over all properties. raw_error is
-        # independent of the adaptive scales/normalization (so it is stable
-        # before normalization is computed) and weighting by prop.weight
-        # ensures user priorities drive the seed choice instead of being
-        # silently averaged away. (See weight-effectiveness fix.)
+        # Use the checkpoint ordering for seed selection too: a candidate
+        # meeting every tolerance wins over a lower-raw-error infeasible one.
+        # The weighted raw sum remains scale-invariant and breaks ties.
         prop_weights = [p.weight for p in self.properties]
         names = self._property_names
         best_initial_idx = 0
-        best_initial_raw_sum = float('inf')
+        best_initial_rank = (True, float('inf'))
         for i, (_, prop_info) in enumerate(initial_results):
-            raw_sum = sum(
-                prop_info[n]['raw_error'] * w
-                for n, w in zip(names, prop_weights)
-            )
-            if raw_sum < best_initial_raw_sum:
-                best_initial_raw_sum = raw_sum
+            rank = self._checkpoint_rank(prop_info)
+            if rank < best_initial_rank:
+                best_initial_rank = rank
                 best_initial_idx = i
         best_initial_seq = initial_candidates[best_initial_idx]
         best_initial_error = initial_results[best_initial_idx][0]
@@ -2729,27 +2725,15 @@ class SequenceOptimizer:
         best_raw_error = self._weighted_raw_sum(initial_property_info, unsatisfied_only=True)
         self.best_raw_error_history.append(best_raw_error)
         
-        # Initialize global-best tracking with the starting sequence.
-        # This is the scale-invariant "checkpoint" that ensures we never
-        # return a sequence worse than the best we've ever seen. The metric
-        # is the total weighted raw error over ALL properties
-        # (``unsatisfied_only=False``) so it provides a consistent ordering
-        # across sequences regardless of which properties happen to be
-        # within tolerance for any given candidate.
-        self._global_best_sequence = self.best_sequence
-        self._global_best_raw_error = self._weighted_raw_sum(
-            initial_property_info, unsatisfied_only=False
-        )
+        # Checkpoints prioritize meeting all tolerances. Among sequences with
+        # the same feasibility, total weighted raw error gives a stable order.
+        self._global_best_sequence = None
+        self._record_global_best(self.best_sequence, initial_property_info)
 
-        # Sweep all initial candidates against the checkpoint too: the seed
-        # selected by ``best_initial_raw_sum`` (unsatisfied-weighted) may not
-        # be the absolute best by total-raw-sum, and we already paid for
-        # those evaluations.
+        # A feasible initial candidate must survive even if the seed selected
+        # by total raw error falls outside one of the property tolerances.
         for cand_seq, (_, cand_prop_info) in zip(initial_candidates, initial_results):
-            cand_total_raw = self._weighted_raw_sum(cand_prop_info, unsatisfied_only=False)
-            if cand_total_raw < self._global_best_raw_error:
-                self._global_best_sequence = cand_seq
-                self._global_best_raw_error = cand_total_raw
+            self._record_global_best(cand_seq, cand_prop_info)
         
         # Main optimization loop
         for _ in range(self.max_iterations):
@@ -2782,25 +2766,24 @@ class SequenceOptimizer:
                 # while staying invariant to adaptive scaling.
                 candidate_raw_error = self._weighted_raw_sum(property_info, unsatisfied_only=True)
 
-                # Global-best checkpoint: track the absolute best sequence
-                # ever evaluated, regardless of whether it was accepted by
-                # the (scale-dependent) weighted-error acceptance rule. This
-                # is the metric we use to restore at end-of-run, so it must
-                # be updated for EVERY candidate -- not just accepted ones.
-                # Use the all-properties weighted raw sum so the metric is
-                # scale-invariant AND consistent across sequences with
-                # different "satisfied" subsets.
-                candidate_total_raw = self._weighted_raw_sum(
-                    property_info, unsatisfied_only=False
-                )
-                if candidate_total_raw < self._global_best_raw_error:
-                    self._global_best_sequence = candidate
-                    self._global_best_raw_error = candidate_total_raw
+                # Save evaluated candidates even when an exploratory acceptance
+                # rule would reject them. Feasible solutions take priority.
+                self._record_global_best(candidate, property_info)
 
                 # Maintain elite pool from every evaluated candidate (#13).
                 # No extra cost: we already have raw_error / weighted_error.
                 if self.elite_pool_size > 1:
                     self._maybe_add_to_pool(candidate, candidate_raw_error, weighted_error)
+
+                # Once a solution meets the stopping criterion, accept it now.
+                # A later sideways/relaxed move in this batch must not replace
+                # it before the end-of-iteration tolerance check.
+                if self.enable_error_tolerance and self._all_properties_within_tolerance(property_info):
+                    best_candidate = candidate
+                    best_candidate_error = weighted_error
+                    best_candidate_raw_error = candidate_raw_error
+                    best_candidate_property_info = property_info
+                    break
                 
                 # Skip the first candidate (the parent itself) when it equals
                 # the current best -- accepting it would be a no-op.
@@ -2957,7 +2940,7 @@ class SequenceOptimizer:
             if self._check_error_tolerance():
                 if self.verbose:
                     self.logger.info(f"\n🎯 Error tolerance reached at iteration {self.iteration}")
-                    self.logger.info(f"   Current error for properties not within tolerance: {self.best_error:.6f} <= {self.error_tolerance:.6f}")
+                    self.logger.info("   All properties meet their per-property or global stopping tolerances.")
                 break
             
             # Handle stagnation
@@ -2991,30 +2974,22 @@ class SequenceOptimizer:
             progress_bar.refresh()
         progress_bar.close()
         
-        # Before final reporting, check if the global-best sequence (by raw
-        # error) is actually better than the current working best. Exploratory
-        # moves (relaxed acceptance, sideways moves, emergency injection) can
-        # cause the working best to drift away from the true optimum.
-        #
-        # We compare using the total weighted raw error over ALL properties
-        # -- the same scale-invariant, sequence-consistent metric used to
-        # update the checkpoint -- so this restoration reliably swaps back
-        # to the true best sequence seen at any point during the run.
+        # Exploratory moves can drift away from the best saved sequence. Use
+        # the same tolerance-first rank here as when saving checkpoints so a
+        # lower raw sum can never replace a feasible solution with an infeasible one.
         if (self._global_best_sequence is not None
             and self._global_best_sequence != self.best_sequence):
             # Re-evaluate the global best under current scaling to get its
             # weighted error for a fair comparison.
             global_weighted_error, global_prop_info = self._evaluate_sequence(self._global_best_sequence)
-            global_raw_error = self._weighted_raw_sum(global_prop_info, unsatisfied_only=False)
-            # Compare raw errors (scale-invariant ground truth)
-            current_raw_error = self._weighted_raw_sum(
-                self._get_best_sequence_property_info(), unsatisfied_only=False
-            )
-            if global_raw_error < current_raw_error:
+            global_rank = self._checkpoint_rank(global_prop_info)
+            current_rank = self._checkpoint_rank(self._get_best_sequence_property_info())
+            if global_rank < current_rank:
                 if self.debugging:
                     self.logger.info(
                         f"\n🔄 Restoring global-best sequence "
-                        f"(raw_error {global_raw_error:.6f} < current {current_raw_error:.6f})"
+                        f"(all tolerances met: {not global_rank[0]}, "
+                        f"total weighted raw error: {global_rank[1]:.6f})"
                     )
                 self._update_best_sequence(self._global_best_sequence, global_weighted_error)
         
@@ -3062,7 +3037,13 @@ class SequenceOptimizer:
                 tolerance_info = f", tolerance: {tolerance:.4f}" if tolerance > 0 else ""
                 constraint_type = info.get('constraint_type', 'N/A')
                 
-                if self.debugging:
+                if info.get('calculate_as_linear_profile', False):
+                    self.logger.info(
+                        f"   {status_indicator} {prop_name}: mean profile value {actual:.3f} "
+                        f"(target: {constraint_type} profile, profile_error: {raw_error:.4f}), "
+                        f"tolerance: {tolerance:.4f}"
+                    )
+                elif self.debugging:
                     self.logger.info(
                         f"   {status_indicator} {prop_name}: {actual:.3f} "
                         f"(target: {target:.3f}, raw_error: {raw_error:.4f}), "

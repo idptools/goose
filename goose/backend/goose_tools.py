@@ -3,6 +3,7 @@ various essential tools to help GOOSE take flight
 '''
 import random
 import csv
+from numbers import Integral
 
 from goose.goose_exceptions import GooseError, GooseInputError
 from goose.backend import parameters
@@ -153,12 +154,23 @@ def remove_None(**kwargs):
     return kwargs
 
 
+def check_property_optimization_iterations(max_hydropathy_iterations=None,
+                                         max_kappa_iterations=None):
+    """Validate optional inner-loop limits separately from batch attempts."""
+    for name, value in (('max_hydropathy_iterations', max_hydropathy_iterations),
+                        ('max_kappa_iterations', max_kappa_iterations)):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, Integral) or value < 1):
+            raise GooseInputError(f'{name} must be a positive integer or None, got {value!r}.')
+
+
 def check_props_parameters(length, **kwargs):
     '''
     function that makes sure the values for a given seq are not 
     outside possible bounds. Only for generating
     sequences by specifying properties.
     '''
+    check_property_optimization_iterations(kwargs.get('max_hydropathy_iterations'),
+                                         kwargs.get('max_kappa_iterations'))
     # check FCR bounds
     if kwargs['FCR'] != None:
         curval = kwargs['FCR']
@@ -291,6 +303,8 @@ def check_and_correct_props_kwargs(**kwargs):
                         'exclude':None, 'attempts':5000, 'strict_disorder': False,
                         'hydropathy_tolerance': parameters.MAXIMUM_HYDRO_ERROR,
                         'kappa_tolerance': parameters.MAXIMUM_KAPPA_ERROR,
+                        'max_hydropathy_iterations': None,
+                        'max_kappa_iterations': None,
                         'disorder_cutoff': parameters.DISORDER_THRESHOLD,
                         'max_consecutive_ordered': parameters.ALLOWED_CONSECUTIVE_ORDERED,
                         'max_total_ordered': parameters.ALLOWED_TOTAL_ORDERED_FRACTION,

@@ -14,15 +14,20 @@
 ## the requested number of times.
 ##
 
-__all__ = ['generate_property_library', 'enumerate_property_combinations']
-
-import time
+__all__ = ['generate_property_library', 'enumerate_property_combinations',
+           'generate_fractions_library', 'enumerate_fraction_combinations',
+           'generate_dimensions_library', 'enumerate_dimension_combinations',
+           'generate_class_library', 'enumerate_class_combinations']
 
 from goose import create
+from goose._library_support import LibraryProgress
 from goose.goose_exceptions import GooseInputError
 from goose.backend import goose_tools
 from goose.backend import parameters
 from goose.data.amino_acids import amino_acid_dat
+from goose.fractions_library import generate_fractions_library, enumerate_fraction_combinations
+from goose.dimensions_library import generate_dimensions_library, enumerate_dimension_combinations
+from goose.class_library import generate_class_library, enumerate_class_combinations
 
 
 # order the properties are iterated over and the order they appear in names.
@@ -42,16 +47,13 @@ _SEQUENCE_KWARGS = ['attempts', 'disorder_cutoff', 'exclude', 'strict_disorder',
                     'use_weighted_probabilities', 'custom_probabilities',
                     'metapredict_version', 'max_consecutive_ordered',
                     'max_total_ordered', 'batch_size', 'hydropathy_tolerance',
-                    'kappa_tolerance']
+                    'kappa_tolerance', 'max_hydropathy_iterations',
+                    'max_kappa_iterations']
 
 # tolerance for float comparisons. Needed because things like 0.3-0.1 != 0.2
 # in floating point, and we do a lot of comparisons on values built up by
 # repeatedly adding an increment.
 _EPS = 1e-9
-
-# how often (in seconds) to report progress while a library is being made.
-_SECONDS_BETWEEN_PROGRESS_REPORTS = 30
-
 
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
 #-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/             \|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-
@@ -452,30 +454,6 @@ def _goose_input_check(length, property_values, sequence_kwargs):
     return True, None
 
 
-def _count_reasons(skipped):
-    '''
-    Count how many parameter combinations were skipped for each kind of reason.
-    Used for the summary printed when verbose is True, because listing every
-    skipped combination is not useful for a large library.
-
-    Parameters
-    ----------
-    skipped : list
-        List of skipped combination dicts.
-
-    Returns
-    -------
-    dict
-        Dict mapping the kind of reason to the number of combinations dropped
-        for it, most common first.
-    '''
-    counts = {}
-    for combination in skipped:
-        reason_type = combination.get('reason_type', 'unknown')
-        counts[reason_type] = counts.get(reason_type, 0) + 1
-    return dict(sorted(counts.items(), key=lambda item: item[1], reverse=True))
-
-
 def _build_name(property_values, decimals):
     '''
     Build the name for a set of property values, e.g.
@@ -574,7 +552,7 @@ def enumerate_property_combinations(length,
 
     min_FCR_NCPR_difference_for_kappa : float
         Minimum required difference between the FCR and the absolute value of
-        the NCPR (FCR - |NCPR|) for kappa to be specified. Default is 0.1.
+        the NCPR (``FCR - |NCPR|``) for kappa to be specified. Default is 0.1.
 
     generate_kappa_free_sequences : bool
         Whether combinations where kappa cannot be specified should still be
@@ -615,6 +593,8 @@ def enumerate_property_combinations(length,
     # not allow return_all_sequences because the library needs one sequence
     # per call.
     goose_tools.check_valid_kwargs(kwargs, _SEQUENCE_KWARGS)
+    goose_tools.check_property_optimization_iterations(kwargs.get('max_hydropathy_iterations'),
+                                                      kwargs.get('max_kappa_iterations'))
     sequence_kwargs = dict(kwargs)
 
     # check the kappa requirements.
@@ -809,7 +789,8 @@ def generate_property_library(length,
     combination that survives is generated num_copies times.
 
     Combinations are dropped when:
-      * |NCPR| is greater than the FCR.
+
+      * ``|NCPR|`` is greater than the FCR.
       * The FCR / NCPR values do not give a whole number of charged residues at
         the requested length (turn off with require_exact_charge_counts=False).
       * The hydropathy value is outside the range that is compositionally
@@ -822,8 +803,8 @@ def generate_property_library(length,
         exception with on_generation_failure='raise').
 
     Kappa is only specified when it is meaningful. It is skipped when the FCR
-    is 0, when all of the charged residues carry the same sign (FCR == |NCPR|),
-    when the FCR is below min_FCR_for_kappa, and when FCR - |NCPR| is below
+    is 0, when all of the charged residues carry the same sign (``FCR == |NCPR|``),
+    when the FCR is below min_FCR_for_kappa, and when ``FCR - |NCPR|`` is below
     min_FCR_NCPR_difference_for_kappa. By default those combinations are still
     made, just without kappa specified, and are named with 'kappa_none'.
 
@@ -838,12 +819,14 @@ def generate_property_library(length,
 
     hydropathy_range : float, int, list, tuple, or None
         The mean hydropathy values to titrate over. Can be:
+
           * None - hydropathy is not specified at all (the default).
           * a single number - hydropathy is held constant at that value.
           * [start, end] - titrated from start to end using
             hydropathy_increment.
           * [start, end, increment] - as above, with the increment given as
             the third value.
+
         If the increment does not divide the range evenly, the end value is
         still included as the final value of the titration.
 
@@ -878,7 +861,7 @@ def generate_property_library(length,
 
     min_FCR_NCPR_difference_for_kappa : float
         The minimum difference between the FCR and the absolute value of the
-        NCPR (FCR - |NCPR|) a combination must have for kappa to be specified.
+        NCPR (``FCR - |NCPR|``) a combination must have for kappa to be specified.
         This is the fraction of the sequence available for oppositely charged
         residues, so small values leave very few charges to pattern. Default
         is 0.1.
@@ -920,8 +903,9 @@ def generate_property_library(length,
         skipped and what failed instead of just the library. Default is False.
 
     verbose : bool
-        Whether to print progress and a summary of what was skipped or failed.
-        Default is True.
+        Show a tqdm progress bar with completed copies, the current target,
+        and generated, failed, duplicate, and skipped counts. Default is True.
+        False suppresses the progress bar.
 
     **kwargs
         Any keyword argument accepted by create.sequence() other than
@@ -929,14 +913,18 @@ def generate_property_library(length,
         this is where to set things like attempts, hydropathy_tolerance,
         kappa_tolerance, exclude, disorder_cutoff, or custom_probabilities.
 
-        One note on attempts: it sets how long GOOSE will keep trying before it
-        gives up on a sequence, and the hardest combinations (a high kappa
-        combined with a high FCR and a high hydropathy) will use every attempt
-        they are given. create.sequence() defaults to 5000 attempts, which can
-        mean minutes on a single combination, so this function defaults to
-        GOOSE's DEFAULT_ATTEMPTS (currently 200) instead. Lower it to make a
-        large library finish sooner, or raise it if combinations you expect to
-        be possible are showing up as failures.
+        ``attempts`` limits candidate batches, not the work inside each batch.
+        With dynamic batching, attempts=1 still starts 10 candidates and can
+        run up to 1000 hydropathy iterations and 20000 kappa iterations. This
+        function defaults to GOOSE's DEFAULT_ATTEMPTS (currently 200), rather
+        than create.sequence()'s default of 5000.
+
+        Set ``max_hydropathy_iterations`` and ``max_kappa_iterations`` to
+        positive integers to limit these inner searches. Their default of
+        None preserves the existing optimizer limits. For a faster exploratory
+        run, try attempts=1, max_hydropathy_iterations=100, and
+        max_kappa_iterations=100. Lower limits can miss attainable targets;
+        these iteration counts are not wall-clock deadlines.
 
     Returns
     -------
@@ -1011,17 +999,7 @@ def generate_property_library(length,
 
     length = int(length)
 
-    if verbose:
-        print(f'Generating {len(possible) * num_copies} sequences '
-              f'({len(possible)} parameter combinations x {num_copies} '
-              f'{"copy" if num_copies == 1 else "copies"}).')
-        if skipped != []:
-            print(f'{len(skipped)} parameter combinations were not possible and were skipped:')
-            for reason_type, count in _count_reasons(skipped).items():
-                print(f'  {count} - {reason_type}')
-
     library, failed, duplicates = {}, [], []
-    successful_combinations = 0
 
     # a library makes a lot of sequences, and a single hard combination can
     # take a long time at create.sequence()'s default of 5000 attempts. Use
@@ -1030,75 +1008,41 @@ def generate_property_library(length,
     if 'attempts' not in kwargs or kwargs['attempts'] is None:
         kwargs['attempts'] = parameters.DEFAULT_ATTEMPTS
 
-    # timing, used to report progress on long runs.
-    start_time = time.time()
-    last_report_time = start_time
+    with LibraryProgress(len(possible) * num_copies, len(skipped), verbose, 'Property library') as progress:
+        for combination in possible:
+            # Drop bookkeeping keys and properties not part of this library.
+            generation_kwargs = dict(kwargs)
+            for property_name in _PROPERTY_ORDER:
+                if combination.get(property_name) is not None:
+                    generation_kwargs[property_name] = combination[property_name]
 
-    for combination_number, combination in enumerate(possible, start=1):
-        # the property values GOOSE needs, dropping the bookkeeping keys and
-        # any property that is not part of this library.
-        generation_kwargs = dict(kwargs)
-        for property_name in _PROPERTY_ORDER:
-            if combination.get(property_name) is not None:
-                generation_kwargs[property_name] = combination[property_name]
-
-        sequences_for_combination = []
-        for copy_number in range(1, num_copies + 1):
-            name = f'{combination["name"]}_rep_{copy_number}'
-            try:
-                sequence = create.sequence(length, **generation_kwargs)
-                # if the copies should be unique, try again a few times when we
-                # get a sequence we have already made for this combination.
-                if require_unique_copies:
-                    for _ in range(4):
-                        if sequence not in sequences_for_combination:
-                            break
-                        sequence = create.sequence(length, **generation_kwargs)
-                    if sequence in sequences_for_combination:
-                        duplicates.append(name)
-            # catching everything here because a combination that passes every
-            # check can still fail during generation, and the failure can
-            # surface as more than just a GooseFail.
-            except Exception as e:
-                if on_generation_failure == 'raise':
-                    raise
-                failure = {property_name: combination[property_name]
-                           for property_name in _PROPERTY_ORDER if property_name in combination}
-                failure['name'] = name
-                failure['reason'] = f'{type(e).__name__}: {e}'
-                failed.append(failure)
-                continue
-
-            sequences_for_combination.append(sequence)
-            library[name] = sequence
-
-        if sequences_for_combination != []:
-            successful_combinations += 1
-
-        # report progress on a timer rather than every N combinations. Some
-        # combinations (high kappa at high FCR and high hydropathy) take far
-        # longer than others, so a timer is what keeps a slow run from looking
-        # like a hung one.
-        if verbose and (time.time() - last_report_time) > _SECONDS_BETWEEN_PROGRESS_REPORTS:
-            print(f'  ...{combination_number} of {len(possible)} parameter combinations, '
-                  f'{len(library)} sequences made, {round(time.time() - start_time)}s elapsed.')
-            last_report_time = time.time()
-
-    if verbose:
-        print(f'\nGenerated {len(library)} sequences across {successful_combinations} '
-              f'parameter combinations in {round(time.time() - start_time, 1)}s.')
-        if failed != []:
-            print(f'{len(failed)} sequences could not be generated despite having valid parameters:')
-            for failure in failed[:10]:
-                print(f'  {failure["name"]}: {failure["reason"]}')
-            if len(failed) > 10:
-                print(f'  ...and {len(failed) - 10} more.')
-        if duplicates != []:
-            print(f'{len(duplicates)} sequences are duplicates of another copy of the '
-                  f'same parameter combination.')
-        if skipped != [] or failed != []:
-            print('Use return_details=True to get the full list of skipped and failed '
-                  'parameter combinations.')
+            sequences_for_combination = []
+            for copy_number in range(1, num_copies + 1):
+                name = f'{combination["name"]}_rep_{copy_number}'
+                progress.start_copy(name)
+                try:
+                    sequence = create.sequence(length, **generation_kwargs)
+                    # Retry copies that duplicate this target's earlier sequences.
+                    if require_unique_copies:
+                        for _ in range(4):
+                            if sequence not in sequences_for_combination:
+                                break
+                            sequence = create.sequence(length, **generation_kwargs)
+                        if sequence in sequences_for_combination:
+                            duplicates.append(name)
+                # Generation failures can surface as more than just GooseFail.
+                except Exception as e:
+                    if on_generation_failure == 'raise':
+                        raise
+                    failure = {property_name: combination[property_name]
+                               for property_name in _PROPERTY_ORDER if property_name in combination}
+                    failure['name'] = name
+                    failure['reason'] = f'{type(e).__name__}: {e}'
+                    failed.append(failure)
+                else:
+                    sequences_for_combination.append(sequence)
+                    library[name] = sequence
+                progress.finish_copy(len(library), len(failed), len(duplicates))
 
     if return_details:
         return {'library': library, 'skipped': skipped, 'failed': failed,

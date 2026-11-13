@@ -131,9 +131,12 @@ def fill_in_remaining_classes(
     # Calculate current sum of specified fractions
     current_sum = sum(frac for frac in filled_fractions.values() if frac is not None)
 
-    # If sum is already 1.0 (within tolerance), return as is
+    # If specified classes fill the sequence, all other classes have zero content.
     if abs(current_sum - 1.0) < 1e-10:
-        return filled_fractions
+        # No positions remain for unspecified classes. The downstream
+        # allocator expects numeric fractions, including at 100% targets.
+        return {class_name: 0.0 if fraction is None else fraction
+                for class_name, fraction in filled_fractions.items()}
     
     # If sum exceeds 1.0, normalize all fractions proportionally
     if current_sum > 1.0:
